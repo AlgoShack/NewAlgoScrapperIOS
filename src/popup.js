@@ -119,6 +119,32 @@
         if (shiftKey) return false;
         return !hasFullPageFeature();
     }
+
+    /** True when localStorage has a decrypted AlgoQA session from a pasted token. */
+    function hasConnectedToken() {
+        try {
+            const raw = localStorage.getItem("algoQAUser");
+            if (!raw) return false;
+            const parsed = JSON.parse(raw);
+            return !!(parsed && (parsed.userID || parsed.userId || parsed.baseUrl));
+        } catch (_) {
+            return false;
+        }
+    }
+
+    /** Returns true if Launch Application button is allowed to be enabled. */
+    function canEnableLaunch() {
+        if (launchedViaProtocol) return true;
+        return hasConnectedToken();
+    }
+
+    /** Enable/disable #Run and sync button styling. */
+    function setLaunchEnabled(enabled) {
+        const runBtn = document.getElementById("Run");
+        if (!runBtn) return;
+        runBtn.disabled = !enabled;
+        runBtn.style.backgroundColor = enabled ? "#2F8BCC" : "#B6B6B4";
+    }
     let showElementHover = false;
     let touchInProgress = false; // Blocks overlapping touch/swipe while loader is up
     let hoverRequestId = 0;
@@ -432,11 +458,7 @@
             const el = document.getElementById(id);
             if (el) el.disabled = false;
         });
-        const runBtn = document.getElementById('Run');
-        if (runBtn) {
-            runBtn.disabled = false;
-            runBtn.style.backgroundColor = '#2F8BCC';
-        }
+        setLaunchEnabled(canEnableLaunch());
         const overlay = document.getElementById('overlay');
         if (overlay) overlay.style.display = 'none';
         const appRunningPopup = document.getElementById('AppRunningPopup');
@@ -498,12 +520,8 @@
         registeredFeatureAreas = [];
         createFeatureMode = false;
 
-        // Only Launch Application enabled
-        const runBtn = document.getElementById('Run');
-        if (runBtn) {
-            runBtn.disabled = false;
-            runBtn.style.backgroundColor = '#2F8BCC';
-        }
+        // Only Launch Application enabled if token is connected
+        setLaunchEnabled(canEnableLaunch());
 
         const actionButtons = ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'addScenarioBtn', 'createFeatureBtn'];
         actionButtons.forEach((id) => {
@@ -1327,10 +1345,8 @@
                             if (deviceSelect && deviceName) deviceSelect.value = deviceName;
                         }
 
-                        const runBtn = document.getElementById('Run');
-                        if (runBtn && !resetFormLockActive) {
-                            runBtn.disabled = false;
-                            runBtn.style.backgroundColor = '#2F8BCC';
+                        if (!resetFormLockActive) {
+                            setLaunchEnabled(canEnableLaunch());
                         }
                     } else {
                         // Current platform has no devices!
@@ -1367,10 +1383,8 @@
                                 ipcRenderer.send("get-installed-apps", selectedAlt);
                             }
 
-                            const runBtn = document.getElementById('Run');
-                            if (runBtn && !resetFormLockActive) {
-                                runBtn.disabled = false;
-                                runBtn.style.backgroundColor = '#2F8BCC';
+                            if (!resetFormLockActive) {
+                                setLaunchEnabled(canEnableLaunch());
                             }
 
                             if (wasDeviceConnectedBefore) {
@@ -1528,20 +1542,16 @@
 
     // Double-click start: Launch stays off until token (protocol mode enables via IPC)
     if (!launchedViaProtocol) {
-        if (typeof setLaunchEnabled === 'function') {
-            setLaunchEnabled(false);
-        } else {
-            const runEarly = document.getElementById('Run');
-            if (runEarly) {
-                runEarly.disabled = true;
-                runEarly.style.backgroundColor = '#B6B6B4';
-            }
-        }
+        setLaunchEnabled(canEnableLaunch());
     } else if (typeof applyLaunchModeState === 'function') {
         applyLaunchModeState();
     }
 
     document.getElementById("Run").addEventListener('click', async () => {
+            if (!canEnableLaunch()) {
+                showCustomAlert("Authentication Required", "Please paste and connect a valid token before launching the application.", "warning");
+                return;
+            }
             // Windows: #platformname is a readonly INPUT; macOS: SELECT — never use .options
             var plateformOption = getSelectedPlatform();
             var appName = document.getElementById('appname').value;
@@ -3219,11 +3229,7 @@ function markSessionInterrupted(err) {
         detail: readableError
     });
 
-    const runBtn = document.getElementById('Run');
-    if (runBtn) {
-        runBtn.disabled = false;
-        runBtn.style.backgroundColor = '#2F8BCC';
-    }
+    setLaunchEnabled(canEnableLaunch());
 
     ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn'].forEach((id) => {
         const btn = document.getElementById(id);
@@ -3599,9 +3605,7 @@ function attachScreenshotInteractionHandlers(img) {
             const { scaleX, scaleY, rect } = getScreenshotScale(img);
             const clickX = (e.clientX - rect.left) * scaleX;
             const clickY = (e.clientY - rect.top) * scaleY;
-            // First click = full page. After a page feature exists, click = control inside it.
-            // Shift+click always maps the control under the cursor.
-            handleFeatureClick(clickX, clickY, { preferFullPage: shouldMapFullPageFeature(e.shiftKey) });
+            handleFeatureClick(clickX, clickY);
             return;
         }
 
@@ -3978,15 +3982,9 @@ async function performSwipe(startX, startY, endX, endY) {
             }
 
             if (createFeatureMode) {
-                const preferFullPage = shouldMapFullPageFeature(e.shiftKey);
-                drawFeatureHoverAt(x, y, { preferFullPage });
+                drawFeatureHoverAt(x, y);
                 if (currentFeatureArea) {
                     drawFeatureAreaHighlight(currentFeatureArea, { active: true });
-                }
-                if (preferFullPage) {
-                    const overlayEl = document.getElementById("overlayContainer");
-                    const shot = document.getElementById("screenshot");
-                    if (overlayEl && shot) drawFullPageFeatureFrame(shot, overlayEl);
                 }
             } else if (node) {
                 drawHoveredNode(node);
@@ -4023,6 +4021,10 @@ async function performSwipe(startX, startY, endX, endY) {
                 allNodes[i];
 
             if (["AppiumAUT", "XCUIElementTypeApplication", "XCUIElementTypeWindow", "hierarchy"].includes(node.nodeName)) {
+                continue;
+            }
+
+            if (!isNodeVisibleOnScreen(node)) {
                 continue;
             }
 
@@ -4592,9 +4594,6 @@ function createAndAppendTable(dtControls) {
             "border-box";
 
         overlay.appendChild(box);
-
-        drawParentLayers(node);
-
     }
 
     function drawFeatureHover(node){
@@ -4604,143 +4603,48 @@ function createAndAppendTable(dtControls) {
         drawFeatureHoverAt(rect.x + rect.width / 2, rect.y + rect.height / 2);
     }
 
-    /** Pick the region Create Feature would save on click (full page by default, or control with Shift). */
-    function resolveFeatureTargetAt(clickX, clickY, preferFullPage) {
-        if (!window.xmlDoc) return null;
-
-        const rootTypes = ["AppiumAUT", "XCUIElementTypeApplication", "XCUIElementTypeWindow", "hierarchy"];
-        const img = document.getElementById("screenshot");
-        const dims = (typeof getDeviceDimensions === "function")
-            ? getDeviceDimensions()
-            : { width: 0, height: 0 };
-        const screenArea = (dims.width > 0 && dims.height > 0)
-            ? (dims.width * dims.height)
-            : ((img && img.naturalWidth && img.naturalHeight) ? (img.naturalWidth * img.naturalHeight) : 0);
-
-        // Click (preferFullPage) → always the full screenshot/device rect
-        if (preferFullPage) {
-            if (dims.width > 0 && dims.height > 0) {
-                return {
-                    node: null,
-                    rect: { x: 0, y: 0, width: dims.width, height: dims.height },
-                    area: dims.width * dims.height,
-                    fullPage: true
-                };
-            }
-            if (img && img.naturalWidth > 0 && img.naturalHeight > 0) {
-                return {
-                    node: null,
-                    rect: { x: 0, y: 0, width: img.naturalWidth, height: img.naturalHeight },
-                    area: img.naturalWidth * img.naturalHeight,
-                    fullPage: true
-                };
-            }
-            return null;
-        }
-
-        // Shift+click or inner feature → smallest meaningful control, never the full page
-        const hits = [];
-        const nodes = window.xmlDoc.getElementsByTagName("*");
-        const pageH = Math.max(1, dims.height || 1);
-        for (let i = 0; i < nodes.length; i++) {
-            const node = nodes[i];
-            if (rootTypes.includes(node.nodeName)) continue;
-            const rect = parseNodeRect(node);
-            if (!rect || rect.width <= 0 || rect.height <= 0) continue;
-            const { x, y, width, height } = rect;
-            if (clickX >= x && clickX <= (x + width) && clickY >= y && clickY <= (y + height)) {
-                const area = width * height;
-                if (screenArea > 0 && (area / screenArea) > 0.92) continue;
-                if (y <= pageH * 0.05 && height / pageH >= 0.55 && (y + height) / pageH < 0.92) continue;
-                hits.push({ node, rect, area });
-            }
-        }
-        if (!hits.length) return null;
-
-        hits.sort((a, b) => a.area - b.area);
-        const meaningful = hits.filter((h) => typeof isMeaningfulControlNode === "function" && isMeaningfulControlNode(h.node));
-        return meaningful[0] || hits[0];
-    }
-
     /**
-     * Create Feature hover preview.
-     * preferFullPage (default click): cyan full-screenshot frame + nested hints.
-     * !preferFullPage (Shift): emphasize the control under the pointer (what Shift+click saves).
+     * Create Feature hover preview — highlights the exact section/control under the cursor (or whole page when hovering empty space).
      */
-    function drawFeatureHoverAt(x, y, options = {}) {
+    function drawFeatureHoverAt(x, y) {
         clearOverlay();
 
         const overlay = document.getElementById("overlayContainer");
         const img = document.getElementById("screenshot");
         if (!overlay || !img || !window.xmlDoc) return;
 
-        const preferFullPage = options.preferFullPage !== false;
-
-        // Skip shell/root nodes — iOS Window often stops above the bottom tab bar and
-        // looks like a "full page" cut mid-screen if drawn as the hover outline.
-        const rootSkip = new Set([
-            "AppiumAUT",
-            "hierarchy",
-            "XCUIElementTypeApplication",
-            "XCUIElementTypeWindow"
-        ]);
-
-        const dims = (typeof getDeviceDimensions === "function")
-            ? getDeviceDimensions()
-            : { width: img.naturalWidth || 0, height: img.naturalHeight || 0 };
-        const pageArea = Math.max(1, (dims.width || 1) * (dims.height || 1));
-        const pageH = Math.max(1, dims.height || 1);
-
-        const hits = [];
-        const seenKeys = new Set();
-        const allNodes = window.xmlDoc.getElementsByTagName("*");
-        for (let i = 0; i < allNodes.length; i++) {
-            const node = allNodes[i];
-            if (rootSkip.has(node.nodeName)) continue;
-
-            const rect = nodeRectOnScreenshot(node);
-            if (!rect || rect.width <= 0 || rect.height <= 0) continue;
-
-            const { x: nx, y: ny, width: nw, height: nh } = rect;
-            if (!(x >= nx && x <= nx + nw && y >= ny && y <= ny + nh)) continue;
-
-            if (nh < 4 || nw < 4) continue;
-            if ((nw * nh) / pageArea > 0.92) continue;
-            if (ny <= pageH * 0.05 && nh / pageH >= 0.55 && (ny + nh) / pageH < 0.92) continue;
-
-            const area = nw * nh;
-            const key = `${Math.round(nx)},${Math.round(ny)},${Math.round(nw)},${Math.round(nh)}`;
-            if (seenKeys.has(key)) continue;
-            seenKeys.add(key);
-
-            hits.push({ node, area, rect });
-        }
-
-        hits.sort((a, b) => b.area - a.area);
-
-        if (preferFullPage) {
-            // Nested hints only (full page frame drawn by caller / below)
-            const layers = hits.slice(0, 8);
-            const colors = [
-                "#34A853", "#FBBC05", "#EA4335", "#9C27B0", "#FF6D00",
-                "#8BC34A", "#3F51B5", "#E91E63"
-            ];
-            layers.forEach((hit, index) => {
-                if (!hit) return;
-                drawLayer(hit.node, colors[index % colors.length]);
-            });
+        const node = findHoveredNode(x, y);
+        if (!node) {
             drawFullPageFeatureFrame(img, overlay);
             return;
         }
 
-        // Shift: show the control that will be saved (smallest meaningful hit)
-        const inners = hits.slice().sort((a, b) => a.area - b.area);
-        const primary = inners[0];
-        if (primary) {
-            drawLayer(primary.node, "#2F8BCC");
-        } else {
+        const nodeRect = nodeRectOnScreenshot(node);
+        if (!nodeRect || nodeRect.width <= 0 || nodeRect.height <= 0) {
             drawFullPageFeatureFrame(img, overlay);
+            return;
         }
+
+        const { invScaleX: scaleX, invScaleY: scaleY } = getScreenshotScale(img);
+        const overlayRect = overlay.getBoundingClientRect();
+        const imgRect = img.getBoundingClientRect();
+        const offsetX = imgRect.left - overlayRect.left;
+        const offsetY = imgRect.top - overlayRect.top;
+
+        const box = document.createElement("div");
+        box.style.position = "absolute";
+        box.style.left = (offsetX + nodeRect.x * scaleX) + "px";
+        box.style.top = (offsetY + nodeRect.y * scaleY) + "px";
+        box.style.width = (nodeRect.width * scaleX) + "px";
+        box.style.height = (nodeRect.height * scaleY) + "px";
+        box.style.border = "2px dashed #2F8BCC";
+        box.style.backgroundColor = "rgba(47, 139, 204, 0.08)";
+        box.style.borderRadius = "3px";
+        box.style.pointerEvents = "none";
+        box.style.boxSizing = "border-box";
+        box.style.zIndex = "100";
+
+        overlay.appendChild(box);
     }
 
     /** Cyan dashed box around the entire visible screenshot = complete app page (never mid-cut). */
@@ -6379,6 +6283,10 @@ function verifyPageNameSavedBeforeScraping() {
                     continue;
                 }
 
+                if (!isNodeVisibleOnScreen(node)) {
+                    continue;
+                }
+
                 const rect = parseNodeRect(node);
                 if (!rect || rect.width <= 0 || rect.height <= 0) {
                     continue;
@@ -6443,37 +6351,31 @@ function verifyPageNameSavedBeforeScraping() {
                         ]);
                     }
 
-    async function handleFeatureClick(clickX, clickY, options = {}) {
+    async function handleFeatureClick(clickX, clickY) {
         if (!window.xmlDoc) return;
 
         if (!verifyPageNameSavedBeforeScraping()) {
             return;
         }
 
-        const preferFullPage = !!(options && options.preferFullPage);
-        const matched = resolveFeatureTargetAt(clickX, clickY, preferFullPage);
+        const matchedNode = findHoveredNode(clickX, clickY);
+        let targetRect = matchedNode ? parseNodeRect(matchedNode) : null;
 
-        if (!preferFullPage && !matched) {
-            showCustomAlert(
-                "No Control Selected",
-                "Click a visible control to create a feature inside the page.",
-                "info"
-            );
-            return;
+        if (!targetRect) {
+            const dims = (typeof getDeviceDimensions === "function") ? getDeviceDimensions() : { width: 0, height: 0 };
+            targetRect = (dims.width > 0 && dims.height > 0)
+                ? { x: 0, y: 0, width: dims.width, height: dims.height }
+                : { x: Math.round(clickX), y: Math.round(clickY), width: 1, height: 1 };
         }
-
-        let matchedNode = matched ? matched.node : null;
-        let targetRect = matched ? matched.rect : { x: Math.round(clickX), y: Math.round(clickY), width: 1, height: 1 };
-        const isFullPage = !!(matched && matched.fullPage) ||
-            !!(preferFullPage && targetRect && targetRect.width > 10 && targetRect.height > 10);
 
         // CHECK: Does this exact area already exist in registeredFeatureAreas?
         if (targetRect) {
             const existing = registeredFeatureAreas.find(area =>
-                area.rect.x === targetRect.x &&
-                area.rect.y === targetRect.y &&
-                area.rect.width === targetRect.width &&
-                area.rect.height === targetRect.height
+                area && area.rect &&
+                Math.abs(area.rect.x - targetRect.x) < 4 &&
+                Math.abs(area.rect.y - targetRect.y) < 4 &&
+                Math.abs(area.rect.width - targetRect.width) < 4 &&
+                Math.abs(area.rect.height - targetRect.height) < 4
             );
 
             if (existing) {
@@ -6482,10 +6384,13 @@ function verifyPageNameSavedBeforeScraping() {
             }
         }
 
+        const dims = (typeof getDeviceDimensions === "function") ? getDeviceDimensions() : { width: 0, height: 0 };
+        const isFullPage = !matchedNode || (dims.width > 0 && dims.height > 0 && targetRect.width >= dims.width * 0.92 && targetRect.height >= dims.height * 0.92);
+
         if (!matchedNode || isFullPage) {
             pendingFeatureData = {
-                ControlName: isFullPage ? "page_FullScreen" : `coord_${Math.round(clickX)}_${Math.round(clickY)}`,
-                ControlType: isFullPage ? "Page" : "Coordinate",
+                ControlName: isFullPage ? "page_FullScreen" : `section_${Math.round(clickX)}_${Math.round(clickY)}`,
+                ControlType: isFullPage ? "Page" : "Section",
                 ControlId: isFullPage
                     ? [`//XCUIElementTypeApplication`, `//hierarchy`]
                     : [`COORDINATE(${Math.round(clickX)},${Math.round(clickY)})`],
@@ -6508,6 +6413,7 @@ function verifyPageNameSavedBeforeScraping() {
         const modal = document.getElementById("createFeatureModal");
         const overlay = document.getElementById("overlay");
         const featureNameInputOnOpen = document.getElementById("feature_name_input");
+
         if (featureNameInputOnOpen) {
             featureNameInputOnOpen.value = "";
             featureNameInputOnOpen.classList.remove("input-error-border");
@@ -6529,6 +6435,14 @@ function verifyPageNameSavedBeforeScraping() {
         const allRows = tableBody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)');
 
         allRows.forEach(row => {
+            const featureNameCell = row.querySelector('.featureName');
+            if (!featureNameCell) return;
+
+            if (area.fullPage) {
+                featureNameCell.innerText = area.name;
+                return;
+            }
+
             const rectStr = row.dataset.rect;
             if (!rectStr) return;
 
@@ -6542,10 +6456,7 @@ function verifyPageNameSavedBeforeScraping() {
 
                 // Check if center point is within the new feature area
                 if (centerX >= ax && centerX <= (ax + aw) && centerY >= ay && centerY <= (ay + ah)) {
-                    const featureNameCell = row.querySelector('.featureName');
-                    if (featureNameCell) {
-                        featureNameCell.innerText = area.name;
-                    }
+                    featureNameCell.innerText = area.name;
                 }
             } catch (e) {
                 console.error("Sync: Failed to parse row rect", e);
@@ -6555,23 +6466,53 @@ function verifyPageNameSavedBeforeScraping() {
 
     //Add Rows number
         function updateRowNumbers() {
-            const rows = document.querySelectorAll("#myTable tr");
-            let visibleIndex = 1; // Start counting from 1 for the filtered view
+            const tbody = document.getElementById("myTable");
+            if (!tbody) return;
 
-            rows.forEach((row) => {
-                // Only skip the "No Results" search error row
-                if (row.classList.contains("no-results-row")) {
-                    return;
-                }
+            const allRows = Array.from(tbody.querySelectorAll("tr"));
+            const dataRows = allRows.filter(row => !row.classList.contains("empty-excel-row") && !row.classList.contains("no-results-row"));
 
-                // Assign a sequence number to ALL visible rows (Data + Empty Placeholders)
+            // 1. Number all active data rows sequentially 1, 2, 3...
+            let activeDataIndex = 1;
+            dataRows.forEach((row) => {
                 if (!row.classList.contains("page-hidden") && !row.classList.contains("search-hidden")) {
                     const indexCell = row.querySelector(".row-index");
                     if (indexCell) {
-                        indexCell.textContent = visibleIndex++;
+                        indexCell.textContent = activeDataIndex++;
                     }
                 }
             });
+
+            // 2. Number the visible empty placeholder rows sequentially following the current page's visible data
+            const emptyRows = allRows.filter(row => row.classList.contains("empty-excel-row") && row.style.display !== 'none');
+
+            if (dataRows.length > 0) {
+                // Find highest row number currently visible on this active page
+                const visibleDataRows = dataRows.filter(r => r.style.display !== 'none' && !r.classList.contains("page-hidden") && !r.classList.contains("search-hidden"));
+                let nextIndex = 1;
+                if (visibleDataRows.length > 0) {
+                    const lastVisibleRow = visibleDataRows[visibleDataRows.length - 1];
+                    const lastIndexCell = lastVisibleRow.querySelector(".row-index");
+                    const lastNum = parseInt(lastIndexCell ? lastIndexCell.textContent : '0', 10);
+                    nextIndex = (!isNaN(lastNum) && lastNum > 0) ? lastNum + 1 : (visibleDataRows.length + 1);
+                }
+
+                emptyRows.forEach((row) => {
+                    const indexCell = row.querySelector(".row-index");
+                    if (indexCell) {
+                        indexCell.textContent = nextIndex++;
+                    }
+                });
+            } else {
+                // Initial blank spreadsheet grid: 1, 2, 3, 4...
+                let emptyIndex = 1;
+                emptyRows.forEach((row) => {
+                    const indexCell = row.querySelector(".row-index");
+                    if (indexCell) {
+                        indexCell.textContent = emptyIndex++;
+                    }
+                });
+            }
         }
 
     // Helper to count custom columns added by user
@@ -6579,8 +6520,6 @@ function verifyPageNameSavedBeforeScraping() {
         var headerRow = document.querySelector('#mainTable thead tr');
         return headerRow ? headerRow.querySelectorAll('.custom-editable-header').length : 0;
     }
-
-
 
     function createEmptyRowHtml() {
             var allHeaders = Array.from(document.querySelectorAll('#mainTable thead tr > *'));
@@ -6596,20 +6535,20 @@ function verifyPageNameSavedBeforeScraping() {
                 } else if (th.id === 'add_empty_column') {
                     rowHtml += `<td class="add-col-cell" style="${displayStyle}">&nbsp;</td>`;
                 } else if (th.classList.contains('custom-editable-header')) {
-                    rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
+                    rowHtml += `<td contenteditable="true" style="${displayStyle}">&nbsp;</td>`;
                 } else if (thText.includes('CONTROL TYPE')) {
-                    rowHtml += `<td class="ct pt-3-half" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
+                    rowHtml += `<td class="ct pt-3-half" style="${displayStyle}">&nbsp;</td>`;
                 } else if (thText.includes('CONTROL ID')) {
-                    rowHtml += `<td class="xpath pt-3-half" style="border-color: black; text-align: center; ${displayStyle}"></td>`;
+                    rowHtml += `<td class="xpath pt-3-half" style="${displayStyle}"></td>`;
                 } else if (thText.includes('APP URL') || th.id === 'appUrl') {
                     rowHtml += `<td class="appUrl" style="display:none;"></td>`;
                 } else if (th.classList.contains('fingerprint')) {
                     rowHtml += `<td class="fingerprint" style="display:none;"></td>`;
                 } else if (thText.includes('DELETE') || th.innerText.includes('Delete') || th.id === 'delete_header') {
                     // Completely empty cell for placeholder rows so no icons or checkboxes ever appear
-                    rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}"></td>`;
+                    rowHtml += `<td class="delete-cell" style="${displayStyle}"></td>`;
                 } else {
-                    rowHtml += `<td class="cn pt-3-half" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}"></td>`;
+                    rowHtml += `<td class="cn pt-3-half" contenteditable="true" style="${displayStyle}">&nbsp;</td>`;
                 }
             });
             return rowHtml;
@@ -6624,32 +6563,30 @@ function verifyPageNameSavedBeforeScraping() {
 
             const headerRow = document.querySelector('#mainTable thead tr');
             const headerHeight = headerRow ? headerRow.getBoundingClientRect().height : 32;
-            const sampleRow = tbody.querySelector('tr');
-            const measuredRowH = sampleRow ? sampleRow.getBoundingClientRect().height : 0;
-            // Prefer measured row height so empty rows fill #table-container with no grey gap
-            const rowHeight = measuredRowH > 0 ? measuredRowH : 28;
+            const ROW_HEIGHT = 32;
 
             // Shared on Windows + macOS: grow with the table pane (capped for safety)
             const MAX_VISIBLE_ROWS = 50;
             const availableHeight = Math.max(0, container.clientHeight - headerHeight);
-            let targetRowCount = Math.max(1, Math.ceil(availableHeight / Math.max(rowHeight, 1)));
+            // Use Math.ceil with fixed 32px row height so empty rows completely fill the table container down to the bottom border with zero gap
+            let targetRowCount = Math.max(1, Math.ceil(availableHeight / ROW_HEIGHT));
             targetRowCount = Math.min(MAX_VISIBLE_ROWS, Math.max(1, targetRowCount));
 
-            let currentRows = Array.from(tbody.querySelectorAll('tr'));
-                let emptyRows = Array.from(tbody.querySelectorAll('tr.empty-excel-row'));
+            // Count ONLY the data rows that are currently VISIBLE on the active page
+            let visibleDataRowCount = 0;
+            const allRows = Array.from(tbody.querySelectorAll('tr'));
+            allRows.forEach(row => {
+                if (!row.classList.contains('empty-excel-row') &&
+                    !row.classList.contains('no-results-row') &&
+                    row.style.display !== 'none') {
+                    visibleDataRowCount++;
+                }
+            });
 
-                // Count ONLY the data rows that are currently VISIBLE on the active page
-                let dataRowCount = 0;
-                currentRows.forEach(row => {
-                    if (!row.classList.contains('empty-excel-row') &&
-                        !row.classList.contains('no-results-row') &&
-                        row.style.display !== 'none') {
-                        dataRowCount++;
-                    }
-                });
+            let desiredEmptyRows = targetRowCount - visibleDataRowCount;
+            if (desiredEmptyRows < 0) desiredEmptyRows = 0;
 
-                let desiredEmptyRows = targetRowCount - dataRowCount;
-                if (desiredEmptyRows < 0) desiredEmptyRows = 0;
+            let emptyRows = Array.from(tbody.querySelectorAll('tr.empty-excel-row'));
 
             if (emptyRows.length < desiredEmptyRows) {
                 // Fill missing space with blank rows
@@ -6665,11 +6602,13 @@ function verifyPageNameSavedBeforeScraping() {
             } else if (emptyRows.length > desiredEmptyRows) {
                 // Trim excess blank rows if window shrinks
                 const rowsToRemove = emptyRows.length - desiredEmptyRows;
-                for(let i = 0; i < rowsToRemove; i++) {
-                    if(emptyRows[emptyRows.length - 1 - i]) {
+                for (let i = 0; i < rowsToRemove; i++) {
+                    if (emptyRows[emptyRows.length - 1 - i]) {
                         emptyRows[emptyRows.length - 1 - i].remove();
                     }
                 }
+                updateRowNumbers();
+            } else {
                 updateRowNumbers();
             }
             if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
@@ -7759,11 +7698,7 @@ function displayScreenshotError(err) {
     });
 
     // --- BUTTON LOGIC ---
-    const runBtn = document.getElementById('Run');
-    if (runBtn) {
-        runBtn.disabled = false;
-        runBtn.style.backgroundColor = '#2F8BCC';
-    }
+    setLaunchEnabled(canEnableLaunch());
 
     const actionButtons = ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn'];
     actionButtons.forEach(id => {
@@ -7937,9 +7872,10 @@ function applyPagination() {
     });
 
     applyColumnVisibility();
+    if (typeof updateRowNumbers === 'function') updateRowNumbers();
     renderPaginationControls(totalPages);
 
-    // Crucial: Fire your existing empty row recalculator to fill screen gaps
+    // Recalculate empty rows if table is empty
     if (typeof adjustEmptyRows === 'function') requestAnimationFrame(adjustEmptyRows);
 }
 
@@ -9483,7 +9419,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (scrapeBtn) { scrapeBtn.disabled = true; scrapeBtn.style.backgroundColor = '#B6B6B4'; }
                     if (scrapeUIBtn) { scrapeUIBtn.disabled = true; scrapeUIBtn.style.backgroundColor = '#B6B6B4'; }
 
-                    showCustomAlert("Feature Mode Started", "First click maps the <b>full page</b>. After that, click a control to add a feature <b>inside</b> the page. Hold <b>Shift</b> and click to map a control anytime.", "success");
+                    showCustomAlert("Feature Mode Active", "Hover over any section or control on the device preview, and click to create a feature for that section.", "success");
                 } else {
                     createFeatureBtn.style.backgroundColor = "#2F8BCC";
                     if (btnSpan) btnSpan.innerText = "Create Feature";
@@ -10012,8 +9948,61 @@ function getUiNodeName(node) {
     return node.nodeName || '';
 }
 
+function isNodeVisibleOnScreen(node) {
+    if (!node || typeof node.getAttribute !== 'function') return false;
+
+    // 1. Check XML visibility attributes (iOS & Android)
+    const visibleAttr = node.getAttribute('visible');
+    if (visibleAttr !== null && String(visibleAttr).toLowerCase() === 'false') {
+        return false;
+    }
+
+    const displayedAttr = node.getAttribute('displayed');
+    if (displayedAttr !== null && String(displayedAttr).toLowerCase() === 'false') {
+        return false;
+    }
+
+    const userVisAttr = node.getAttribute('visible-to-user');
+    if (userVisAttr !== null && String(userVisAttr).toLowerCase() === 'false') {
+        return false;
+    }
+
+    // 2. Check bounds / coordinates against visible screenshot dimensions
+    const rect = parseNodeRect(node);
+    if (!rect || rect.width <= 0 || rect.height <= 0) {
+        return false;
+    }
+
+    const dims = (typeof getDeviceDimensions === "function") ? getDeviceDimensions() : { width: 0, height: 0 };
+    const img = document.getElementById("screenshot");
+    const viewW = dims.width > 0 ? dims.width : (img && img.naturalWidth ? img.naturalWidth : 0);
+    const viewH = dims.height > 0 ? dims.height : (img && img.naturalHeight ? img.naturalHeight : 0);
+
+    if (viewW > 0 && viewH > 0) {
+        // Element completely outside screen bounds
+        if (rect.x >= viewW || rect.y >= viewH || (rect.x + rect.width) <= 0 || (rect.y + rect.height) <= 0) {
+            return false;
+        }
+
+        // Must have at least 2px visible area inside the screen viewport
+        const visibleLeft = Math.max(0, rect.x);
+        const visibleTop = Math.max(0, rect.y);
+        const visibleRight = Math.min(viewW, rect.x + rect.width);
+        const visibleBottom = Math.min(viewH, rect.y + rect.height);
+        const visibleW = visibleRight - visibleLeft;
+        const visibleH = visibleBottom - visibleTop;
+
+        if (visibleW <= 2 || visibleH <= 2) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 function isMeaningfulControlNode(node) {
     if (!node) return false;
+    if (!isNodeVisibleOnScreen(node)) return false;
     const tag = getUiNodeName(node);
     const name = node.nodeName || '';
     if (['AppiumAUT', 'XCUIElementTypeApplication', 'XCUIElementTypeWindow', 'hierarchy'].includes(name)) {
