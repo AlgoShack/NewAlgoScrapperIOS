@@ -1,0 +1,56 @@
+{
+  "name": "algoscraper",
+  "productName": "AlgoScraper",
+  "version": "1.0.0",
+  "description": "AlgoScraper scrapes UI XPath/controls for Android (UiAutomator2) and iOS (XCUITest). Main process: src/main.js. Renderer: src/popup.js. Setup: npm run setup (bundled Node + Appium + both drivers).",
+  "main": "./src/main.js",
+  "scripts": {
+    "download-node": "node scripts/download-bundled-node.js",
+    "setup": "node scripts/setup.js",
+    "start": "electron-forge start",
+    "package": "npm run download-node && electron-forge package",
+    "make": "node scripts/make-all.js",
+    "make:mac": "node scripts/make-all.js ios",
+    "make:ios": "node scripts/make-all.js ios",
+    "make:win": "node scripts/make-all.js win",
+    "publish": "electron-forge publish",
+    "lint": "echo \"No linting configured\"",
+    "package-win": "electron-packager . AlgoScraper --overwrite --asar=true --platform=win32 --arch=x64 --prune=false --out=algoScraper-builds --icon=assets/algoScraper\\ Logo.ico --version-string.CompanyName=AlgoShack --version-string.FileDescription=AlgoScraper scrapes XPath for Android and iOS apps --version-string.ProductName=\"AlgoScraper\""
+  },
+  "keywords": [],
+  "author": "YJayaKishore <jayakishore.y@algoshack.com>",
+  "license": "AlgoShack",
+  "devDependencies": {
+    "@electron-forge/cli": "^7.1.0",
+    "@electron-forge/maker-dmg": "^7.11.2",
+    "@electron-forge/maker-zip": "^7.1.0",
+    "@electron-forge/plugin-auto-unpack-natives": "^7.1.0",
+    "electron": "^43.1.0",
+    "electron-builder": "^25.1.8",
+    "electron-packager": "^17.1.2"
+  },
+  "config": {
+    "forge": "forge.config.js"
+  },
+  "dependencies": {
+    "adbkit": "^2.0.17",
+    "appium": "^2.0.1",
+    "appium-xcuitest-driver": "^9.10.5",
+    "crypto-js": "^4.2.0",
+    "electron-squirrel-startup": "^1.0.0",
+    "screenshot-desktop": "^1.15.0",
+    "selenium-webdriver": "^4.46.0"
+  },
+  "allowScripts": {
+    "uglifyjs-webpack-plugin@0.4.6": true,
+    "es5-ext@0.10.64": true,
+    "fsevents@2.3.3": true,
+    "fsevents@1.2.13": true,
+    "appium@2.19.0": true,
+    "sharp@0.34.2": true,
+    "fs-xattr@0.3.1": true,
+    "macos-alias@0.2.12": true,
+    "electron-winstaller@5.4.4": true
+  },
+  "type": "commonjs"
+}

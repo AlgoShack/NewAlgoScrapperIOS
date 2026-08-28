@@ -1,0 +1,4 @@
+- [x] Fix `index.html` header for fingerprint
+- [x] Update `downloadTableAsJSON` in `popup.js` to include fingerprint and App URL
+- [x] Update `sendTableDataToAPI` in `popup.js` to include fingerprint and App URL
+- [x] Verify changes

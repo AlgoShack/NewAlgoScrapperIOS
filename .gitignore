@@ -1,0 +1,44 @@
+# Node.js
+node_modules/
+
+# Electron Forge build output
+out/
+dist/
+.webpack/
+
+# Appium runtime dependencies
+appium-runtime/node_modules/
+appium-runtime/.appium-home/
+appium-runtime/.uia2-registered
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Logs
+npm-debug.log
+yarn-error.log
+pnpm-debug.log
+
+# Environment files
+.env
+.env.*
+
+# Coverage
+coverage/
+
+# Temporary files
+*.log
+*.tmp
+
+# Bundled Node.js download/extract scratch
+.tmp-node-download/
+.tmp-win-prune/
+# Local Node binary (restore with npm run download-node); too large for GitHub
+bundled-node/node
+bundled-node/node.exe
+# GitHub Actions needs token `workflow` scope to push; keep local only
+.github/workflows/

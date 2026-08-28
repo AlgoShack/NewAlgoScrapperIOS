@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' data:; img-src 'self' data: file:;">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #2b2f38;
+    /* Avoid remote Google Fonts (often blocked offline / on Windows) */
+    font-family: "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .popup {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(180deg, #343842 0%, #2b2f38 55%, #252933 100%);
+    overflow: hidden;
+  }
+
+  .brand {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    height: 40px;
+    padding: 0 22px 0 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    color: #ffffff;
+    background: #2F8BCC;
+    border-bottom-right-radius: 22px;
+    box-shadow: 4px 6px 18px rgba(47, 139, 204, 0.28);
+  }
+
+  .brand-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+    white-space: nowrap;
+    color: #ffffff;
+  }
+
+  .brand-subtitle {
+    font-size: 12px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.92);
+    white-space: nowrap;
+  }
+
+  .bottom-line {
+    position: absolute;
+    top: 40px;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #2F8BCC, rgba(47,139,204,0.15));
+    z-index: 1;
+  }
+
+  .content {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 48px 24px 20px;
+    text-align: center;
+  }
+
+  .loader-wrap {
+    width: 58px;
+    height: 58px;
+    margin-bottom: 14px;
+    position: relative;
+    display: grid;
+    place-items: center;
+  }
+
+  .loader-image {
+    width: 58px;
+    height: 58px;
+    object-fit: contain;
+    -webkit-user-drag: none;
+  }
+
+  .spinner {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.12);
+    border-top-color: #2F8BCC;
+    border-right-color: rgba(47,139,204,0.35);
+    animation: spin 0.85s linear infinite;
+  }
+
+  .spinner.hidden,
+  .loader-image.hidden { display: none; }
+
+  .check {
+    display: none;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    place-items: center;
+    background: rgba(61, 214, 140, 0.15);
+    border: 1.5px solid rgba(61, 214, 140, 0.45);
+    color: #3dd68c;
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .check.show { display: grid; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  h1 {
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin-bottom: 10px;
+  }
+
+  /* Active status text — blue (readable on dark splash) */
+  .status {
+    min-height: 22px;
+    color: #2F8BCC;
+    font-size: 14px;
+    font-weight: 600;
+    max-width: 320px;
+    line-height: 1.35;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 0.28s ease, transform 0.28s ease;
+  }
+
+  .status.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .status.ok { color: #7dffb5; }
+  .status.err { color: #ff8f8f; }
+
+  .dots::after {
+    content: "";
+    display: inline-block;
+    width: 1.2em;
+    text-align: left;
+    animation: dots 1.2s steps(4, end) infinite;
+  }
+
+  @keyframes dots {
+    0% { content: ""; }
+    25% { content: "."; }
+    50% { content: ".."; }
+    75% { content: "..."; }
+    100% { content: ""; }
+  }
+
+  .bar {
+    margin-top: 16px;
+    width: 160px;
+    height: 3px;
+    border-radius: 99px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+
+  .bar > i {
+    display: block;
+    height: 100%;
+    width: 18%;
+    border-radius: inherit;
+    background: #2F8BCC;
+    transition: width 0.4s ease;
+  }
+</style>
+</head>
+<body>
+  <div class="popup">
+    <div class="brand">
+      <span class="brand-title">AlgoScraper</span>
+      <span class="brand-subtitle">Powered by algoShack</span>
+    </div>
+    <div class="bottom-line"></div>
+
+    <div class="content">
+      <div class="loader-wrap">
+        <img src="icon/load-8510_256.gif" class="loader-image" id="loaderImg" alt=""
+             onerror="this.classList.add('hidden'); document.getElementById('spinner').classList.remove('hidden');" />
+        <div class="spinner hidden" id="spinner"></div>
+        <div class="check" id="checkMark">✓</div>
+      </div>
+
+      <h1 id="headline">Preparing AlgoScraper</h1>
+      <p class="status show" id="status">Starting<span class="dots"></span></p>
+      <div class="bar"><i id="progressBar"></i></div>
+    </div>
+  </div>
+
+<script>
+  const STEP_PROGRESS = { prereq: 18, appium: 55, device: 80, launch: 100 };
+  let msgTimer = null;
+
+  function setProgress(step, status) {
+    const bar = document.getElementById("progressBar");
+    if (!bar) return;
+    let pct = STEP_PROGRESS[step] || 20;
+    if (status === "active") pct = Math.max(8, pct - 12);
+    if (status === "done" && step === "launch") pct = 100;
+    bar.style.width = pct + "%";
+  }
+
+  function setBusy(isDone) {
+    const img = document.getElementById("loaderImg");
+    const spinner = document.getElementById("spinner");
+    const check = document.getElementById("checkMark");
+    if (isDone) {
+      if (img) img.classList.add("hidden");
+      if (spinner) spinner.classList.add("hidden");
+      if (check) check.classList.add("show");
+    } else {
+      if (img && !img.classList.contains("hidden")) img.classList.remove("hidden");
+      if (spinner && img && img.classList.contains("hidden")) spinner.classList.remove("hidden");
+      if (check) check.classList.remove("show");
+    }
+  }
+
+  window.__setStartupUI = function(payload) {
+    try {
+      const data = typeof payload === "string" ? JSON.parse(payload) : payload;
+      const statusEl = document.getElementById("status");
+      const headlineEl = document.getElementById("headline");
+      const text = data.live || data.detail || "";
+      const isDone = data.status === "done";
+      const isError = data.status === "error";
+
+      if (data.headline && headlineEl) headlineEl.textContent = data.headline;
+
+      setProgress(data.step, data.status);
+      setBusy(data.step === "launch" && isDone);
+
+      if (!statusEl || !text) return;
+
+      if (msgTimer) clearTimeout(msgTimer);
+      statusEl.classList.remove("show", "ok", "err");
+
+      msgTimer = setTimeout(function() {
+        const showDots = data.status === "active";
+        const safeText = String(text)
+          .replace(/[\u2713\u2714\u2705\u2611]/g, '')
+          .replace(/â[\u0080-\u00FF]{0,3}/g, '')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        statusEl.innerHTML = safeText + (showDots ? '<span class="dots"></span>' : '');
+        if (isDone) statusEl.classList.add("ok");
+        if (isError) statusEl.classList.add("err");
+        void statusEl.offsetWidth;
+        statusEl.classList.add("show");
+      }, 160);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+</script>
+</body>
+</html>

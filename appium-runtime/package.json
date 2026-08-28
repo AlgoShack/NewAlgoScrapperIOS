@@ -1,0 +1,25 @@
+{
+  "name": "appium-runtime",
+  "version": "1.0.0",
+  "description": "Bundled Appium 2 runtime for AlgoScraper. UiAutomator2 = Android; XCUITest = iOS. Spawned by src/main.js using bundled-node (not system Appium).",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "appium",
+    "android",
+    "ios",
+    "uiautomator2",
+    "xcuitest",
+    "algoscraper"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "appium": "^2.19.0",
+    "appium-uiautomator2-driver": "^2.45.1",
+    "appium-xcuitest-driver": "^9.10.5"
+  }
+}

@@ -1,0 +1,4 @@
+- [x] Implement `syncExistingRowsWithNewFeature(area)` helper function
+- [x] Update `featureSaveBtn` listener to call sync function
+- [x] Update `newExtraBtn` listener to call sync function
+- [x] Update `newOkayBtn` (`createNewFeature` case) to call sync function

@@ -1,0 +1,68 @@
+# electron-builder config — Windows NSIS installer only
+# Used by: npm run make:win  →  forge package, then:
+#   npx electron-builder --prepackaged <out/AlgoScraper-win32-x64> --win nsis --x64
+#
+# Do not use npm run make for Windows — that is Mac/iOS only.
+#
+# WHY install can look "stuck":
+#   The Setup packs Electron + Appium UiAutomator2 + Node (~200–300MB after pruning).
+#   Extraction can take several minutes with little UI change — leave it running.
+#
+# WHY Windows says "not safe" / SmartScreen:
+#   The installer is not Authenticode code-signed yet. Without a paid code-signing
+#   certificate, Windows shows "Windows protected your PC". Users can choose
+#   More info → Run anyway. Signing removes that warning.
+
+appId: com.algoshack.algoscraper
+productName: AlgoScraper
+copyright: Copyright © AlgoShack
+
+directories:
+  output: out/windows-installer
+  buildResources: assets
+
+# normal = much faster Windows make; Setup is a bit larger. App contents are identical.
+compression: normal
+
+win:
+  icon: assets/algoScraper Logo.ico
+  # Shown in file Properties → Details (helps slightly; does NOT replace code signing)
+  publisherName: AlgoShack
+  legalTrademarks: AlgoScraper
+  requestedExecutionLevel: asInvoker
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: AlgoScraper-Setup-${version}.${ext}
+  verifyUpdateCodeSignature: false
+  # Do not force signing — unsigned builds still work; SmartScreen warning is expected
+  signAndEditExecutable: true
+
+# Register myapp:// so AlgoQA API can deep-link into the installed Windows app
+protocols:
+  - name: AlgoScraper
+    schemes:
+      - myapp
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: AlgoScraper
+  installerIcon: assets/algoScraper Logo.ico
+  uninstallerIcon: assets/algoScraper Logo.ico
+  installerHeaderIcon: assets/algoScraper Logo.ico
+  deleteAppDataOnUninstall: false
+  # Don't auto-launch after install — large first boot (Appium) looks like a hang
+  runAfterFinish: false
+  menuCategory: false
+  displayLanguageSelector: false
+  warningsAsErrors: false
+  # Show install details so progress is visible while large files extract
+  differentialPackage: false
+  artifactName: AlgoScraper-Setup-${version}.${ext}
+  include: null

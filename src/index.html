@@ -1,0 +1,1167 @@
+<!DOCTYPE html>
+<!--
+  AlgoScraper — main UI (loaded by Electron BrowserWindow).
+  Script: popup.js (renderer)  |  Styles: index.css  |  Process: main.js (IPC)
+
+  LAYOUT
+    Top nav tabs: Home | Configuration | About
+    Home           → left device preview + right captured-controls table
+    Configuration  → session setup (device, capabilities, Launch, Reset)
+    About          → product info
+    Top right      → token, Change, algoQA
+
+  CROSS-PLATFORM UI
+    Windows + macOS share the same layout (index.css "Shared layout").
+    Windows: Platform dropdown shows Android only (popup.js lockPlatformToAndroidOnWindows).
+    macOS: Platform dropdown shows Android + IOS.
+
+  LAUNCH GATE
+    #Run starts disabled. Enabled after a valid token, or immediately on myapp:// launch.
+    See popup.js [LAUNCH-MODE].
+
+  PLATFORM FIELDS (toggled by popup.js updatePlatformUI)
+    Android → #appPkg / #appActvty, automationName UiAutomator2
+    iOS     → #bndlID, automationName XCUITest
+    #devicename is filled from main-process discovery and filtered by platform.
+
+  HIDDEN CONTROLS
+    #Scrape (Load Page) → display:none — Scrape UI + tap scrape are the active paths
+-->
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>AlgoScraper</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <link rel="stylesheet" href="./index.css">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+</head>
+
+<body>
+<div class="overlay" id="overlay"></div>
+<div id="sttus_bar_div" style="text-align: center;height: 22px;display: none;"></div>
+<div id="div_status_bar" style="text-align: center;height: 22px;display: none;">
+    <span><img src="icon/load-8510_256.gif" style="height: 36px;"/></span>
+</div>
+
+<!-- ========== TOP NAV ========== -->
+<header class="app-topnav" role="banner">
+    <div class="topnav-brand">
+        <div class="brand-mark" aria-hidden="true">
+            <img src="icon/algoScraper-logo.png" alt="AlgoScraper" class="brand-mark-img">
+        </div>
+        <div class="brand-copy">
+            <span class="brand-name">AlgoScraper</span>
+            <span class="brand-sub">Powered by algoShack</span>
+        </div>
+    </div>
+
+    <nav class="topnav-tabs" role="tablist" aria-label="AlgoScraper">
+        <button type="button" class="topnav-tab is-active" data-tab="home" role="tab" aria-selected="true">Home</button>
+        <button type="button" class="topnav-tab" data-tab="configuration" role="tab" aria-selected="false">Configuration</button>
+        <button type="button" class="topnav-tab" data-tab="about" role="tab" aria-selected="false">About</button>
+    </nav>
+
+    <div class="topnav-actions">
+        <div id="tokenContainer" class="nav-token-wrap">
+            <input
+                type="text"
+                id="tokenInput"
+                placeholder="Paste your token"
+                autocomplete="off"
+                spellcheck="false">
+            <div id="tokenStatus" style="display:none;">Connected</div>
+        </div>
+
+        <button id="changeTokenBtn" class="pill-btn nav-ghost-btn" style="display: none;">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+            <span>Change</span>
+        </button>
+
+        <button id="algoQA" class="pill-btn algoqa-styled-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 3h7v7"></path>
+                <path d="M10 14L21 3"></path>
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            </svg>
+            <span class="algoqa-text">
+                <span class="text-algo">algo</span><span class="text-qa">QA</span><sup class="registered-symbol">®</sup>
+            </span>
+        </button>
+    </div>
+</header>
+
+<div class="app-shell">
+
+<section id="tab-configuration" class="app-tab" role="tabpanel">
+    <div class="config-page-wrapper">
+        
+        <!-- TOP CLEAN HEADER -->
+        <div class="config-page-header">
+            <div class="config-header-main">
+                <h1 class="config-header-title">Configuration & Capabilities Dashboard</h1>
+                <p class="config-header-desc">Active Appium connection, target hardware specs, and W3C desired capabilities payload.</p>
+            </div>
+            <div class="config-header-status">
+                <span class="pulse-dot"></span>
+                <span>Appium Gateway: <b>127.0.0.1:4723</b></span>
+            </div>
+        </div>
+
+        <!-- 3 SUMMARY METRIC CHIPS -->
+        <div class="config-metrics-row">
+            <div class="config-metric-chip">
+                <div class="metric-chip-icon blue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                </div>
+                <div class="metric-chip-content">
+                    <span class="metric-chip-label">Target Platform</span>
+                    <span class="metric-chip-value" id="configMetricPlatform">Android</span>
+                </div>
+            </div>
+
+            <div class="config-metric-chip">
+                <div class="metric-chip-icon purple">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                </div>
+                <div class="metric-chip-content">
+                    <span class="metric-chip-label">Automation Engine</span>
+                    <span class="metric-chip-value" id="configMetricEngine">UiAutomator2</span>
+                </div>
+            </div>
+
+            <div class="config-metric-chip">
+                <div class="metric-chip-icon green">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                </div>
+                <div class="metric-chip-content">
+                    <span class="metric-chip-label">Platform OS Version</span>
+                    <span class="metric-chip-value" id="configMetricVersion">Android 14</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2-COLUMN DASHBOARD GRID -->
+        <div class="config-dashboard-grid">
+            
+            <!-- LEFT CARD: DEVICE & APPLICATION SPECS -->
+            <div class="config-dash-card">
+                <div class="dash-card-header">
+                    <div class="dash-card-title-wrap">
+                        <div class="dash-icon-box blue">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                        </div>
+                        <div>
+                            <h3 class="dash-card-title">Target Device & Application</h3>
+                            <p class="dash-card-subtitle">Active hardware identifier and target app components</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dash-card-body">
+                    
+                    <!-- UDID / Serial Item -->
+                    <div class="dash-spec-item">
+                        <div class="dash-spec-label-row">
+                            <span class="dash-spec-label" id="udidLabel">Device Identifier (Serial / UDID)</span>
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('udid', this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <div class="dash-code-pill">
+                            <input type="text" id="udid" name="udid" class="dash-prop-input mono" readonly value="" placeholder="No device selected">
+                        </div>
+                        <span class="dash-spec-hint">Connected physical hardware serial or simulator UUID</span>
+                    </div>
+
+                    <!-- App Package (Android) -->
+                    <div id="appPkg" class="dash-spec-item" style="display: flex;">
+                        <div class="dash-spec-label-row">
+                            <span class="dash-spec-label">App Package</span>
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('apppackage', this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <div class="dash-code-pill">
+                            <input type="text" id="apppackage" name="apppackage" class="dash-prop-input mono" readonly value="com.ril.mobilecal" placeholder="App Package">
+                        </div>
+                        <span class="dash-spec-hint">Android package namespace identifier</span>
+                    </div>
+
+                    <!-- App Activity (Android) -->
+                    <div id="appActvty" class="dash-spec-item" style="display: flex;">
+                        <div class="dash-spec-label-row">
+                            <span class="dash-spec-label">App Activity</span>
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('appactivity', this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <div class="dash-code-pill">
+                            <input type="text" id="appactivity" name="appactivity" class="dash-prop-input mono" readonly value="com.apple.mobilecal" placeholder="App Activity">
+                        </div>
+                        <span class="dash-spec-hint">Main launch activity component invoked</span>
+                    </div>
+
+                    <!-- Bundle Identifier (iOS) -->
+                    <div id="bndlID" class="dash-spec-item" style="display: none;">
+                        <div class="dash-spec-label-row">
+                            <span class="dash-spec-label">Bundle Identifier</span>
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('bundleID', this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <div class="dash-code-pill">
+                            <input type="text" id="bundleID" name="bundleID" class="dash-prop-input mono" readonly value="com.apple.mobilecal" placeholder="Bundle ID">
+                        </div>
+                        <span class="dash-spec-hint">Primary bundle identifier for iOS app bundle</span>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- RIGHT CARD: APPIUM W3C CAPABILITIES JSON PAYLOAD (VS CODE STYLE) -->
+            <div class="config-dash-card">
+                <div class="dash-card-header">
+                    <div class="dash-card-title-wrap">
+                        <div class="dash-icon-box purple">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                        </div>
+                        <div>
+                            <h3 class="dash-card-title">W3C Capabilities Payload</h3>
+                            <p class="dash-card-subtitle">Live JSON payload supplied to Appium session gateway</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="dash-card-body" style="padding: 10px 12px 12px; display: flex; flex-direction: column;">
+                    <div class="vscode-window">
+                        <!-- VS Code Title Bar -->
+                        <div class="vscode-header">
+                            <div class="vscode-mac-dots">
+                                <span class="dot red"></span>
+                                <span class="dot yellow"></span>
+                                <span class="dot green"></span>
+                            </div>
+                            <div class="vscode-tab">
+                                <svg viewBox="0 0 24 24" class="vscode-json-icon"><path fill="#fbc02d" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h2v6H7v2h6v-2h-2V9h2V7H7z"/></svg>
+                                <span>capabilities.json</span>
+                            </div>
+                            <div class="vscode-actions">
+                                <button type="button" class="vscode-copy-btn" onclick="copyConfigJson(this)">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    <span>Copy</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- VS Code Editor Canvas -->
+                        <div class="vscode-body">
+                            <div class="vscode-gutter" id="configJsonGutter">
+                                <span>1</span>
+                                <span>2</span>
+                                <span>3</span>
+                                <span>4</span>
+                                <span>5</span>
+                                <span>6</span>
+                                <span>7</span>
+                                <span>8</span>
+                            </div>
+                            <div class="vscode-code-area">
+                                <pre id="configJsonPreview" class="vscode-code"></pre>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- HIDDEN ACTIVE INPUTS FOR APPIUM PARAMS -->
+                    <input type="hidden" id="appiumurl" value="http://127.0.0.1:4723">
+                    <input type="hidden" id="automationName" value="UiAutomator2">
+                    <input type="hidden" id="platformversion" value="14">
+                    <div id="pfVersion" style="display:none;"></div>
+                    <div id="automatione_name" style="display:none;"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- HIDDEN LABELS / COMPATIBILITY HOOKS -->
+        <span id="configStatPlatform" style="display:none;">Android</span>
+        <span id="configStatEngine" style="display:none;">UiAutomator2</span>
+
+    </div>
+</section>
+
+<section id="tab-home" class="app-tab is-active" role="tabpanel">
+    <div class="home-session-bar">
+        <div class="home-session-top">
+            <div class="home-session-fields">
+                <div class="home-field">
+                    <label for="platformname">Platform</label>
+                    <select id="platformname" name="platformname" class="js-custom-select">
+                        <option value="Android" selected>Android</option>
+                        <option value="IOS">IOS</option>
+                    </select>
+                </div>
+                <div class="home-field home-field-app">
+                    <label for="appname">App</label>
+                    <select id="appname" class="js-custom-select">
+                        <option value="">Loading Apps...</option>
+                    </select>
+                </div>
+                <div class="home-field home-field-device">
+                    <label for="devicename">Device</label>
+                    <select type="text" id="devicename" name="devicename" class="js-custom-select" placeholder="Your device name.."></select>
+                </div>
+            </div>
+            <div class="home-session-actions">
+                <button id="Run" class="pill-btn" style="background-color: #B6B6B4;" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span>Launch Application</span>
+                </button>
+                <button id="reset" class="pill-btn home-reset-btn" disabled>
+                    <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                    <span>Reset</span>
+                </button>
+            </div>
+        </div>
+        <div class="home-toolbar">
+            <div class="screen-name-badge is-disabled">
+                <span class="badge-label">Page Name</span>
+                <div class="badge-content" style="position: relative;">
+                    <div class="info-icon-wrapper">
+                        <svg class="info-icon" viewBox="0 0 24 24" fill="#2F8BCC"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                        <div class="page-info-tooltip">
+                        Updating the page name will automatically be reflected in all controls where it has been captured.
+                        </div>
+                    </div>
+
+                    <input type="text" id="pagename_searchbox" name="pagename_searchbox" placeholder="Page name" disabled>
+
+                    <svg class="add-page-icon" viewBox="0 0 24 24" fill="none" stroke="#555555" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display: inline-block; cursor: pointer; width: 14px; height: 14px; margin-right: 4px; transition: all 0.2s ease;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+
+                    <svg class="edit-icon" viewBox="0 0 24 24" fill="#555555"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+
+                    <svg class="confirm-edit-icon" viewBox="0 0 24 24" fill="none" stroke="#28a745" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: none; cursor: pointer; width: 16px; height: 16px; margin-left: 5px; transition: transform 0.2s;"><polyline points="20 6 9 17 4 12"></polyline></svg>
+
+                    <svg class="cancel-edit-icon" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" style="display: none; cursor: pointer; width: 16px; height: 16px; margin-left: 5px; transition: transform 0.2s;"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+
+                    <div class="error-icon-wrapper" style="display: none; margin-left: 5px; position: relative;">
+                        <svg class="error-info-icon" viewBox="0 0 24 24" fill="#dc3545" style="width: 16px; height: 16px; cursor: pointer;">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                        </svg>
+                        <div class="error-info-tooltip">
+                            Page Name must be at least 3 characters and can accept alphanumeric, single space between words and underscore starting with alphabet and numbers and underscore
+                        </div>
+                    </div>
+
+                    <svg class="dropdown-icon" viewBox="0 0 10 6" style="cursor: pointer;"><polygon points="0,0 10,0 5,6" fill="#888888"></polygon></svg>
+
+                    <div id="pageNameDropdown" class="page-name-dropdown" style="display: none;"></div>
+                </div>
+            </div>
+
+            <button id="recordScenarioBtn" class="pill-btn" style="background-color: #B6B6B4;" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="3" fill="currentColor"></circle></svg>
+                <span>Record Scenario</span>
+            </button>
+
+            <button id="addScenarioBtn" class="pill-btn" style="display: none !important;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Add Scenario</span>
+            </button>
+
+            <button id="createFeatureBtn" class="pill-btn" style="background-color: #B6B6B4;" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="7" height="16" stroke-dasharray="4 4"></rect>
+                    <rect x="14" y="4" width="7" height="5"></rect>
+                    <path d="M21 14a2.121 2.121 0 0 0-3-3L11 18v3h3l7-7z"></path>
+                </svg>
+                <span>Create Feature</span>
+            </button>
+
+            <button id="Scrape" class="pill-btn" style="display: none !important;" disabled>
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <span>Load Page</span>
+            </button>
+
+            <button id="scrapeUI" class="pill-btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                    <polyline points="2 17 12 22 22 17"></polyline>
+                    <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+                <span>Scrape UI</span>
+            </button>
+        </div>
+    </div>
+
+    <div class="home-layout">
+    <div class="split-div2 home-preview">
+        <div class="container preview-panel" style="position:relative; overflow:hidden; height:100%;">
+
+            <div class="panel-header preview-header">
+                <div>
+                    <h2 class="panel-title">Device preview</h2>
+                </div>
+                <div id="imageToolbarmain">
+                <div id="imageToolbar">
+                    <div class="toolWrapper">
+                        <button id="zoomInBtn" class="toolBtn" aria-label="Zoom in">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                        </button>
+                        <span class="toolTip">Zoom In (125%)</span>
+                    </div>
+
+                    <div class="toolWrapper">
+                        <button id="zoomOutBtn" class="toolBtn" aria-label="Zoom out" disabled style="opacity: 0.45; cursor: not-allowed;">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.3" y2="16.3"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                        </button>
+                        <span class="toolTip">Zoom Out (100% Min)</span>
+                    </div>
+
+                    <div class="toolWrapper">
+                        <button id="resetZoomBtn" class="toolBtn" aria-label="Reset zoom">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6v6"/></svg>
+                        </button>
+                        <span class="toolTip">Reset Zoom (100%)</span>
+                    </div>
+
+                    <div class="toolWrapper">
+                        <button id="refreshBtn" class="toolBtn" aria-label="Refresh page">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+                        </button>
+                        <span class="toolTip">Refresh Page</span>
+                    </div>
+
+                    <div class="toolWrapper">
+                        <button id="touchBtn" class="toolBtn" aria-label="Touch mode">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0"/><path d="M14 10V4a2 2 0 0 0-4 0v8"/><path d="M10 10.5V8a2 2 0 0 0-4 0v7a6 6 0 0 0 12 0v-3.5a2 2 0 0 0-2-2h-2"/></svg>
+                        </button>
+                        <span class="toolTip">Touch Mode</span>
+                    </div>
+
+                    <div class="toolWrapper">
+                        <button id="tapBtn" class="toolBtn" aria-label="Tap element">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="8"/><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/></svg>
+                        </button>
+                        <span class="toolTip">Tap Element</span>
+                    </div>
+                </div>
+                </div>
+            </div>
+
+            <div id="image-container"
+                 style="
+                 position:relative;
+                 height:100%;
+                 width:100%;
+                 display:flex;
+                 overflow:hidden;
+                 text-align:center;
+                 justify-content:center;
+                 align-items:center;">
+
+                <div class="phone-stage">
+                <div class="phone-bezel">
+                <div id="zoomFrame">
+                    <div id="overlayContainer"></div>
+
+                    <div id="dummyDevice">
+                        <div class="phone-welcome-overlay">
+                            <svg id="dummyIcon" class="info-svg" viewBox="0 0 24 24" fill="#2F8BCC" xmlns="http://www.w3.org/2000/svg" style="width: 45px; height: 45px; margin-bottom: 15px;">
+                                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                            </svg>
+                            <p id="dummyMainText" class="phone-welcome-title">Select platform, app and device, then click Launch Application.</p>
+                            <p id="dummyErrorText" style="display: none; color: #d9534f; font-size: 11px; margin-top: 12px; line-height: 1.4; padding: 0 10px; font-weight: 600; word-break: break-word;"></p>
+                        </div>
+                    </div>
+                </div>
+                </div>
+                </div>
+            </div>
+
+            <p id="info"></p>
+        </div>
+    </div>
+    <div class="split-div3" id="split-div3" style="display: none;">
+        <div class="container" style="height: 512px; display: flex; justify-content: center; align-items: center;">
+            <button
+                    id="closePreview"
+                    style="
+        position:absolute;
+        top:15px;
+        right:15px;
+        background:none;
+        border:none;
+        font-size:24px;
+        cursor:pointer;
+        color:#888;
+    ">
+                ✕
+            </button>
+            <div id="image-container_ss" style="height: 407px; display: flex; justify-content: center; align-items: center;">
+                <div id="div_status_bar_ss" style="text-align: center; height: 22px; display: none;">
+            <span style="height: 407px;">
+              <img src="icon/load-8510_256.gif" alt="Element Image could not found" style="display: flex; justify-content: center; align-items: center; width: 40px; height: 40px;"/>
+            </span>
+                </div>
+            </div>
+            <h6 id="brokenText" style="height: 30px; padding: 5px; border-radius: 5px; justify-content: center; align-items: center; display: none; background-color: rgb(255, 0, 0); color: #fff;">Image could not be found for this Element</h6>
+            <p id="info"></p>
+        </div>
+    </div>
+
+    <div class="home-table">
+<div id="tableTopToolbar" class="table-top-toolbar" style="font-size: 11px; display: flex; align-items: center; gap: 10px;">
+
+    <div class="table-search-wrapper">
+        <svg class="table-search-icon-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 2 9.5 2S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="searchbox" name="searchbox" placeholder="Search table data">
+    </div>
+
+    <div class="toolWrapper" style="display: inline-flex;">
+        <button id="download" class="download-circle-btn" aria-label="Download">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+        </button>
+        <span class="toolTip">Download</span>
+    </div>
+
+    <div class="toolWrapper custom-col-tool-wrapper" style="display: inline-flex; position: relative;">
+        <button id="customizeColumnsBtn" class="download-circle-btn" aria-label="Customize Columns" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 21v-7"></path>
+                <path d="M4 10V3"></path>
+                <path d="M12 21v-9"></path>
+                <path d="M12 8V3"></path>
+                <path d="M20 21v-5"></path>
+                <path d="M20 12V3"></path>
+                <circle cx="4" cy="14" r="2"></circle>
+                <circle cx="12" cy="8" r="2"></circle>
+                <circle cx="20" cy="16" r="2"></circle>
+            </svg>
+        </button>
+        <span class="toolTip">Customize Table</span>
+
+        <div id="customizeColumnsDropdown" class="customize-columns-dropdown" style="display: none;">
+            <div class="customize-columns-header">
+                <div class="customize-columns-header-title">
+                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <line x1="9" y1="3" x2="9" y2="21"></line>
+                        <line x1="15" y1="3" x2="15" y2="21"></line>
+                    </svg>
+                    <span>Columns Visibility</span>
+                </div>
+                <span id="customizeColumnsCounter" class="customize-columns-counter"></span>
+            </div>
+            <div id="customizeColumnsList" class="customize-columns-list"></div>
+        </div>
+    </div>
+</div>
+
+    <div id="scenarioOutlineBar" class="scenario-outline-bar" style="display: none;">
+        <span class="scenario-label" id="so_badge_label">Scenario Outline</span>
+        <div class="scenario-content" style="position: relative;">
+            <input type="text" id="scenarioOutlineText" class="scenario-input" style="color: #333 !important; font-weight: 600;" readonly>
+            <div class="scenario-icons-wrapper">
+                <svg id="so_edit_icon" class="scenario-icon blue-icon" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
+                </svg>
+                <svg id="so_dropdown_icon" class="scenario-dropdown-icon" viewBox="0 0 10 6" style="cursor: pointer;">
+                    <polygon points="0,0 10,0 5,6" fill="#888888"></polygon>
+                </svg>
+            </div>
+            <div id="scenarioOutlineDropdown" class="scenario-outline-dropdown" style="display: none;"></div>
+        </div>
+    </div>
+
+    <div class="unhide-dropdown-wrapper custom-tooltip-wrapper" style="margin-left: 5px; display: none !important;">
+        <button id="unhide_col_btn" class="circular-eye-btn" disabled style="width: auto !important; min-width: unset; border-radius: 14px; padding: 0 10px; gap: 5px; display: inline-flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span style="font-size: 11px; font-weight: 700;">Col</span>
+        </button>
+        <span class="custom-tooltip">Unhide Column</span>
+        <div id="unhide_col_menu" class="unhide-menu"></div>
+    </div>
+
+    <div class="unhide-dropdown-wrapper custom-tooltip-wrapper" style="margin-left: 5px; display: none !important;">
+        <button id="unhide_row_btn" class="circular-eye-btn" disabled style="width: auto !important; min-width: unset; border-radius: 14px; padding: 0 10px; gap: 5px; display: inline-flex; align-items: center; justify-content: center;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span style="font-size: 11px; font-weight: 700;">Row</span>
+        </button>
+        <span class="custom-tooltip">Unhide Row</span>
+        <div id="unhide_row_menu" class="unhide-menu"></div>
+    </div>
+
+<div id="colContextMenu" class="custom-context-menu">
+    <div id="hideColOption">Hide Column</div>
+</div>
+<div id="rowContextMenu" class="custom-context-menu">
+    <div id="hideRowOption">Hide Row</div>
+</div>
+<div id="deleteContextMenu" class="custom-context-menu">
+    <div id="toggleMultiDeleteOpt">Enable Multi-Delete</div>
+</div>
+
+<div class="table-bottom-section">
+<div class="bottom-div" id="table-container">
+    <table class="table table-bordered" id="mainTable">
+        <thead>
+        <tr class="bg-info" style="font-size: 11px;">
+            <th class="excel-header-corner" style="width: 45px; min-width: 45px; border-inline-color: black; text-align: center; vertical-align: middle;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 15px; height: 15px; margin-top: 2px; cursor: default; -webkit-user-drag: none;">
+                    <line x1="10" y1="6" x2="21" y2="6"></line>
+                    <line x1="10" y1="12" x2="21" y2="12"></line>
+                    <line x1="10" y1="18" x2="21" y2="18"></line>
+                    <path d="M4 6h1v4"></path>
+                    <path d="M4 10h2"></path>
+                    <path d="M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"></path>
+                </svg>
+                <span style="display:none;">#</span>
+                <div class="resizer"></div>
+            </th>
+            <th id="cn pt-3-half" style="border-inline-color:black; text-align: center; width: 110px;">Control Name <div class="resizer"></div></th>
+            <th id="ct pt-3-half" style="border-inline-color:black; text-align: center; width: 120px;">Control Type <div class="resizer"></div></th>
+            <th id="xpath pt-3-half" style="border-inline-color:black; text-align: center; width: auto;">Control ID <h7 id="matchCount" style="margin-left: 12px;color: #e7db09;font-style: italic;"></h7><div class="resizer"></div></th>
+            <th id="page pt-3-half" style="border-inline-color:black; text-align: center; width: 95px;">Page Name <div class="resizer"></div></th>
+            <th id="identificationType pt-3-half" style="border-inline-color:black; text-align: center; width: 155px;">IDENTIFICATION TYPE <div class="resizer"></div></th>
+            <th id="controlValue pt-3-half" style="border-inline-color:black; text-align: center; width: 125px;">CONTROL VALUE <div class="resizer"></div></th>
+            <th id="featureName pt-3-half" style="border-inline-color:black; text-align: center; width: 115px;">FEATURE NAME <div class="resizer"></div></th>
+            <th class="nodeName pt-3-half" id="nodeName pt-3-half" style="border-inline-color:black; text-align: center; width: 100px;">NODE NAME <div class="resizer"></div></th>
+            <th class="fingerprint" style="display:none;">FINGERPRINT</th>
+            <th id="appUrl" style="display:none;">APP URL</th>
+            <th id="delete_header" style="border-inline-color:black; width: 45px; text-align: center; vertical-align: middle;">
+                <input type="checkbox" id="selectAllCheckbox" style="display: none; cursor: pointer; margin: 0 auto;">
+                <svg id="headerDeleteIcon" viewBox="0 0 448 512" fill="#ffffff" style="width: 15px; height: 16px; margin-top: 2px; cursor: pointer; -webkit-user-drag: none;">
+                    <path d="M135.2 17.7C140.6 6.8 151.7 0 163.8 0H284.2c12.1 0 23.2 6.8 28.6 17.7L320 32h96c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 96 0 81.7 0 64S14.3 32 32 32h96l7.2-14.3zM32 128H416V448c0 35.3-28.7 64-64 64H96c-35.3 0-64-28.7-64-64V128zm96 64c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16z"/>
+                </svg>
+                <span style="display:none;">DELETE</span>
+            </th>
+            <th id="add_empty_column" class="custom-tooltip-wrapper" style="width: 35px; min-width: 35px; text-align: center; display: none !important;">
+                <img src="icon/plus.png" style="width:16px; cursor:pointer; -webkit-user-drag: none;" />
+                <span class="custom-tooltip">Add Column</span>
+            </th>
+        </tr>
+        </thead>
+        <tbody id="myTable">
+        </tbody>
+    </table>
+</div>
+
+<div id="tableSearchEmptyState" class="table-search-empty-state" style="display: none;">
+    <div class="empty-state-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#2F8BCC" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            <line x1="8" y1="11" x2="14" y2="11"></line>
+        </svg>
+    </div>
+    <div class="empty-state-title">No Matching Controls Found</div>
+    <div class="empty-state-subtitle" id="tableSearchEmptySubtitle">No elements match your search query.</div>
+    <button id="clearSearchBtn" class="clear-search-pill-btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+        <span>Clear Search</span>
+    </button>
+</div>
+
+<div id="bottom-action-bar">
+    <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="custom-tooltip-wrapper">
+            <button id="add_row_btn" class="pill-btn" style="height: 26px !important; margin: 0 !important; padding: 0 10px 0 8px !important; background-color: #2F8BCC; border-radius: 6px !important; gap: 4px !important;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width: 13px; height: 13px;"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                <span>Row</span>
+            </button>
+        </div>
+        <button id="bulk_delete_btn" class="pill-btn" style="height: 26px !important; margin: 0 !important; padding: 0 10px !important; background-color: #d9534f; border-radius: 6px !important; display: none !important; gap: 4px;">
+            <svg viewBox="0 0 448 512" fill="#ffffff" style="width: 12px; height: 12px;"><path d="M135.2 17.7C140.6 6.8 151.7 0 163.8 0H284.2c12.1 0 23.2 6.8 28.6 17.7L320 32h96c17.7 0 32 14.3 32 32s-14.3 32-32 32H32C14.3 96 0 81.7 0 64S14.3 32 32 32h96l7.2-14.3zM32 128H416V448c0 35.3-28.7 64-64 64H96c-35.3 0-64-28.7-64-64V128zm96 64c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16zm96 0c-8.8 0-16 7.2-16 16V432c0 8.8 7.2 16 16 16s16-7.2 16-16V208c0-8.8-7.2-16-16-16z"/></svg>
+            <span>Delete Selected</span>
+        </button>
+    </div>
+
+    <div id="pagination_controls" style="display: flex; align-items: center; gap: 8px;">
+        <div id="pagination_pages" style="display: flex; gap: 4px; align-items: center;"></div>
+        <div style="position: relative; display: inline-flex; align-items: center;">
+            <select id="rows_per_page" style="width: 58px !important; height: 26px !important; padding: 0 20px 0 8px !important; border-radius: 6px !important; border: 1px solid #cbd5e1 !important; background-color: #f8fafc !important; font-size: 11px !important; font-weight: 600 !important; color: #1e293b !important;">
+                <option value="10">10</option>
+                <option value="25" selected>25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+                <option value="all">All</option>
+            </select>
+            <svg width="8" height="5" viewBox="0 0 10 6" style="position: absolute; right: 8px; pointer-events: none; z-index: 5;">
+                <polygon points="0,0 10,0 5,6" fill="#64748b"></polygon>
+            </svg>
+        </div>
+    </div>
+</div>
+</div><!-- /.table-bottom-section -->
+    </div><!-- /.home-table -->
+    </div><!-- /.home-layout -->
+</section>
+
+<section id="tab-about" class="app-tab" role="tabpanel">
+    <div class="about-page-wrapper">
+        
+        <!-- HERO BANNER CARD -->
+        <div class="about-hero-card">
+            <div class="about-hero-left">
+                <div class="about-logo-box">
+                    <img src="icon/algoScraper-logo.png" alt="AlgoScraper" class="about-logo-img">
+                </div>
+                <div class="about-hero-text">
+                    <div class="about-title-row">
+                        <h1 class="about-title">AlgoScraper</h1>
+                        <span class="about-badge">v1.0.0</span>
+                        <span class="about-badge-sub">Enterprise Edition</span>
+                    </div>
+                    <p class="about-kicker">Intelligent Mobile UI Element Extraction & Test Automation Framework</p>
+                    <p class="about-desc">
+                        Powered by <strong>algoShack</strong>, AlgoScraper empowers QA engineers and automation teams to seamlessly inspect, extract resilient XPaths, record BDD test scenarios, and export structured test automation assets for native Android and iOS mobile applications.
+                    </p>
+                </div>
+            </div>
+            <div class="about-hero-stats">
+                <div class="hero-stat-item">
+                    <span class="hero-stat-num">Android & iOS</span>
+                    <span class="hero-stat-lbl">Dual-Platform W3C</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-num">algoQA Cloud</span>
+                    <span class="hero-stat-lbl">Direct Sync Enabled</span>
+                </div>
+                <div class="hero-stat-divider"></div>
+                <div class="hero-stat-item">
+                    <span class="hero-stat-num">1-Click</span>
+                    <span class="hero-stat-lbl">XPath Extraction</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECTION: WHAT ALGORITHMSCRAPER CAN DO (6 CAPABILITY CARDS) -->
+        <div class="about-section-header">
+            <h2 class="about-section-title">Core Capabilities & Features</h2>
+            <p class="about-section-desc">Key features designed to accelerate your mobile testing and test asset authoring workflow.</p>
+        </div>
+
+        <div class="about-features-grid">
+            
+            <!-- Feature 1 -->
+            <div class="about-feature-card">
+                <div class="feature-icon-box blue">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                </div>
+                <div class="feature-info">
+                    <h3 class="feature-title">Live Mobile Device Mirroring</h3>
+                    <p class="feature-text">Mirror connected physical devices or emulators/simulators in real-time with responsive interactive viewport and touch/swipe emulation.</p>
+                </div>
+            </div>
+
+            <!-- Feature 2 -->
+            <div class="about-feature-card">
+                <div class="feature-icon-box purple">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                </div>
+                <div class="feature-info">
+                    <h3 class="feature-title">Precise UI Element Inspection</h3>
+                    <p class="feature-text">Tap anywhere on the mirrored screen to instantly highlight bounding boxes and extract exact element nodes from the underlying XML hierarchy.</p>
+                </div>
+            </div>
+
+            <!-- Feature 3 -->
+            <div class="about-feature-card">
+                <div class="feature-icon-box green">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                </div>
+                <div class="feature-info">
+                    <h3 class="feature-title">Resilient XPath & Locator Generation</h3>
+                    <p class="feature-text">Automatically creates robust, optimized XPaths, Accessibility IDs, Resource IDs, and class name locators with one-click clipboard copying.</p>
+                </div>
+            </div>
+
+            <!-- Feature 4 -->
+            <div class="about-feature-card">
+                <div class="feature-icon-box amber">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                </div>
+                <div class="feature-info">
+                    <h3 class="feature-title">BDD Scenario & Test Step Recorder</h3>
+                    <p class="feature-text">Build Page Object Repositories and record end-to-end BDD Gherkin scenarios with custom actions, step descriptions, and scenario outlines.</p>
+                </div>
+            </div>
+
+            <!-- Feature 5 -->
+            <div class="about-feature-card">
+                <div class="feature-icon-box indigo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                </div>
+                <div class="feature-info">
+                    <h3 class="feature-title">JSON Download & Export</h3>
+                    <p class="feature-text">Download and export captured controls, page objects, and scenario datasets directly as formatted JSON automation payloads.</p>
+                </div>
+            </div>
+
+            <!-- Feature 6 -->
+            <div class="about-feature-card">
+                <div class="feature-icon-box rose">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                </div>
+                <div class="feature-info">
+                    <h3 class="feature-title">Direct algoQA Cloud Integration</h3>
+                    <p class="feature-text">Seamlessly publish your scraped pages, controls, and recorded scenarios to algoQA platform for instant AI-driven script generation.</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- WORKFLOW STEPS -->
+        <div class="about-section-header">
+            <h2 class="about-section-title">How It Works</h2>
+            <p class="about-section-desc">Four simple steps to transform manual mobile app exploration into automated test assets.</p>
+        </div>
+
+        <div class="about-steps-row">
+            <div class="about-step-card">
+                <div class="step-badge">1</div>
+                <div class="step-content">
+                    <h4 class="step-title">Connect & Select</h4>
+                    <p class="step-text">Choose your platform (Android / iOS), select your target application and active device.</p>
+                </div>
+            </div>
+
+            <div class="about-step-card">
+                <div class="step-badge">2</div>
+                <div class="step-content">
+                    <h4 class="step-title">Launch & Scrape</h4>
+                    <p class="step-text">Launch Appium driver session. Tap any element on the preview to extract locators.</p>
+                </div>
+            </div>
+
+            <div class="about-step-card">
+                <div class="step-badge">3</div>
+                <div class="step-content">
+                    <h4 class="step-title">Define & Record</h4>
+                    <p class="step-text">Organize elements into Pages, add action verbs, and record BDD scenario outlines.</p>
+                </div>
+            </div>
+
+            <div class="about-step-card">
+                <div class="step-badge">4</div>
+                <div class="step-content">
+                    <h4 class="step-title">Sync & Export</h4>
+                    <p class="step-text">Export local test datasets or sync directly with the algoQA automation cloud.</p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</section>
+</div><!-- /.app-shell -->
+
+<div class="custom-modal" id="confirmationPopup" style="display: none;">
+    <div class="modal-header header-confirm" id="modal_header">
+        <span id="modal_icon_container" style="display: flex;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="warning-icon">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="12"></line>
+                <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+        </span>
+        <span class="modal-title" id="popup_title">Confirm Action</span>
+    </div>
+    <div class="modal-body">
+        <p class="modal-main-text" id="popup_main_text"></p>
+        <p class="modal-sub-text" id="popup_sub_text"></p>
+        <div class="modal-actions">
+            <button class="btn-cancel" id="back_btn">Cancel</button>
+            <button class="btn-confirm" id="extra_btn" style="display: none;"></button>
+            <button class="btn-confirm" id="okay_btn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<div class="custom-modal" id="editScenarioModal" style="display: none; width: 380px; background: #ffffff; border: 2px solid #2F8BCC; border-radius: 8px; overflow: visible; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100000 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+    <div style="background: #000000; border-bottom: 2px solid #2F8BCC; padding: 10px 16px; display: flex; align-items: center; border-radius: 6px 6px 0 0;">
+        <span style="color: #ffffff; font-size: 14px; font-weight: 600;">Edit Scenario</span>
+    </div>
+    <div style="padding: 24px 20px 16px 20px; display: flex; flex-direction: column; gap: 20px; background: #ffffff; color: #333333; border-radius: 0 0 6px 6px;">
+        <div class="floating-group">
+            <input type="text" id="edit_scenarioname" class="floating-input" placeholder=" ">
+            <label class="floating-label">Scenario Name *</label>
+            <div id="edit_scenario_error_icon" class="rec-error-icon">
+                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="rec-error-tooltip" id="edit_scenario_error_text"></div>
+            </div>
+        </div>
+        <div class="floating-group">
+            <textarea id="edit_scenariooutline" class="floating-input" rows="2.5" placeholder=" "></textarea>
+            <label class="floating-label">Scenario Outline *</label>
+            <div id="edit_outline_error_icon" class="rec-error-icon">
+                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="rec-error-tooltip" id="edit_outline_error_text"></div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px;">
+            <button id="edit_close_btn" class="pill-btn" style="flex: 1; background-color: #555555; color: #fff; height: 30px !important; font-size: 12px;">Close</button>
+            <button id="edit_update_btn" class="pill-btn" style="flex: 1; background-color: #2F8BCC; color: #fff; height: 30px !important; font-size: 12px;">Update</button>
+        </div>
+    </div>
+</div>
+
+<div class="custom-modal" id="createFeatureModal" style="display: none; width: 380px; background: #ffffff; border: 2px solid #2F8BCC; border-radius: 8px; overflow: visible; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100000 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+    <div style="background: #000000; border-bottom: 2px solid #2F8BCC; padding: 10px 16px; display: flex; align-items: center; border-radius: 6px 6px 0 0;">
+        <span style="color: #ffffff; font-size: 14px; font-weight: 600;">Create Feature</span>
+    </div>
+    <div style="padding: 24px 20px 16px 20px; display: flex; flex-direction: column; gap: 20px; background: #ffffff; color: #333333; border-radius: 0 0 6px 6px;">
+        <div class="floating-group">
+            <input type="text" id="feature_name_input" class="floating-input" placeholder=" ">
+            <label class="floating-label">Feature Name *</label>
+            <div id="feature_name_error_icon" class="rec-error-icon">
+                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="rec-error-tooltip" id="feature_name_error_text"></div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px;">
+            <button id="feature_cancel_btn" class="pill-btn" style="flex: 1; background-color: #555555; color: #fff; height: 30px !important; font-size: 12px;">Cancel</button>
+            <button id="feature_save_btn" class="pill-btn" style="flex: 1; background-color: #2F8BCC; color: #fff; height: 30px !important; font-size: 12px;">Save Feature</button>
+        </div>
+    </div>
+</div>
+
+<div class="popup" id="launchErrorPopup" style="display: none; height: auto; min-height: 220px; width: 440px; z-index: 100000 !important;">
+    <p id="launchErrorTitle" style="font-weight: bold; margin-top: 15px; text-align: center; color: #d9534f; font-size: 15px;">
+        Application Launch Error
+    </p>
+    <p style="font-size: 11px; color: #828080; text-align: center; margin-bottom: 10px; padding: 0 10px;">
+        Review the actual error log details below:
+    </p>
+    <div id="launchErrorLog" style="margin: 0 15px 15px 15px; padding: 10px; background-color: #1e1e1e; color: #ff6b6b; font-family: monospace; font-size: 11px; text-align: left; max-height: 150px; overflow-y: auto; border-radius: 6px; border: 1px solid #444; white-space: pre-wrap; word-break: break-word;">
+        No log recorded.
+    </div>
+    <div class="myname" style="text-align: center; margin-bottom: 15px;">
+        <button class="btn btn-primary no-button" id="okay_button" style="font-size: 13px; font-weight: 500; width: 80px;">Okay</button>
+    </div>
+</div>
+
+<div class="popup" id="SamePageNameError" style="display: none;">
+    <p style="font-weight: bold;margin-top: 4px;">Page Name already used, please try scraping with different page name</p>
+    <div class="myname" style="margin-left: 6px;">
+        <button class="btn btn-primary no-button" id="okay"
+                style="margin-left: 13px;font-size: 13px;font-weight: 500;">Okay</button>
+    </div>
+</div>
+<div class="popup" id="ScreenNameError" style="display: none;">
+    <p style="font-weight: bold;margin-top: 4px;">Screen Name can accept Alphabets, alphanumeric, space between words, word starting with alphabets/Number/Underscore</p>
+    <div class="myname" style="margin-left: 6px;">
+        <button class="btn btn-primary no-button" id="ok_button"
+                style="margin-left: 13px;font-size: 13px;font-weight: 500;">Okay</button>
+    </div>
+</div>
+<div class="popup" id="Error" style="display: none;">
+    <p style="font-weight: bold;margin-top: 4px;color: #cb5757;">Please Releoad The Scraper And Try Again!!</p>
+    <div class="myname" style="margin-left: 6px;">
+        <button class="btn btn-primary no-button" id="ok_btn"
+                style="margin-left: 13px;font-size: 13px;font-weight: 500;">Okay</button>
+    </div>
+</div>
+<div class="loading" id="AppRunningPopup" style="display: none;">
+    <span><img src="icon/load-8510_256.gif" style="height: 101px;"/></span>
+</div>
+
+<div class="custom-modal" id="recordScenarioModal" style="display: none; width: 380px; background: #ffffff; border: 2px solid #2F8BCC; border-radius: 8px; overflow: visible; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100000 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+    <div style="background: #000000; border-bottom: 2px solid #2F8BCC; padding: 10px 16px; display: flex; align-items: center; border-radius: 6px 6px 0 0;">
+        <span style="color: #ffffff; font-size: 14px; font-weight: 600;">Record Scenario</span>
+    </div>
+    <div style="padding: 24px 20px 16px 20px; display: flex; flex-direction: column; gap: 20px; background: #ffffff; color: #333333; border-radius: 0 0 6px 6px;">
+        <div class="floating-group">
+            <input type="text" id="rec_pagename" class="floating-input" placeholder=" ">
+            <label class="floating-label">Page Name *</label>
+            <div id="rec_page_error_icon" class="rec-error-icon">
+                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="rec-error-tooltip" id="rec_page_error_text"></div>
+            </div>
+        </div>
+        <div class="floating-group">
+            <input type="text" id="rec_scenarioname" class="floating-input" placeholder=" ">
+            <label class="floating-label">Scenario Name *</label>
+            <div id="rec_scenario_error_icon" class="rec-error-icon">
+                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="rec-error-tooltip" id="rec_scenario_error_text"></div>
+            </div>
+        </div>
+        <div class="floating-group">
+            <textarea id="rec_scenariooutline" class="floating-input" rows="2.5" placeholder=" "></textarea>
+            <label class="floating-label">Scenario Outline *</label>
+            <div id="rec_outline_error_icon" class="rec-error-icon">
+                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+                <div class="rec-error-tooltip" id="rec_outline_error_text"></div>
+            </div>
+        </div>
+        <div style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px;">
+            <button id="rec_close_btn" class="pill-btn" style="flex: 1; background-color: #555555; color: #fff; height: 30px !important; font-size: 12px;">Close</button>
+            <button id="rec_start_btn" class="pill-btn" style="flex: 1; background-color: #2F8BCC; color: #fff; height: 30px !important; font-size: 12px;">Start Recording</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    function copyConfigProp(id, btn) {
+        var el = document.getElementById(id);
+        var val = el ? (el.value || el.textContent) : '';
+        if (val && navigator.clipboard) {
+            navigator.clipboard.writeText(val.trim());
+            var original = btn.innerHTML;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied</span>';
+            setTimeout(function() { btn.innerHTML = original; }, 1500);
+        }
+    }
+    window.copyConfigProp = copyConfigProp;
+
+    function formatJsonToHtml(jsonStr) {
+        if (!jsonStr) return '';
+        var escaped = jsonStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            var cls = 'json-number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'json-key';
+                } else {
+                    cls = 'json-string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'json-boolean';
+            } else if (/null/.test(match)) {
+                cls = 'json-null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+        });
+    }
+
+    var lastRawConfigJson = "";
+
+    function copyConfigJson(btn) {
+        var val = lastRawConfigJson || (document.getElementById('configJsonPreview') ? document.getElementById('configJsonPreview').textContent : '');
+        if (val && navigator.clipboard) {
+            navigator.clipboard.writeText(val.trim());
+            var original = btn.innerHTML;
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied</span>';
+            setTimeout(function() { btn.innerHTML = original; }, 1500);
+        }
+    }
+    window.copyConfigJson = copyConfigJson;
+
+    function updateConfigDashboard() {
+        var isIos = false;
+        var pSelect = document.getElementById("platformname");
+        if (pSelect && pSelect.value === "IOS") isIos = true;
+
+        var platformText = isIos ? "Apple iOS" : "Android";
+        var engineText = isIos ? "XCUITest" : "UiAutomator2";
+        var osVersion = (document.getElementById("platformversion") && document.getElementById("platformversion").value) || (isIos ? "17.2" : "14");
+        var udidVal = (document.getElementById("udid") && document.getElementById("udid").value) || "";
+        var pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "com.ril.mobilecal";
+        var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || ".MainActivity";
+        var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "com.apple.mobilecal";
+
+        var mPlatform = document.getElementById("configMetricPlatform");
+        if (mPlatform) mPlatform.textContent = platformText;
+
+        var mEngine = document.getElementById("configMetricEngine");
+        if (mEngine) mEngine.textContent = engineText;
+
+        var mVersion = document.getElementById("configMetricVersion");
+        if (mVersion) mVersion.textContent = isIos ? ("iOS " + osVersion) : ("Android " + osVersion);
+
+        var jsonPreview = document.getElementById("configJsonPreview");
+        if (jsonPreview) {
+            var caps = {
+                "platformName": isIos ? "iOS" : "Android",
+                "appium:automationName": engineText,
+                "appium:udid": udidVal || (isIos ? "SIMULATOR-UDID" : "DEVICE-SERIAL"),
+                "appium:platformVersion": osVersion
+            };
+            if (isIos) {
+                caps["appium:bundleId"] = bndlVal;
+            } else {
+                caps["appium:appPackage"] = pkgVal;
+                caps["appium:appActivity"] = actVal;
+            }
+            lastRawConfigJson = JSON.stringify(caps, null, 2);
+            jsonPreview.innerHTML = formatJsonToHtml(lastRawConfigJson);
+
+            var lineCount = lastRawConfigJson.split('\n').length;
+            var gutterEl = document.getElementById('configJsonGutter');
+            if (gutterEl) {
+                var linesHtml = '';
+                for (var i = 1; i <= lineCount; i++) {
+                    linesHtml += '<span>' + i + '</span>';
+                }
+                gutterEl.innerHTML = linesHtml;
+            }
+        }
+    }
+    window.updateConfigDashboard = updateConfigDashboard;
+
+    function switchAppTab(name) {
+        document.querySelectorAll(".topnav-tab").forEach(function (btn) {
+            var on = btn.getAttribute("data-tab") === name;
+            btn.classList.toggle("is-active", on);
+            btn.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        document.querySelectorAll(".app-tab").forEach(function (panel) {
+            panel.classList.toggle("is-active", panel.id === "tab-" + name);
+        });
+        if (name === "home") {
+            requestAnimationFrame(function () {
+                window.dispatchEvent(new Event("resize"));
+                if (typeof adjustEmptyRows === "function") adjustEmptyRows();
+            });
+        } else if (name === "configuration") {
+            if (typeof updatePlatformUI === 'function') updatePlatformUI();
+            ["udid", "appiumurl", "platformversion", "automationName", "bundleID", "apppackage", "appactivity"].forEach(function(id) {
+                var el = document.getElementById(id);
+                if (el) {
+                    el.readOnly = true;
+                    el.setAttribute('readonly', 'readonly');
+                }
+            });
+            updateConfigDashboard();
+        }
+    }
+    window.switchAppTab = switchAppTab;
+    document.addEventListener("click", function (e) {
+        var btn = e.target.closest(".topnav-tab");
+        if (!btn) return;
+        switchAppTab(btn.getAttribute("data-tab"));
+    });
+})();
+</script>
+<script src="./popup.js" type="text/javascript"></script>
+</body>
+</html>
