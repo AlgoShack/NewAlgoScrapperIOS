@@ -850,17 +850,67 @@
     const secretKey = "algoshackv5-123";
 
     function decryptData(cipherText) {
-        try {
-            const bytes = CryptoJS.AES.decrypt(cipherText, secretKey);
-            // Enforcing strict UTF-8 conversion drops malformed block fragments
-            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+        if (!cipherText || typeof cipherText !== "string") return null;
+        const cleaned = cipherText.trim();
+        if (!cleaned) return null;
 
-            // If the parsing fails to return readable text, it's an invalid block sequence
-            if (!decrypted || decrypted.trim() === "") {
+        // 1. Strict Base64 validation (disallows appended characters, bad padding, or non-base64 characters)
+        const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+        if (!base64Regex.test(cleaned) || cleaned.length % 4 !== 0) {
+            console.warn("Token validation failed: Invalid base64 format or alignment");
+            return null;
+        }
+
+        try {
+            // 2. Parse OpenSSL cipher parameters
+            const cipherParams = CryptoJS.format.OpenSSL.parse(cleaned);
+
+            // Must contain a valid 8-byte salt
+            if (!cipherParams.salt || cipherParams.salt.sigBytes !== 8) {
+                console.warn("Token validation failed: Invalid salt structure");
                 return null;
             }
 
-            console.log("Decrypted successfully:", decrypted);
+            // Must contain ciphertext whose byte length is a non-zero multiple of 16 (AES block size)
+            if (!cipherParams.ciphertext || cipherParams.ciphertext.sigBytes === 0 || cipherParams.ciphertext.sigBytes % 16 !== 0) {
+                console.warn("Token validation failed: Invalid ciphertext block alignment");
+                return null;
+            }
+
+            // 3. Exact Canonical Match (rejects appended characters like xyzabc where xyz is valid)
+            const canonicalBase64 = CryptoJS.format.OpenSSL.stringify(cipherParams);
+            if (canonicalBase64 !== cleaned) {
+                console.warn("Token validation failed: Ciphertext does not match canonical base64 representation");
+                return null;
+            }
+
+            // 4. AES Decryption with strict UTF-8 decoding
+            const bytes = CryptoJS.AES.decrypt(cipherParams, secretKey);
+            if (!bytes || bytes.sigBytes <= 0) {
+                console.warn("Token validation failed: Decrypted byte stream is empty or corrupt");
+                return null;
+            }
+
+            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+            if (!decrypted || decrypted.trim() === "") {
+                console.warn("Token validation failed: Decrypted string is empty");
+                return null;
+            }
+
+            // 5. Strict JSON verification
+            const parsed = JSON.parse(decrypted);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+                console.warn("Token validation failed: Decrypted payload is not a valid JSON object");
+                return null;
+            }
+
+            // Validate structural fields
+            if (!parsed.userID && !parsed.baseUrl && !parsed.token && !parsed.username && !parsed.id) {
+                console.warn("Token validation failed: Missing required authentication fields");
+                return null;
+            }
+
+            console.log("Token successfully verified and decrypted");
             return decrypted;
         } catch (err) {
             console.error("Decrypt Error:", err);
