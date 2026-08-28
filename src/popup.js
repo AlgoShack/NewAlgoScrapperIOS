@@ -1006,10 +1006,28 @@
             closeAllCustomSelects(wrap);
             if (willOpen) {
                 const rect = trigger.getBoundingClientRect();
-                menu.style.left = `${Math.round(rect.left)}px`;
-                menu.style.width = `${Math.round(rect.width)}px`;
+                const fieldWrap = wrap.closest('.home-field');
+                const fieldRect = fieldWrap ? fieldWrap.getBoundingClientRect() : rect;
+
+                // Anchor menu under the full chip with ample min-width so text is fully visible
+                const menuLeft = Math.round(fieldWrap ? fieldRect.left : rect.left);
+                const minW = Math.round(fieldWrap ? fieldRect.width : rect.width);
+
+                menu.style.left = `${menuLeft}px`;
+                menu.style.minWidth = `${Math.max(minW, 140)}px`;
+                menu.style.width = 'auto';
+                menu.style.maxWidth = '400px';
                 menu.style.top = `${Math.round(rect.bottom + 4)}px`;
                 menu.style.bottom = 'auto';
+
+                // Prevent overflowing off-screen on the right
+                requestAnimationFrame(() => {
+                    const mRect = menu.getBoundingClientRect();
+                    if (mRect.right > window.innerWidth - 12) {
+                        const shift = mRect.right - (window.innerWidth - 12);
+                        menu.style.left = `${Math.max(10, mRect.left - shift)}px`;
+                    }
+                });
 
                 // Flip upward if not enough space below
                 const spaceBelow = window.innerHeight - rect.bottom;
@@ -6566,8 +6584,9 @@ function verifyPageNameSavedBeforeScraping() {
             const ROW_HEIGHT = 32;
 
             // Shared on Windows + macOS: grow with the table pane (capped for safety)
-            const MAX_VISIBLE_ROWS = 50;
-            const availableHeight = Math.max(0, container.clientHeight - headerHeight);
+            const MAX_VISIBLE_ROWS = 60;
+            const containerHeight = Math.max(container.clientHeight, container.getBoundingClientRect().height);
+            const availableHeight = Math.max(0, containerHeight - headerHeight);
             // Use Math.ceil with fixed 32px row height so empty rows completely fill the table container down to the bottom border with zero gap
             let targetRowCount = Math.max(1, Math.ceil(availableHeight / ROW_HEIGHT));
             targetRowCount = Math.min(MAX_VISIBLE_ROWS, Math.max(1, targetRowCount));
@@ -6676,7 +6695,7 @@ const TABLE_COL_CONFIG = [
     { key: 'number', label: '# (Number)', selector: 'th.excel-header-corner', locked: true },
     { key: 'control_name', label: 'Control Name', selector: 'th[id*="cn"]', locked: true },
     { key: 'control_type', label: 'Control Type', selector: 'th[id*="ct"]', locked: true },
-    { key: 'control_id', label: 'Control ID', selector: 'th[id*="xpath"]', locked: false },
+    { key: 'control_id', label: 'Control ID', selector: 'th[id*="xpath"]', locked: true },
     { key: 'page_name', label: 'Page Name', selector: 'th[id*="page"]', locked: true },
     { key: 'identification_type', label: 'Identification Type', selector: 'th[id*="identificationType"]', locked: false },
     { key: 'control_value', label: 'Control Value', selector: 'th[id*="controlValue"]', locked: false },
