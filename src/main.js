@@ -1598,11 +1598,11 @@
 
     function createLoadingWindow() {
       loadingWindow = new BrowserWindow({
-        width: 400,
-        height: 250,
+        width: 420,
+        height: 260,
         frame: false,
         transparent: false,
-        backgroundColor: "#2b2f38",
+        backgroundColor: "#141820",
         resizable: false,
         movable: false,
         minimizable: false,

@@ -9,96 +9,102 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background: #2b2f38;
-    /* Avoid remote Google Fonts (often blocked offline / on Windows) */
-    font-family: "Segoe UI", "Avenir Next", "Helvetica Neue", Arial, sans-serif;
+    background: #141820;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
+    user-select: none;
   }
 
   .popup {
     position: relative;
     width: 100%;
     height: 100%;
-    background: linear-gradient(180deg, #343842 0%, #2b2f38 55%, #252933 100%);
+    background: radial-gradient(circle at 50% 0%, #1e2634 0%, #12161f 100%);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 
-  .brand {
-    position: absolute;
-    top: 0;
-    left: 0;
-    z-index: 2;
-    height: 40px;
-    padding: 0 22px 0 14px;
-    display: inline-flex;
+  .header {
+    height: 42px;
+    padding: 0 16px;
+    display: flex;
     align-items: center;
-    gap: 7px;
-    color: #ffffff;
-    background: #2F8BCC;
-    border-bottom-right-radius: 22px;
-    box-shadow: 4px 6px 18px rgba(47, 139, 204, 0.28);
+    justify-content: space-between;
+    background: rgba(15, 20, 29, 0.5);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+  }
+
+  .brand-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .brand-logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 5px;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.12);
   }
 
   .brand-title {
-    font-size: 15px;
+    font-size: 13.5px;
     font-weight: 700;
     letter-spacing: -0.2px;
-    white-space: nowrap;
     color: #ffffff;
   }
 
-  .brand-subtitle {
-    font-size: 12px;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.92);
-    white-space: nowrap;
-  }
-
-  .bottom-line {
-    position: absolute;
-    top: 40px;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, #2F8BCC, rgba(47,139,204,0.15));
-    z-index: 1;
+  .brand-pill {
+    background: rgba(47, 139, 204, 0.14);
+    border: 1px solid rgba(47, 139, 204, 0.3);
+    color: #38bdf8;
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
   }
 
   .content {
-    width: 100%;
-    height: 100%;
+    flex: 1;
     display: flex;
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    padding: 48px 24px 20px;
+    padding: 10px 20px 14px;
     text-align: center;
   }
 
-  .loader-wrap {
-    width: 58px;
-    height: 58px;
-    margin-bottom: 14px;
+  .loader-container {
     position: relative;
+    width: 48px;
+    height: 48px;
+    margin-bottom: 10px;
     display: grid;
     place-items: center;
   }
 
   .loader-image {
-    width: 58px;
-    height: 58px;
+    width: 44px;
+    height: 44px;
     object-fit: contain;
     -webkit-user-drag: none;
+    z-index: 2;
   }
 
   .spinner {
-    width: 42px;
-    height: 42px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    border: 3px solid rgba(255,255,255,0.12);
-    border-top-color: #2F8BCC;
-    border-right-color: rgba(47,139,204,0.35);
+    border: 3px solid rgba(255, 255, 255, 0.08);
+    border-top-color: #38bdf8;
+    border-right-color: rgba(56, 189, 248, 0.35);
     animation: spin 0.85s linear infinite;
+    z-index: 2;
   }
 
   .spinner.hidden,
@@ -106,40 +112,40 @@
 
   .check {
     display: none;
-    width: 42px;
-    height: 42px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     place-items: center;
-    background: rgba(61, 214, 140, 0.15);
-    border: 1.5px solid rgba(61, 214, 140, 0.45);
-    color: #3dd68c;
-    font-size: 22px;
+    background: rgba(34, 197, 94, 0.15);
+    border: 1.5px solid rgba(34, 197, 94, 0.45);
+    color: #4ade80;
+    font-size: 19px;
     font-weight: 700;
-    line-height: 1;
+    z-index: 2;
+    box-shadow: 0 0 16px rgba(34, 197, 94, 0.2);
   }
   .check.show { display: grid; }
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
   h1 {
-    color: #ffffff;
-    font-size: 20px;
+    color: #f8fafc;
+    font-size: 16px;
     font-weight: 700;
     letter-spacing: -0.3px;
-    margin-bottom: 10px;
+    margin-bottom: 3px;
   }
 
-  /* Active status text — blue (readable on dark splash) */
   .status {
-    min-height: 22px;
-    color: #2F8BCC;
-    font-size: 14px;
+    min-height: 18px;
+    color: #38bdf8;
+    font-size: 12.5px;
     font-weight: 600;
-    max-width: 320px;
-    line-height: 1.35;
+    max-width: 340px;
+    line-height: 1.3;
     opacity: 0;
-    transform: translateY(6px);
-    transition: opacity 0.28s ease, transform 0.28s ease;
+    transform: translateY(4px);
+    transition: opacity 0.22s ease, transform 0.22s ease;
   }
 
   .status.show {
@@ -147,8 +153,8 @@
     transform: translateY(0);
   }
 
-  .status.ok { color: #7dffb5; }
-  .status.err { color: #ff8f8f; }
+  .status.ok { color: #4ade80; }
+  .status.err { color: #f87171; }
 
   .dots::after {
     content: "";
@@ -166,35 +172,58 @@
     100% { content: ""; }
   }
 
-  .bar {
-    margin-top: 16px;
-    width: 160px;
-    height: 3px;
-    border-radius: 99px;
-    background: rgba(255,255,255,0.08);
+  .bar-container {
+    width: 180px;
+    height: 3.5px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
     overflow: hidden;
+    margin-top: 10px;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 
-  .bar > i {
+  .bar-container > i {
     display: block;
     height: 100%;
     width: 18%;
     border-radius: inherit;
-    background: #2F8BCC;
-    transition: width 0.4s ease;
+    background: linear-gradient(90deg, #2F8BCC, #38bdf8);
+    box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .first-time-hint {
+    margin-top: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #94a3b8;
+    font-size: 10.5px;
+    font-weight: 500;
+  }
+
+  .first-time-hint svg {
+    color: #38bdf8;
+    flex-shrink: 0;
   }
 </style>
 </head>
 <body>
   <div class="popup">
-    <div class="brand">
-      <span class="brand-title">AlgoScraper</span>
-      <span class="brand-subtitle">Powered by algoShack</span>
+    <div class="header">
+      <div class="brand-group">
+        <img src="icon/algoScraper-logo.png" class="brand-logo" alt="Logo" onerror="this.style.display='none';" />
+        <span class="brand-title">AlgoScraper</span>
+      </div>
+      <span class="brand-pill">Powered by algoShack</span>
     </div>
-    <div class="bottom-line"></div>
 
     <div class="content">
-      <div class="loader-wrap">
+      <div class="loader-container">
         <img src="icon/load-8510_256.gif" class="loader-image" id="loaderImg" alt=""
              onerror="this.classList.add('hidden'); document.getElementById('spinner').classList.remove('hidden');" />
         <div class="spinner hidden" id="spinner"></div>
@@ -203,7 +232,19 @@
 
       <h1 id="headline">Preparing AlgoScraper</h1>
       <p class="status show" id="status">Starting<span class="dots"></span></p>
-      <div class="bar"><i id="progressBar"></i></div>
+      
+      <div class="bar-container">
+        <i id="progressBar"></i>
+      </div>
+
+      <div class="first-time-hint">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <span>First time loading may take time, please wait...</span>
+      </div>
     </div>
   </div>
 

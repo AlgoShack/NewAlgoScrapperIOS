@@ -5393,15 +5393,19 @@ pre#configJsonPreview.vscode-code {
    iOS DEVICE FRAME (Dynamic Island + Rounded Contours + Home Indicator)
    ============================================================================= */
 .phone-bezel.device-bezel-ios,
-.device-stage-ios .phone-bezel {
+.device-stage-ios .phone-bezel,
+html.platform-win .phone-bezel.device-bezel-ios,
+html.platform-win .device-stage-ios .phone-bezel {
   aspect-ratio: 9 / 19.5;
-  border-radius: 36px;
+  border-radius: 36px !important;
   background: linear-gradient(165deg, #334155 0%, #1e293b 35%, #0f172a 100%);
-  padding: 7px 6px 8px;
+  padding: 7px 6px 8px !important;
 }
 
 .phone-bezel.device-bezel-ios::before,
-.device-stage-ios .phone-bezel::before {
+.device-stage-ios .phone-bezel::before,
+html.platform-win .phone-bezel.device-bezel-ios::before,
+html.platform-win .device-stage-ios .phone-bezel::before {
   content: "";
   display: block;
   width: 44px;
@@ -5416,7 +5420,9 @@ pre#configJsonPreview.vscode-code {
 }
 
 .phone-bezel.device-bezel-ios::after,
-.device-stage-ios .phone-bezel::after {
+.device-stage-ios .phone-bezel::after,
+html.platform-win .phone-bezel.device-bezel-ios::after,
+html.platform-win .device-stage-ios .phone-bezel::after {
   content: "";
   position: absolute;
   bottom: 2px;
@@ -5431,12 +5437,16 @@ pre#configJsonPreview.vscode-code {
 }
 
 .device-stage-ios #zoomFrame,
-.device-bezel-ios #zoomFrame {
+.device-bezel-ios #zoomFrame,
+html.platform-win .device-stage-ios #zoomFrame,
+html.platform-win .device-bezel-ios #zoomFrame {
   border-radius: 28px !important;
 }
 
 .device-stage-ios .phone-welcome-overlay,
-.device-bezel-ios .phone-welcome-overlay {
+.device-bezel-ios .phone-welcome-overlay,
+html.platform-win .device-stage-ios .phone-welcome-overlay,
+html.platform-win .device-bezel-ios .phone-welcome-overlay {
   border-radius: 28px !important;
 }
 
@@ -5444,15 +5454,19 @@ pre#configJsonPreview.vscode-code {
    ANDROID DEVICE FRAME (Punch-Hole Camera + Modern Squared Edges)
    ============================================================================= */
 .phone-bezel.device-bezel-android,
-.device-stage-android .phone-bezel {
+.device-stage-android .phone-bezel,
+html.platform-win .phone-bezel.device-bezel-android,
+html.platform-win .device-stage-android .phone-bezel {
   aspect-ratio: 9 / 20;
-  border-radius: 20px;
+  border-radius: 20px !important;
   background: linear-gradient(165deg, #2c3440 0%, #18202c 40%, #0b111a 100%);
-  padding: 6px 5px 6px;
+  padding: 6px 5px 6px !important;
 }
 
 .phone-bezel.device-bezel-android::before,
-.device-stage-android .phone-bezel::before {
+.device-stage-android .phone-bezel::before,
+html.platform-win .phone-bezel.device-bezel-android::before,
+html.platform-win .device-stage-android .phone-bezel::before {
   content: "";
   display: block;
   width: 8px;
@@ -5467,17 +5481,23 @@ pre#configJsonPreview.vscode-code {
 }
 
 .phone-bezel.device-bezel-android::after,
-.device-stage-android .phone-bezel::after {
+.device-stage-android .phone-bezel::after,
+html.platform-win .phone-bezel.device-bezel-android::after,
+html.platform-win .device-stage-android .phone-bezel::after {
   display: none !important;
 }
 
 .device-stage-android #zoomFrame,
-.device-bezel-android #zoomFrame {
+.device-bezel-android #zoomFrame,
+html.platform-win .device-stage-android #zoomFrame,
+html.platform-win .device-bezel-android #zoomFrame {
   border-radius: 14px !important;
 }
 
 .device-stage-android .phone-welcome-overlay,
-.device-bezel-android .phone-welcome-overlay {
+.device-bezel-android .phone-welcome-overlay,
+html.platform-win .device-stage-android .phone-welcome-overlay,
+html.platform-win .device-bezel-android .phone-welcome-overlay {
   border-radius: 14px !important;
 }
 
@@ -5540,11 +5560,6 @@ html.platform-win .home-session-bar {
   border: 1px solid rgba(203, 213, 225, 0.8) !important;
   border-radius: 12px !important;
   box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.04), 0 4px 12px -2px rgba(15, 23, 42, 0.04) !important;
-}
-
-html.platform-win .phone-bezel {
-  border-radius: 28px;
-  padding: 7px 5px 7px;
 }
 
 .home-table {
