@@ -5372,7 +5372,7 @@ pre#configJsonPreview.vscode-code {
   max-width: 100%;
   aspect-ratio: 9 / 19.5;
   background: linear-gradient(165deg, #334155 0%, #1e293b 35%, #0f172a 100%);
-  border-radius: 32px;
+  border-radius: 36px;
   padding: 8px 6px 8px;
   box-shadow:
     0 22px 50px -10px rgba(15, 23, 42, 0.38),
@@ -5386,20 +5386,99 @@ pre#configJsonPreview.vscode-code {
   min-height: 0;
   position: relative;
   flex: 0 0 auto;
+  transition: border-radius 0.25s ease, aspect-ratio 0.25s ease, padding 0.25s ease;
 }
 
-.phone-bezel::before {
+/* =============================================================================
+   iOS DEVICE FRAME (Dynamic Island + Rounded Contours + Home Indicator)
+   ============================================================================= */
+.phone-bezel.device-bezel-ios,
+.device-stage-ios .phone-bezel {
+  aspect-ratio: 9 / 19.5;
+  border-radius: 36px;
+  background: linear-gradient(165deg, #334155 0%, #1e293b 35%, #0f172a 100%);
+  padding: 7px 6px 8px;
+}
+
+.phone-bezel.device-bezel-ios::before,
+.device-stage-ios .phone-bezel::before {
   content: "";
   display: block;
-  width: 38px;
-  height: 5px;
+  width: 44px;
+  height: 11px;
   margin: 0 auto 5px;
-  border-radius: 99px;
+  border-radius: 20px;
   background: #020617;
   box-shadow:
-    inset 0 1px 2px rgba(0, 0, 0, 0.9),
+    inset 0 1px 2px rgba(0, 0, 0, 0.95),
     0 0 0 1px rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+}
+
+.phone-bezel.device-bezel-ios::after,
+.device-stage-ios .phone-bezel::after {
+  content: "";
+  position: absolute;
+  bottom: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.35);
+  border-radius: 99px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.device-stage-ios #zoomFrame,
+.device-bezel-ios #zoomFrame {
+  border-radius: 28px !important;
+}
+
+.device-stage-ios .phone-welcome-overlay,
+.device-bezel-ios .phone-welcome-overlay {
+  border-radius: 28px !important;
+}
+
+/* =============================================================================
+   ANDROID DEVICE FRAME (Punch-Hole Camera + Modern Squared Edges)
+   ============================================================================= */
+.phone-bezel.device-bezel-android,
+.device-stage-android .phone-bezel {
+  aspect-ratio: 9 / 20;
+  border-radius: 20px;
+  background: linear-gradient(165deg, #2c3440 0%, #18202c 40%, #0b111a 100%);
+  padding: 6px 5px 6px;
+}
+
+.phone-bezel.device-bezel-android::before,
+.device-stage-android .phone-bezel::before {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 8px;
+  margin: 0 auto 4px;
+  border-radius: 50%;
+  background: #020617;
+  box-shadow:
+    inset 0 0 2px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(255, 255, 255, 0.15);
+  flex-shrink: 0;
+}
+
+.phone-bezel.device-bezel-android::after,
+.device-stage-android .phone-bezel::after {
+  display: none !important;
+}
+
+.device-stage-android #zoomFrame,
+.device-bezel-android #zoomFrame {
+  border-radius: 14px !important;
+}
+
+.device-stage-android .phone-welcome-overlay,
+.device-bezel-android .phone-welcome-overlay {
+  border-radius: 14px !important;
 }
 
 #tab-home .home-preview #zoomFrame {

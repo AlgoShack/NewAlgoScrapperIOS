@@ -383,6 +383,24 @@
             .replace(/"/g, '&quot;');
     }
 
+    function updateDeviceFrameStyle(platform) {
+        const currentPlatform = platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
+        const isIos = (typeof normalizePlatformName === 'function' ? normalizePlatformName(currentPlatform) : (String(currentPlatform).toUpperCase() === 'IOS')) === 'IOS';
+        const phoneStage = document.querySelector('.phone-stage');
+        const phoneBezel = document.querySelector('.phone-bezel');
+
+        if (phoneStage) {
+            phoneStage.classList.toggle('device-stage-ios', isIos);
+            phoneStage.classList.toggle('device-stage-android', !isIos);
+        }
+        if (phoneBezel) {
+            phoneBezel.classList.toggle('device-bezel-ios', isIos);
+            phoneBezel.classList.toggle('device-bezel-android', !isIos);
+            phoneBezel.style.aspectRatio = isIos ? "9 / 19.5" : "9 / 20";
+            phoneBezel.style.width = "";
+        }
+    }
+
     /**
      * Phone preview placeholder messages (info | warning | error | loading).
      * Keeps icon + colors consistent across launch / reset / session errors.
@@ -391,11 +409,7 @@
         const dummy = document.getElementById("dummyDevice");
         if (!dummy) return;
 
-        const bezel = document.querySelector(".phone-bezel");
-        if (bezel) {
-            bezel.style.aspectRatio = "9 / 19.5";
-            bezel.style.width = "";
-        }
+        updateDeviceFrameStyle();
 
         const theme = options.theme || 'info';
         const title = options.title || getIdleDummyTitle();
@@ -10340,6 +10354,9 @@ function updatePlatformUI() {
     }
     if (typeof updateConfigDashboard === 'function') {
         updateConfigDashboard();
+    }
+    if (typeof updateDeviceFrameStyle === 'function') {
+        updateDeviceFrameStyle(selectedPlatform);
     }
 }
 
