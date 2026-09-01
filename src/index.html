@@ -771,7 +771,6 @@
 
         <!-- 1. ROOT VIEW: PROJECTS LIST -->
         <div id="repoProjectsView" class="repo-view-section">
-            <!-- REPO HERO STATS OVERVIEW TILES -->
             <div class="repo-hero-stats-row" id="repoHeroStatsRow">
                 <div class="repo-hero-stat-card">
                     <div class="repo-hero-stat-icon blue">
@@ -779,7 +778,7 @@
                     </div>
                     <div class="repo-hero-stat-text">
                         <span class="repo-hero-stat-val" id="repoTotalProjectsCount">0</span>
-                        <span class="repo-hero-stat-lbl">Active Projects</span>
+                        <span class="repo-hero-stat-lbl">Projects</span>
                     </div>
                 </div>
                 <div class="repo-hero-stat-card">
@@ -811,7 +810,6 @@
                 </div>
             </div>
 
-            <!-- TOOLBAR WITH PLATFORM TABS & SEARCH -->
             <div class="repo-toolbar">
                 <div class="repo-toolbar-top-row">
                     <div class="repo-filter-tabs" id="repoPlatformFilterTabs">
@@ -828,98 +826,158 @@
                             <span class="repo-tab-count" id="repoTabPlatformAndroid">0</span>
                         </button>
                     </div>
-                    <div class="repo-search-wrap" style="width: 300px;">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="11" cy="11" r="8"></circle>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                        </svg>
-                        <input type="text" id="repoProjectSearchInput" placeholder="Search application projects..." autocomplete="off" />
+                    <div class="repo-toolbar-right">
+                        <div class="repo-search-select">
+                            <div class="repo-search-wrap">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="repoProjectSearchInput" placeholder="Search projects" autocomplete="off" />
+                            </div>
+                            <div class="toolWrapper repo-select-toggle-wrap">
+                                <button type="button" id="repoMultiDeleteBtn" class="repo-select-toggle" aria-label="Select">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                                    </svg>
+                                </button>
+                                <span class="toolTip">Select</span>
+                            </div>
+                            <div class="repo-select-tools" id="repoBulkSelectTools" hidden>
+                                <label class="repo-select-all">
+                                    <input type="checkbox" id="repoSelectAllProjects" />
+                                    <span>Select all</span>
+                                </label>
+                                <button type="button" id="repoCancelMultiDeleteBtn" class="repo-select-cancel-btn" title="Cancel selection">
+                                    Cancel
+                                </button>
+                                <button type="button" id="repoDeleteSelectedBtn" class="repo-select-delete-btn" disabled title="Delete checked projects">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                                        <polyline points="3 6 5 6 21 6"></polyline>
+                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                                    </svg>
+                                    <span>Delete</span>
+                                    <span class="repo-bulk-count" id="repoDeleteSelectedCount"></span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- PROJECTS GRID -->
             <div class="repo-projects-grid" id="repoProjectsGrid">
-                <!-- Dynamic project cards -->
             </div>
         </div>
 
-        <!-- 2. PROJECT DETAILS VIEW (TOP HORIZONTAL ASSETS STRIP + FULL-WIDTH JSON VIEWER BELOW) -->
-        <div id="repoDetailsView" class="repo-view-section" style="display: none;">
-            <!-- UNIFIED PROJECT CONTROL BAR (FILTERS INCLUDING FEATURES & SEARCH) -->
-            <div class="repo-project-control-bar">
-                <div class="repo-filter-tabs">
-                    <button type="button" class="repo-filter-btn is-active" data-filter="all">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
-                        <span>All Assets</span>
-                        <span class="repo-tab-count" id="repoAllCount">0</span>
-                    </button>
-                    <button type="button" class="repo-filter-btn" data-filter="scenarios">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-                        <span>Scenarios</span>
-                        <span class="repo-tab-count" id="repoScenTabCount">0</span>
-                    </button>
-                    <button type="button" class="repo-filter-btn" data-filter="features">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                        <span>Features</span>
-                        <span class="repo-tab-count" id="repoFeatTabCount">0</span>
-                    </button>
-                    <button type="button" class="repo-filter-btn" data-filter="pages">
-                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
-                        <span>Scraped Pages</span>
-                        <span class="repo-tab-count" id="repoPageTabCount">0</span>
-                    </button>
-                </div>
-                <div class="repo-search-wrap">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" id="repoSearchInput" placeholder="Filter scenarios, pages or controls..." autocomplete="off" />
-                </div>
-            </div>
-
-            <!-- TOP: HORIZONTAL SCROLLABLE ASSETS ROW -->
-            <div class="repo-horizontal-strip-wrapper">
-                <div class="repo-horizontal-strip" id="repoCardsContainer">
-                    <!-- Dynamic horizontal cards rendered here -->
-                </div>
-            </div>
-
-            <!-- BOTTOM: FULL WIDTH AUTHENTIC VS CODE DARK EDITOR (NO WHITE BOX WRAPPER, MATCHES W3C PAYLOAD STYLE) -->
-            <div class="repo-full-json-viewer" id="repoRightColumn">
-                <div class="vscode-window" id="repoJsonViewerBox">
-                    <!-- VS Code Title Bar -->
-                    <div class="vscode-header">
-                        <div class="vscode-mac-dots">
-                            <span class="dot red"></span>
-                            <span class="dot yellow"></span>
-                            <span class="dot green"></span>
+        <!-- 2. PROJECT WORKSPACE -->
+        <div id="repoDetailsView" class="repo-view-section repo-workspace-page" style="display: none;">
+            <div class="repo-workspace-body">
+                <aside class="repo-asset-sidebar">
+                    <div class="repo-asset-sidebar-head">
+                        <div class="repo-asset-sidebar-title">
+                            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                            <span>Assets</span>
                         </div>
-                        <div class="vscode-tab">
-                            <svg viewBox="0 0 24 24" class="vscode-json-icon"><path fill="#fbc02d" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h2v6H7v2h6v-2h-2V9h2V7H7z"/></svg>
-                            <span id="repoJsonViewerTitle">payload.json</span>
-                        </div>
-                        <div class="vscode-actions">
-                            <button type="button" class="vscode-copy-btn" id="repoJsonCopyBtn" title="Copy Formatted JSON to Clipboard">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                <span>Copy</span>
-                            </button>
-                            <button type="button" class="vscode-copy-btn" id="repoJsonDownloadBtn" title="Download JSON File">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                <span>Download</span>
-                            </button>
+                        <div class="repo-project-control-bar">
+                            <div class="repo-filter-tabs">
+                                <button type="button" class="repo-filter-btn is-active" data-filter="all">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+                                    <span>All</span>
+                                    <span class="repo-tab-count" id="repoAllCount">0</span>
+                                </button>
+                                <button type="button" class="repo-filter-btn" data-filter="scenarios">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                                    <span>Scenarios</span>
+                                    <span class="repo-tab-count" id="repoScenTabCount">0</span>
+                                </button>
+                                <button type="button" class="repo-filter-btn" data-filter="features">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                                    <span>Features</span>
+                                    <span class="repo-tab-count" id="repoFeatTabCount">0</span>
+                                </button>
+                                <button type="button" class="repo-filter-btn" data-filter="pages">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline></svg>
+                                    <span>Pages</span>
+                                    <span class="repo-tab-count" id="repoPageTabCount">0</span>
+                                </button>
+                            </div>
+                            <div class="repo-search-wrap">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="11" cy="11" r="8"></circle>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                </svg>
+                                <input type="text" id="repoSearchInput" placeholder="Search assets..." autocomplete="off" />
+                            </div>
                         </div>
                     </div>
+                    <div class="repo-horizontal-strip-wrapper">
+                        <div class="repo-horizontal-strip" id="repoCardsContainer"></div>
+                    </div>
+                </aside>
 
-                    <!-- VS Code Editor Canvas with Gutter Line Numbers -->
-                    <div class="vscode-body" id="repoJsonEditorScroll">
-                        <div class="vscode-gutter" id="repoJsonGutter"></div>
-                        <div class="vscode-code-area">
-                            <pre class="vscode-code" id="repoJsonCodeContent"></pre>
+                <section class="repo-json-pane" id="repoRightColumn">
+                    <div class="vscode-window" id="repoJsonViewerBox">
+                        <div class="vscode-header">
+                            <div class="vscode-tab">
+                                <svg viewBox="0 0 24 24" class="vscode-json-icon" width="14" height="14"><path fill="#e8ab53" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm3.5 5.5A1.5 1.5 0 0 0 7 10v4a1.5 1.5 0 0 0 3 0v-1H8.5v-.8H10V10A1.5 1.5 0 0 0 8.5 8.5zM14 8.5h-1.7L14 12l-1.7 3.5H14L15.8 12 14 8.5z"/></svg>
+                                <span id="repoJsonViewerTitle">payload.json</span>
+                            </div>
+                            <div class="vscode-actions">
+                                <button type="button" class="vscode-copy-btn" id="repoJsonFindBtn" title="Find (Ctrl/Cmd+F)">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                    <span>Find</span>
+                                </button>
+                                <button type="button" class="vscode-copy-btn" id="repoJsonCopyBtn" title="Copy JSON">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                    <span>Copy</span>
+                                </button>
+                                <button type="button" class="vscode-copy-btn" id="repoJsonDownloadBtn" title="Download JSON">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                    <span>Download</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="vscode-editor-stage">
+                            <div class="json-find-widget" id="repoJsonFindWidget" hidden>
+                                <span class="json-find-lead" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                </span>
+                                <input type="text" id="repoJsonFindInput" placeholder="Find" autocomplete="off" spellcheck="false" />
+                                <span class="json-find-count" id="repoJsonFindCount">No results</span>
+                                <div class="json-find-tools">
+                                    <button type="button" class="json-find-icon-btn" id="repoJsonFindPrev" title="Previous match (Shift+Enter)">
+                                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                                    </button>
+                                    <button type="button" class="json-find-icon-btn" id="repoJsonFindNext" title="Next match (Enter)">
+                                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                                    </button>
+                                    <button type="button" class="json-find-icon-btn" id="repoJsonFindCase" title="Match Case" aria-pressed="false">Aa</button>
+                                </div>
+                                <button type="button" class="json-find-icon-btn" id="repoJsonFindClose" title="Close (Escape)">
+                                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                </button>
+                            </div>
+                            <div class="vscode-body" id="repoJsonEditorScroll">
+                                <div class="vscode-gutter" id="repoJsonGutter"></div>
+                                <div class="vscode-code-area">
+                                    <pre class="vscode-code" id="repoJsonCodeContent"></pre>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="vscode-status-bar repo-editor-status">
+                            <div class="vscode-status-left">
+                                <span id="repoJsonStatusInfo">JSON</span>
+                            </div>
+                            <div class="vscode-status-right">
+                                <span id="repoJsonPayloadSize">0 B</span>
+                                <span>UTF-8</span>
+                            </div>
                         </div>
                     </div>
-                </div>
+                </section>
             </div>
         </div>
 </section>
@@ -1116,6 +1174,34 @@
             <button class="btn-cancel" id="back_btn">Cancel</button>
             <button class="btn-confirm" id="extra_btn" style="display: none;"></button>
             <button class="btn-confirm" id="okay_btn">Confirm</button>
+        </div>
+    </div>
+</div>
+
+<div class="custom-modal launch-picker-modal" id="launchProjectModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="launchPickerTitle">
+    <div class="modal-header header-info">
+        <span style="display: flex;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="warning-icon">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+            </svg>
+        </span>
+        <span class="modal-title" id="launchPickerTitle">Launch Application</span>
+    </div>
+    <div class="modal-body">
+        <p class="modal-main-text" id="launchPickerMain"></p>
+        <p class="modal-sub-text" id="launchPickerSub"></p>
+        <div class="launch-picker-search" id="launchPickerSearchWrap" style="display: none;">
+            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="7"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input type="text" id="launchPickerSearch" placeholder="Search project ID..." autocomplete="off" />
+        </div>
+        <div class="launch-picker-list" id="launchPickerList" role="listbox" aria-label="Saved projects"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn-cancel" id="launchPickerCancelBtn">Cancel</button>
+            <button type="button" class="btn-confirm launch-picker-create" id="launchPickerCreateBtn">Create New</button>
+            <button type="button" class="btn-confirm" id="launchPickerContinueBtn">Continue with Old</button>
         </div>
     </div>
 </div>

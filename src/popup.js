@@ -93,6 +93,64 @@
     let pendingFeatureData = null;
     let registeredFeatureAreas = [];
     window.registeredFeatureAreas = registeredFeatureAreas;
+    window.activeProjectSessionMode = null;
+    window.activeResumedProjectKey = null;
+    window.activeResumedAppName = null;
+    window._resumedProjectSnapshot = null;
+
+    function applyTableFeatureSubFeature(cell, newName) {
+        if (!cell || !newName) return;
+        const trimmed = String(newName).trim();
+        cell.innerText = trimmed;
+        const lower = trimmed.toLowerCase();
+        const alreadyRegistered = (registeredFeatureAreas || []).some(a => a && a.name && String(a.name).trim().toLowerCase() === lower);
+        if (!alreadyRegistered) {
+            const tr = cell.closest('tr');
+            let rect = null;
+            try {
+                rect = tr && tr.dataset.rect ? JSON.parse(tr.dataset.rect) : null;
+            } catch (_) {
+                rect = null;
+            }
+            const pageCell = tr ? tr.querySelector('.page') : null;
+            const pageName = (pageCell && pageCell.innerText.trim())
+                || ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '');
+            registeredFeatureAreas.push({
+                rect: rect,
+                name: trimmed,
+                fullPage: false,
+                pageName: pageName
+            });
+            window.registeredFeatureAreas = registeredFeatureAreas;
+            if (typeof window.saveFeatureToRepo === 'function') {
+                window.saveFeatureToRepo(trimmed, rect, false);
+            }
+        }
+        if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+    }
+    window.applyTableFeatureSubFeature = applyTableFeatureSubFeature;
+
+    function applyTableFeatureRenameAll(oldName, newName) {
+        const oldLower = String(oldName || '').trim().toLowerCase();
+        const trimmed = String(newName || '').trim();
+        if (!oldLower || !trimmed) return;
+        document.querySelectorAll('#myTable .featureName').forEach(cell => {
+            if ((cell.innerText || '').replace(/\u00a0/g, ' ').trim().toLowerCase() === oldLower) {
+                cell.innerText = trimmed;
+            }
+        });
+        (registeredFeatureAreas || []).forEach(area => {
+            if (area && area.name && String(area.name).trim().toLowerCase() === oldLower) {
+                area.name = trimmed;
+            }
+        });
+        window.registeredFeatureAreas = registeredFeatureAreas;
+        if (typeof window.saveFeatureToRepo === 'function') {
+            window.saveFeatureToRepo(trimmed, null, false);
+        }
+        if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+    }
+    window.applyTableFeatureRenameAll = applyTableFeatureRenameAll;
 
     function isFullPageFeatureArea(area) {
         if (!area) return false;
@@ -1682,26 +1740,39 @@
         }
     }
 
-    function findExistingRepoProject(appName, platform) {
+    function projectHasLaunchableData(project) {
+        if (!project) return false;
+        const feats = (typeof countProjectFeatures === 'function')
+            ? countProjectFeatures(project)
+            : ((project.features || []).length);
+        return ((project.pages || []).length > 0)
+            || ((project.scenarios || []).length > 0)
+            || feats > 0;
+    }
+
+    function findExistingRepoProjects(appName, platform) {
         const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
         const cleanApp = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : (appName || '')).trim().toLowerCase();
         const platNorm = (platform || 'Android').toLowerCase().includes('ios') ? 'iOS' : 'Android';
-
-        if (!cleanApp) return null;
+        if (!cleanApp) return [];
 
         const matches = [];
         Object.keys(store).forEach(k => {
             const proj = store[k];
-            if (!proj) return;
+            if (!proj || !projectHasLaunchableData(proj)) return;
             const pApp = (typeof getCleanAppName === 'function' ? getCleanAppName(proj.appName || '') : (proj.appName || '')).trim().toLowerCase();
             const pPlat = (proj.platform || k || '').toLowerCase().includes('ios') ? 'iOS' : 'Android';
             if (pApp === cleanApp && pPlat === platNorm) {
                 matches.push({ key: k, project: proj });
             }
         });
-        if (matches.length === 0) return null;
-        matches.sort((a, b) => (b.project.lastUpdated || 0) - (a.project.lastUpdated || 0));
-        return matches[0];
+        matches.sort((a, b) => (b.project.lastUpdated || a.project.createdAt || 0) - (a.project.lastUpdated || a.project.createdAt || 0));
+        return matches;
+    }
+
+    function findExistingRepoProject(appName, platform) {
+        const matches = findExistingRepoProjects(appName, platform);
+        return matches.length ? matches[0] : null;
     }
 
     function restoreProjectDataToHomePage(project) {
@@ -2037,6 +2108,7 @@
     async function resumeExistingProjectAndLaunch(projectKey, fallbackProject, launchParams) {
         if (window._resumeOldProjectLaunchInFlight) return;
         window._resumeOldProjectLaunchInFlight = true;
+        window._resettingHome = false;
         try {
             let snapshot = (typeof fetchRepoProjectSnapshot === 'function')
                 ? fetchRepoProjectSnapshot(projectKey, fallbackProject)
@@ -2055,12 +2127,13 @@
 
             window._resumedProjectSnapshot = snapshot;
             window.activeProjectSessionMode = 'resumed';
-            window.activeResumedProjectKey = projectKey || (snapshot.projectId ? `${snapshot.appName} (${snapshot.platform})::${snapshot.projectId}` : `${snapshot.appName} (${snapshot.platform})`);
+            const resolvedKeyInfo = (typeof findProjectKeyInStore === 'function')
+                ? findProjectKeyInStore(getProjectStore(), projectKey, snapshot)
+                : { key: projectKey };
+            window.activeResumedProjectKey = resolvedKeyInfo.key
+                || projectKey
+                || (snapshot.projectId ? `${snapshot.appName} (${snapshot.platform})::${snapshot.projectId}` : `${snapshot.appName} (${snapshot.platform})`);
             window.activeResumedAppName = snapshot.appName || resolveActiveAppName();
-
-            window._restoringProject = true;
-            restoreProjectDataToHomePage(snapshot);
-            window._restoringProject = false;
 
             pendingLaunchProjectData = null;
             window.pendingLaunchProjectData = null;
@@ -2070,11 +2143,17 @@
             triggerScreenshotLoader();
             resetFormLockActive = false;
             initialData = launchParams;
-            await launchApp(launchParams);
 
+            // Block Home→Repo sync for the whole launch. An empty table sync here
+            // was wiping the saved project and then restoring that empty copy.
             window._restoringProject = true;
-            restoreProjectDataToHomePage(window._resumedProjectSnapshot || snapshot);
-            window._restoringProject = false;
+            try {
+                await launchApp(launchParams);
+                restoreProjectDataToHomePage(snapshot);
+                window._resumedProjectSnapshot = snapshot;
+            } finally {
+                window._restoringProject = false;
+            }
         } catch (err) {
             console.error('Continue with Old failed:', err);
             window._restoringProject = false;
@@ -2082,6 +2161,206 @@
         } finally {
             window._resumeOldProjectLaunchInFlight = false;
         }
+    }
+
+    function formatLaunchPickerDate(ts) {
+        if (!ts) return '';
+        const d = new Date(ts);
+        if (Number.isNaN(d.getTime())) return '';
+        return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    }
+
+    function hideLaunchProjectPicker() {
+        const modal = document.getElementById('launchProjectModal');
+        if (modal) modal.style.display = 'none';
+        const overlay = document.getElementById('overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    function cancelLaunchProjectPicker() {
+        hideLaunchProjectPicker();
+        pendingLaunchProjectData = null;
+        window.pendingLaunchProjectData = null;
+        pendingExportAction = null;
+        window.pendingExportAction = null;
+        if (typeof unlockLaunchForm === 'function') unlockLaunchForm();
+    }
+
+    async function startCreateNewProjectLaunch(activeApp, plateformOption, launchParams) {
+        if (window._createNewProjectLaunchInFlight) return;
+        window._createNewProjectLaunchInFlight = true;
+        try {
+            hideLaunchProjectPicker();
+            const uniqueInfo = (typeof createFreshRepoProject === 'function')
+                ? createFreshRepoProject(activeApp, plateformOption)
+                : { key: `${activeApp} (${plateformOption})::${Date.now().toString(36)}`, appName: activeApp };
+
+            pendingLaunchProjectData = null;
+            window.pendingLaunchProjectData = null;
+            pendingExportAction = null;
+            window.pendingExportAction = null;
+
+            if (typeof window.clearAllPagesAndScrapedDataForNewScenario === 'function') {
+                window.clearAllPagesAndScrapedDataForNewScenario();
+            }
+            if (typeof window.setGlobalPageName === 'function') {
+                window.setGlobalPageName(uniqueInfo.appName);
+            }
+
+            triggerScreenshotLoader();
+            resetFormLockActive = false;
+            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+            initialData = launchParams;
+            await launchApp(launchParams);
+        } finally {
+            window._createNewProjectLaunchInFlight = false;
+        }
+    }
+
+    function showLaunchProjectPicker({ appName, platform, projects, launchParams }) {
+        const modal = document.getElementById('launchProjectModal');
+        const list = document.getElementById('launchPickerList');
+        const titleEl = document.getElementById('launchPickerTitle');
+        const mainEl = document.getElementById('launchPickerMain');
+        const subEl = document.getElementById('launchPickerSub');
+        const continueBtn = document.getElementById('launchPickerContinueBtn');
+        const createBtn = document.getElementById('launchPickerCreateBtn');
+        const cancelBtn = document.getElementById('launchPickerCancelBtn');
+        const searchWrap = document.getElementById('launchPickerSearchWrap');
+        const searchInput = document.getElementById('launchPickerSearch');
+        if (!modal || !list || !continueBtn) return;
+
+        const items = Array.isArray(projects) ? projects.slice() : [];
+        const displayApp = appName || 'this app';
+        const esc = (typeof escapeDummyHtml === 'function') ? escapeDummyHtml : (v) => String(v || '');
+        let selectedKey = items[0] ? items[0].key : '';
+
+        titleEl.textContent = `Launch ${displayApp}`;
+        if (items.length > 1) {
+            mainEl.innerHTML = `<b>${items.length}</b> saved projects for <b>${esc(displayApp)}</b> (${esc(platform)}).`;
+            subEl.textContent = 'Choose one to continue, or Create New for a separate workspace.';
+        } else {
+            mainEl.innerHTML = `A saved project for <b>${esc(displayApp)}</b> (${esc(platform)}) already exists.`;
+            subEl.textContent = 'Continue with Old restores it. Create New starts a separate project.';
+        }
+        if (searchWrap) searchWrap.style.display = items.length > 5 ? 'flex' : 'none';
+        if (searchInput) searchInput.value = '';
+
+        function syncContinueEnabled() {
+            continueBtn.disabled = !selectedKey;
+        }
+
+        function selectProjectKey(key) {
+            selectedKey = key || '';
+            list.querySelectorAll('.launch-picker-card').forEach(card => {
+                const on = card.getAttribute('data-project-key') === selectedKey;
+                card.classList.toggle('is-selected', on);
+                card.setAttribute('aria-selected', on ? 'true' : 'false');
+            });
+            const selectedItem = items.find(it => it.key === selectedKey);
+            if (selectedItem) {
+                pendingLaunchProjectData = {
+                    key: selectedItem.key,
+                    project: selectedItem.project,
+                    initialData: launchParams
+                };
+                window.pendingLaunchProjectData = pendingLaunchProjectData;
+            }
+            syncContinueEnabled();
+        }
+
+        list.innerHTML = items.map((item, idx) => {
+            const p = item.project || {};
+            const isIos = String(p.platform || platform || '').toLowerCase().includes('ios');
+            const platCls = isIos ? 'is-ios' : 'is-android';
+            const title = (typeof getProjectCardTitle === 'function') ? getProjectCardTitle(p, item.key) : (p.appName || displayApp);
+            const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(p, item.key) : (p.projectId || '');
+            const initial = String(title || 'A').charAt(0).toUpperCase();
+            const pages = (p.pages || []).length;
+            const scens = (p.scenarios || []).length;
+            const feats = (typeof countProjectFeatures === 'function') ? countProjectFeatures(p) : ((p.features || []).length);
+            const updated = formatLaunchPickerDate(p.lastUpdated || p.createdAt);
+            const searchBits = `${title} ${shortId} ${item.key}`.toLowerCase();
+            return `
+                <button type="button" class="launch-picker-card${idx === 0 ? ' is-selected' : ''}" data-project-key="${esc(item.key)}" data-search="${esc(searchBits)}" title="${esc(title)}${shortId ? ` · ${shortId}` : ''} · Updated ${esc(updated)}" role="option" aria-selected="${idx === 0 ? 'true' : 'false'}">
+                    <span class="launch-picker-radio" aria-hidden="true"></span>
+                    <span class="launch-picker-avatar ${platCls}">${esc(initial)}</span>
+                    <span class="launch-picker-info">
+                        <span class="launch-picker-name">${esc(title)}</span>
+                        ${shortId ? `<span class="launch-picker-id">${esc(shortId)}</span>` : ''}
+                    </span>
+                    <span class="launch-picker-stats">
+                        <span class="launch-picker-stat is-scen" title="${scens} Scenarios">${scens}s</span>
+                        <span class="launch-picker-stat is-feat" title="${feats} Features">${feats}f</span>
+                        <span class="launch-picker-stat is-page" title="${pages} Pages">${pages}p</span>
+                    </span>
+                    <span class="launch-picker-updated">${esc(updated)}</span>
+                </button>`;
+        }).join('');
+
+        const rowH = 36;
+        const gapH = 4;
+        const visibleCount = Math.min(items.length, 5);
+        const listH = visibleCount > 0
+            ? (visibleCount * rowH) + (Math.max(0, visibleCount - 1) * gapH)
+            : 0;
+        list.style.height = `${listH}px`;
+        list.style.maxHeight = `${listH}px`;
+        list.style.overflowY = items.length > 5 ? 'auto' : 'hidden';
+
+        list.onclick = (e) => {
+            const card = e.target.closest('.launch-picker-card');
+            if (!card || !list.contains(card)) return;
+            selectProjectKey(card.getAttribute('data-project-key'));
+        };
+        list.ondblclick = (e) => {
+            const card = e.target.closest('.launch-picker-card');
+            if (!card || !list.contains(card)) return;
+            selectProjectKey(card.getAttribute('data-project-key'));
+            continueBtn.click();
+        };
+        if (searchInput) {
+            searchInput.oninput = () => {
+                const q = (searchInput.value || '').trim().toLowerCase();
+                let visible = 0;
+                list.querySelectorAll('.launch-picker-card').forEach(card => {
+                    const hay = (card.getAttribute('data-search') || '').toLowerCase();
+                    const show = !q || hay.includes(q);
+                    card.style.display = show ? 'flex' : 'none';
+                    if (show) visible += 1;
+                });
+                let emptyEl = list.querySelector('.launch-picker-empty');
+                if (!visible) {
+                    if (!emptyEl) {
+                        emptyEl = document.createElement('div');
+                        emptyEl.className = 'launch-picker-empty';
+                        emptyEl.textContent = 'No matching projects';
+                        list.appendChild(emptyEl);
+                    }
+                    emptyEl.style.display = 'block';
+                } else if (emptyEl) {
+                    emptyEl.style.display = 'none';
+                }
+            };
+        }
+
+        continueBtn.onclick = async () => {
+            const chosen = items.find(it => it.key === selectedKey);
+            if (!chosen || window._resumeOldProjectLaunchInFlight) return;
+            hideLaunchProjectPicker();
+            await resumeExistingProjectAndLaunch(chosen.key, chosen.project, launchParams);
+        };
+        createBtn.onclick = async () => {
+            await startCreateNewProjectLaunch(appName, platform, launchParams);
+        };
+        cancelBtn.onclick = () => cancelLaunchProjectPicker();
+
+        pendingExportAction = "confirmExistingProjectLaunch";
+        window.pendingExportAction = "confirmExistingProjectLaunch";
+        selectProjectKey(selectedKey);
+
+        modal.style.display = 'flex';
+        document.getElementById('overlay').style.display = 'block';
     }
 
     document.getElementById("Run").addEventListener('click', async () => {
@@ -2148,108 +2427,37 @@
                     selectedAppName = (appSelect?.value || appName || '').trim();
                 }
                 const activeApp = (typeof getCleanAppName === 'function' ? getCleanAppName(selectedAppName) : selectedAppName) || appName;
-                const existingInfo = typeof findExistingRepoProject === 'function' ? findExistingRepoProject(activeApp, plateformOption) : null;
+                const existingProjects = (typeof findExistingRepoProjects === 'function')
+                    ? findExistingRepoProjects(activeApp, plateformOption)
+                    : [];
 
-                if (existingInfo && existingInfo.project) {
-                    const p = existingInfo.project;
-                    const hasPages = Array.isArray(p.pages) && p.pages.length > 0;
-                    const hasScenarios = Array.isArray(p.scenarios) && p.scenarios.length > 0;
-                    const totalFeats = (typeof countProjectFeatures === 'function') ? countProjectFeatures(p) : ((p.features || []).length);
-                    const hasFeatures = totalFeats > 0;
-
-                    if (hasPages || hasScenarios || hasFeatures) {
-                        pendingLaunchProjectData = {
-                            key: existingInfo.key,
-                            project: p,
-                            initialData: initialData
-                        };
-                        window.pendingLaunchProjectData = pendingLaunchProjectData;
-                        pendingExportAction = "confirmExistingProjectLaunch";
-                        window.pendingExportAction = "confirmExistingProjectLaunch";
-
-                        const totalPages = (p.pages || []).length;
-                        const totalScens = (p.scenarios || []).length;
-
-                        showConfirmDialog({
-                            title: "Existing Project Found",
-                            mainText: `A saved project workspace for <b>${p.appName || activeApp}</b> (${p.platform || plateformOption}) already exists in repository.`,
-                            subText: `This project contains <b>${totalPages} page(s)</b>, <b>${totalScens} scenario(s)</b>, and <b>${totalFeats} feature(s)</b>.<br><br>Do you want to <b>Continue with Old</b> to retrieve all its data to the Home workspace, or <b>Create New</b> to start fresh?`,
-                            action: "confirmExistingProjectLaunch",
-                            theme: "info",
-                            okayBtnText: "Continue with Old",
-                            extraBtnText: "Create New",
-                            onOkay: async () => {
-                                if (window._resumeOldProjectLaunchInFlight) return;
-                                const launchParams = [
-                                    plateformOption,
-                                    deviceName,
-                                    platformVersion,
-                                    automationName,
-                                    appiumURL,
-                                    udidName,
-                                    bundleID,
-                                    appPackage,
-                                    appActivity
-                                ];
-                                await resumeExistingProjectAndLaunch(
-                                    existingInfo.key || `${p.appName} (${p.platform})`,
-                                    p,
-                                    launchParams
-                                );
-                            },
-                            onExtra: async () => {
-                                if (window._createNewProjectLaunchInFlight) return;
-                                window._createNewProjectLaunchInFlight = true;
-                                try {
-                                    const launchParams = [
-                                        plateformOption,
-                                        deviceName,
-                                        platformVersion,
-                                        automationName,
-                                        appiumURL,
-                                        udidName,
-                                        bundleID,
-                                        appPackage,
-                                        appActivity
-                                    ];
-                                    const uniqueInfo = (typeof createFreshRepoProject === 'function')
-                                        ? createFreshRepoProject(activeApp, plateformOption)
-                                        : { key: `${activeApp} (${plateformOption})::${Date.now().toString(36)}`, appName: activeApp };
-
-                                    pendingLaunchProjectData = null;
-                                    window.pendingLaunchProjectData = null;
-                                    pendingExportAction = null;
-                                    window.pendingExportAction = null;
-
-                                    if (typeof window.clearAllPagesAndScrapedDataForNewScenario === 'function') {
-                                        window.clearAllPagesAndScrapedDataForNewScenario();
-                                    }
-
-                                    if (typeof window.setGlobalPageName === 'function') {
-                                        window.setGlobalPageName(uniqueInfo.appName);
-                                    }
-
-                                    triggerScreenshotLoader();
-                                    resetFormLockActive = false;
-                                    if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
-                                    initialData = launchParams;
-                                    await launchApp(launchParams);
-                                } finally {
-                                    window._createNewProjectLaunchInFlight = false;
-                                }
-                            },
-                            onCancel: () => {
-                                pendingLaunchProjectData = null;
-                                window.pendingLaunchProjectData = null;
-                                pendingExportAction = null;
-                                window.pendingExportAction = null;
-                                if (typeof unlockLaunchForm === 'function') {
-                                    unlockLaunchForm();
-                                }
-                            }
-                        });
-                        return;
-                    }
+                if (existingProjects.length > 0) {
+                    const launchParams = [
+                        plateformOption,
+                        deviceName,
+                        platformVersion,
+                        automationName,
+                        appiumURL,
+                        udidName,
+                        bundleID,
+                        appPackage,
+                        appActivity
+                    ];
+                    pendingLaunchProjectData = {
+                        key: existingProjects[0].key,
+                        project: existingProjects[0].project,
+                        initialData: launchParams
+                    };
+                    window.pendingLaunchProjectData = pendingLaunchProjectData;
+                    pendingExportAction = "confirmExistingProjectLaunch";
+                    window.pendingExportAction = "confirmExistingProjectLaunch";
+                    showLaunchProjectPicker({
+                        appName: activeApp,
+                        platform: plateformOption,
+                        projects: existingProjects,
+                        launchParams
+                    });
+                    return;
                 }
 
                 const store = getProjectStore();
@@ -2282,6 +2490,7 @@
 
         async function launchApp(initialData) {
             window.launchApp = launchApp;
+            window._resettingHome = false;
             if (!Array.isArray(initialData) || initialData.length < 9 || !initialData[0] || (!initialData[1] && !initialData[5])) {
                 const pOpt = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
                 initialData = [
@@ -2596,13 +2805,7 @@
                 await loadFirstScreen();
                 refreshShouldLaunchApp = false;
                 if (typeof window.switchAppTab === "function") window.switchAppTab("home");
-                if (window.activeProjectSessionMode === 'resumed') {
-                    if (window._resumedProjectSnapshot && typeof restoreProjectDataToHomePage === 'function') {
-                        window._restoringProject = true;
-                        restoreProjectDataToHomePage(window._resumedProjectSnapshot);
-                        window._restoringProject = false;
-                    }
-                } else if (typeof window.syncActiveProjectToRepo === "function") {
+                if (window.activeProjectSessionMode !== 'resumed' && typeof window.syncActiveProjectToRepo === "function") {
                     window.syncActiveProjectToRepo();
                 }
             } catch (screenErr) {
@@ -3211,7 +3414,6 @@ document.getElementById("Scrape").addEventListener('click', async () => {
 
         rows.forEach((row) => {
             if (row.classList.contains('empty-excel-row') || row.classList.contains('no-results-row')) return;
-            if (typeof hiddenRows !== 'undefined' && hiddenRows.some(h => h.rowElement === row)) return;
 
             const allCells = Array.from(row.querySelectorAll('td'));
             if (allCells.length === 0) return;
@@ -3259,6 +3461,14 @@ document.getElementById("Scrape").addEventListener('click', async () => {
 
             const hasData = rowObj["CONTROL NAME"] || rowObj["XPATH"] || rowObj["CONTROL TYPE"] || rowObj["PAGE NAME"];
             if (hasData) {
+                if (!rowObj["PAGE NAME"] || rowObj["PAGE NAME"].trim().toLowerCase() === 'all') {
+                    const resolvedPage = (typeof window.resolveHomePageNameForScrape === 'function')
+                        ? window.resolveHomePageNameForScrape()
+                        : '';
+                    if (resolvedPage && resolvedPage.toLowerCase() !== 'all') {
+                        rowObj["PAGE NAME"] = resolvedPage;
+                    }
+                }
                 try {
                     rowObj.rect = row.dataset.rect ? JSON.parse(row.dataset.rect) : null;
                 } catch (_) {
@@ -3485,71 +3695,97 @@ document.getElementById("Scrape").addEventListener('click', async () => {
         }
 
         if (e.target.classList.contains("featureName")) {
-            const newFeatureNameValue = e.target.innerText.trim();
+            const newFeatureNameValue = (e.target.innerText || "").replace(/\u00a0/g, " ").trim();
             const tr = e.target.closest('tr');
             const pageCell = tr ? tr.querySelector('.page') : null;
             const rowPageName = (pageCell ? pageCell.innerText.trim() : '') || document.getElementById('pagename_searchbox')?.value || 'Default';
+            const oldName = oldFeatureNameValue;
+            oldFeatureNameValue = "";
 
-            // If empty or set to page name, automatically replace with page name and remove feature if no longer used
+            const revertCell = (value) => {
+                e.target.innerText = value || rowPageName;
+            };
+
+            const getFeatureIdentityError = (name) => {
+                const lower = String(name || '').trim().toLowerCase();
+                if (!lower) return "";
+                if (rowPageName && lower === rowPageName.toLowerCase()) return "";
+                const pageHit = Array.from(window.registeredPageNames || []).some(p => p && String(p).trim().toLowerCase() === lower);
+                if (pageHit) return "This name is already used as a Page Name.";
+                if (window.pageScenarioData) {
+                    for (const key of Object.keys(window.pageScenarioData)) {
+                        const scen = window.pageScenarioData[key];
+                        if (scen && scen.scenarioName && scen.scenarioName.trim().toLowerCase() === lower) {
+                            return "This name is already used as a Scenario Name.";
+                        }
+                    }
+                }
+                return "";
+            };
+
+            // Empty or page-name default: this row is not a created feature
             if (newFeatureNameValue === "" || newFeatureNameValue.toLowerCase() === rowPageName.toLowerCase()) {
-                e.target.innerText = rowPageName;
-                if (oldFeatureNameValue && oldFeatureNameValue.toLowerCase() !== rowPageName.toLowerCase()) {
-                    const otherCellsUsingIt = Array.from(document.querySelectorAll('#myTable .featureName')).some(c => c !== e.target && c.innerText.trim().toLowerCase() === oldFeatureNameValue.toLowerCase());
+                revertCell(rowPageName);
+                if (oldName && oldName.toLowerCase() !== rowPageName.toLowerCase()) {
+                    const otherCellsUsingIt = Array.from(document.querySelectorAll('#myTable .featureName')).some(c => c !== e.target && c.innerText.trim().toLowerCase() === oldName.toLowerCase());
                     if (!otherCellsUsingIt && typeof window.removeFeatureCompletely === 'function') {
-                        window.removeFeatureCompletely(oldFeatureNameValue);
+                        window.removeFeatureCompletely(oldName);
                     }
                 }
                 if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
-                oldFeatureNameValue = "";
                 return;
             }
 
-            if (newFeatureNameValue !== oldFeatureNameValue && oldFeatureNameValue !== "") {
-                // Unique Name Check (Feature, Page, and Scenario Names in active session and repository)
-                const isNameUsedAsFeature = registeredFeatureAreas.some(area => area.name.toLowerCase() === newFeatureNameValue.toLowerCase());
-                const isNameUsedAsPage = Array.from(window.registeredPageNames || []).some(p => p.toLowerCase() === newFeatureNameValue.toLowerCase());
-                const isNameInRepo = typeof isFeatureNameInRepo === 'function' && isFeatureNameInRepo(newFeatureNameValue);
-
-                if (isNameUsedAsFeature || isNameUsedAsPage || isNameInRepo) {
-                    pendingFeatureRename = {
-                        oldName: oldFeatureNameValue,
-                        cellElement: e.target
-                    };
-                    const msg = isNameInRepo ? "This feature name already exists in the repository for this application. Please try a different one." : "This feature name is already used. Please try a different one.";
-                    showCustomAlert("Feature Already Exists", msg, "warning");
-                } else {
-                    pendingFeatureRename = {
-                        oldName: oldFeatureNameValue,
-                        newName: newFeatureNameValue,
-                        cellElement: e.target
-                    };
-
-                    // Check if the current value is already a registered feature
-                    const isExistingFeature = registeredFeatureAreas.some(area => area.name === oldFeatureNameValue);
-
-                    if (!isExistingFeature) {
-                        showConfirmDialog({
-                            title: "Create New Feature",
-                            mainText: `Do you want to create a new feature "<b>${newFeatureNameValue}</b>" for this element?`,
-                            subText: "This element will be assigned to this new feature.",
-                            action: "createNewFeature",
-                            theme: "confirm",
-                            okayBtnText: "Create"
-                        });
-                    } else {
-                        showConfirmDialog({
-                            title: "Update Feature Name",
-                            mainText: `How would you like to apply the rename for "<b>${oldFeatureNameValue}</b>"?`,
-                            subText: "Choose 'Rename All' to update every occurrence, or 'Sub-feature' for only this element.",
-                            action: "renameFeature",
-                            theme: "confirm",
-                            okayBtnText: "Rename All",
-                            extraBtnText: "Sub-feature"
-                        });
-                    }
-                }
+            if (newFeatureNameValue === oldName) {
+                return;
             }
-            oldFeatureNameValue = "";
+
+            const formatErr = (typeof getFeatureNameFormatError === 'function')
+                ? getFeatureNameFormatError(newFeatureNameValue)
+                : "";
+            if (formatErr) {
+                revertCell(oldName || rowPageName);
+                showCustomAlert("Invalid Feature Name", formatErr, "warning");
+                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+                return;
+            }
+
+            const identityErr = getFeatureIdentityError(newFeatureNameValue);
+            if (identityErr) {
+                revertCell(oldName || rowPageName);
+                showCustomAlert("Invalid Feature Name", identityErr, "warning");
+                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+                return;
+            }
+
+            const wasPageDefault = !oldName || oldName.toLowerCase() === rowPageName.toLowerCase();
+
+            // Page-name default → always a sub-feature for this row only.
+            // A later edit of that same created name uses Rename All / Sub-feature / Cancel.
+            if (wasPageDefault) {
+                if (typeof window.applyTableFeatureSubFeature === 'function') {
+                    window.applyTableFeatureSubFeature(e.target, newFeatureNameValue);
+                } else {
+                    e.target.innerText = newFeatureNameValue;
+                }
+                return;
+            }
+
+            pendingFeatureRename = {
+                oldName: oldName,
+                newName: newFeatureNameValue,
+                cellElement: e.target
+            };
+            showConfirmDialog({
+                title: "Update Feature Name",
+                mainText: `How would you like to apply "<b>${newFeatureNameValue}</b>"?`,
+                subText: "Rename All updates every row using this feature. Sub-feature applies it to this element only. Cancel keeps the previous name.",
+                action: "renameFeature",
+                theme: "confirm",
+                okayBtnText: "Rename All",
+                extraBtnText: "Sub-feature"
+            });
+            return;
         }
 
         if (typeof window.syncActiveProjectToRepo === 'function') {
@@ -3562,6 +3798,19 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             window.syncActiveProjectToRepo();
         }
     });
+
+    if (!tableEl.dataset.repoLiveSyncObs) {
+        tableEl.dataset.repoLiveSyncObs = 'true';
+        let liveSyncTimer = null;
+        const liveSyncObserver = new MutationObserver(() => {
+            if (window._restoringProject || window._applyingRepoToHome || window._resettingHome || pendingFeatureRename) return;
+            clearTimeout(liveSyncTimer);
+            liveSyncTimer = setTimeout(() => {
+                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+            }, 80);
+        });
+        liveSyncObserver.observe(tableEl, { childList: true, subtree: true, characterData: true });
+    }
 
     tableEl.addEventListener("keydown", (e) => {
         if ((e.target.classList.contains("featureName") || e.target.classList.contains("cn")) && e.key === "Enter") {
@@ -4884,6 +5133,8 @@ async function performSwipe(startX, startY, endX, endY) {
                document.getElementById('table-container').style.display = "block";
 
                updateRowNumbers();
+               if (typeof applyPagination === 'function') applyPagination();
+               if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
            });
        }
 
@@ -5019,7 +5270,9 @@ function createAndAppendTable(dtControls) {
         noResultsMessage.style.display = 'none';
     }
 
-    var pageName = document.getElementById('pagename_searchbox').value;
+    var pageName = (typeof window.resolveHomePageNameForScrape === 'function')
+        ? window.resolveHomePageNameForScrape()
+        : document.getElementById('pagename_searchbox').value;
     var tbody = document.getElementById('myTable');
 
     var allHeaders = Array.from(document.querySelectorAll('#mainTable thead tr > *'));
@@ -6856,6 +7109,19 @@ function getAllPossibleXPaths(node) {
 
 
 // --- GLOBAL PAGE NAME VALIDATOR ---
+function getFeatureNameFormatError(val) {
+    if (!val || String(val).trim() === '') return "Feature Name is required.";
+    const trimmed = String(val).trim();
+    if (trimmed.length < 3) return "Feature Name must be at least 3 characters.";
+    if (trimmed.toLowerCase() === 'all') return "Feature Name cannot be All.";
+    const formatRegex = /^[A-Za-z][A-Za-z0-9_]*(\s[A-Za-z0-9_]+)*$/;
+    if (!formatRegex.test(trimmed)) {
+        return "Feature Name must start with a letter and can contain only letters, numbers, underscore, and a single space between words.";
+    }
+    return "";
+}
+window.getFeatureNameFormatError = getFeatureNameFormatError;
+
 function isGlobalPageNameValid(name) {
     if (!name || name.trim() === '') return false; // Empty is invalid
 
@@ -6963,8 +7229,32 @@ function resolveActiveAppName() {
     return getCleanAppName(val);
 }
 
-function createProjectId() {
-    return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+function nextNumericProjectId(store, baseAppName, platform) {
+    const cleanApp = (typeof getCleanAppName === 'function' ? getCleanAppName(baseAppName) : (baseAppName || '')).trim().toLowerCase();
+    const plat = String(platform || 'Android').toLowerCase().includes('ios') ? 'ios' : 'android';
+    let max = 0;
+    Object.keys(store || {}).forEach(k => {
+        const proj = store[k];
+        const pApp = (typeof getCleanAppName === 'function'
+            ? getCleanAppName(proj && proj.appName ? proj.appName : String(k).split('::')[0].replace(/\s*\(.*?\)\s*$/, ''))
+            : String(k)).trim().toLowerCase();
+        const pPlat = String((proj && proj.platform) || k).toLowerCase().includes('ios') ? 'ios' : 'android';
+        if (cleanApp && (pApp !== cleanApp || pPlat !== plat)) return;
+        const raw = (proj && proj.projectId) || (String(k).includes('::') ? String(k).split('::').pop() : '');
+        const m = String(raw).match(/^p_(\d+)$/i);
+        if (m) {
+            const n = parseInt(m[1], 10);
+            if (n > max) max = n;
+        }
+    });
+    return 'p_' + (max + 1);
+}
+
+function createProjectId(store, baseAppName, platform) {
+    if (store && typeof store === 'object') {
+        return nextNumericProjectId(store, baseAppName, platform);
+    }
+    return 'p_' + String(Date.now()).slice(-6);
 }
 
 function repoPlatformLabel(platform) {
@@ -6999,10 +7289,12 @@ function generateUniqueProjectKey(store, baseAppName, platform, options) {
         }
     }
 
-    let projectId = createProjectId();
+    let projectId = createProjectId(store, cleanApp, plat);
     let key = `${baseKey}::${projectId}`;
+    let n = parseInt(String(projectId).replace(/^p_/i, ''), 10) || 0;
     while (keyTaken(key)) {
-        projectId = createProjectId();
+        n += 1;
+        projectId = 'p_' + n;
         key = `${baseKey}::${projectId}`;
     }
     return { key, appName: cleanApp, projectId };
@@ -7014,6 +7306,19 @@ function getProjectShortId(project, key) {
     if (key && String(key).includes('::')) return String(key).split('::').pop();
     return '';
 }
+
+function isCurrentlyOpenRepoProject(storeKey, project) {
+    const liveKey = window.activeResumedProjectKey;
+    const liveMode = window.activeProjectSessionMode;
+    if (!liveKey || window._resettingHome) return false;
+    if (liveMode !== 'new' && liveMode !== 'resumed') return false;
+    if (storeKey === liveKey) return true;
+    if (String(storeKey).toLowerCase() === String(liveKey).toLowerCase()) return true;
+    const liveId = String(liveKey).includes('::') ? String(liveKey).split('::').pop() : '';
+    const projId = (project && project.projectId) || (String(storeKey).includes('::') ? String(storeKey).split('::').pop() : '');
+    return !!(liveId && projId && liveId === projId);
+}
+window.isCurrentlyOpenRepoProject = isCurrentlyOpenRepoProject;
 
 function getProjectCardTitle(project, key) {
     if (project && project.appName) return project.appName;
@@ -7032,6 +7337,31 @@ function persistProjectStore(store) {
     }
 }
 window.persistProjectStore = persistProjectStore;
+
+function findProjectKeyInStore(store, preferredKey, hintProject) {
+    if (!store || typeof store !== 'object') {
+        return { key: preferredKey || null, project: null };
+    }
+    if (preferredKey && store[preferredKey]) {
+        return { key: preferredKey, project: store[preferredKey] };
+    }
+    if (preferredKey) {
+        const lower = String(preferredKey).toLowerCase();
+        const foundKey = Object.keys(store).find(k => k.toLowerCase() === lower);
+        if (foundKey) return { key: foundKey, project: store[foundKey] };
+    }
+    const idHint = (preferredKey && String(preferredKey).includes('::'))
+        ? String(preferredKey).split('::').pop()
+        : ((hintProject && hintProject.projectId) || '');
+    if (idHint) {
+        const byId = Object.keys(store).find(k =>
+            (store[k] && store[k].projectId === idHint) || String(k).endsWith('::' + idHint)
+        );
+        if (byId) return { key: byId, project: store[byId] };
+    }
+    return { key: preferredKey || null, project: null };
+}
+window.findProjectKeyInStore = findProjectKeyInStore;
 
 function fetchRepoProjectSnapshot(projectKey, hintProject) {
     const clone = (p) => {
@@ -7179,6 +7509,33 @@ function getActiveHomePageName() {
     const el = document.getElementById('pagename_searchbox');
     return (el && el.value ? el.value : '').trim();
 }
+
+function resolveHomePageNameForScrape() {
+    const raw = getActiveHomePageName();
+    if (raw && raw.toLowerCase() !== 'all') return raw;
+
+    const scenarioKeys = Object.keys(window.pageScenarioData || {}).filter(k => k && k.toLowerCase() !== 'all');
+    if (scenarioKeys.length === 1) return scenarioKeys[0];
+
+    const snap = window._resumedProjectSnapshot;
+    const saved = snap && snap.lastActivePageName ? String(snap.lastActivePageName).trim() : '';
+    if (saved && saved.toLowerCase() !== 'all') return saved;
+
+    if (snap && Array.isArray(snap.scenarios) && snap.scenarios.length) {
+        const fromScenario = (snap.scenarios[0].pageName || snap.scenarios[0].name || '').trim();
+        if (fromScenario && fromScenario.toLowerCase() !== 'all') return fromScenario;
+    }
+
+    const pages = Array.from(window.registeredPageNames || []).filter(p => p && String(p).toLowerCase() !== 'all');
+    if (pages.length) {
+        const appName = (window.activeResumedAppName || '').trim().toLowerCase();
+        const owned = pages.filter(p => p.toLowerCase() !== appName);
+        return (owned.length ? owned[owned.length - 1] : pages[pages.length - 1]);
+    }
+
+    return (window.activeResumedAppName || raw || 'home').trim();
+}
+window.resolveHomePageNameForScrape = resolveHomePageNameForScrape;
 
 function isDistinctFeatureName(name, pageName) {
     const n = String(name || '').trim();
@@ -7459,6 +7816,7 @@ function pruneProjectAssetOwnership(project) {
 window.pruneProjectAssetOwnership = pruneProjectAssetOwnership;
 
 function getProjectStore() {
+    if (window._activeRepoWriteStore) return window._activeRepoWriteStore;
     let store = {};
     try {
         const raw = localStorage.getItem(REPO_STORAGE_KEY);
@@ -7513,6 +7871,13 @@ function getProjectStore() {
                 p.appName = cleanName;
             }
             p.platform = plat;
+
+            if (!p.projectId) {
+                p.projectId = String(k).includes('::')
+                    ? String(k).split('::').pop()
+                    : createProjectId(store, p.appName || cleanName, plat);
+                modified = true;
+            }
 
             // 1. Deduplicate Features by feature name
             if (Array.isArray(p.features)) {
@@ -7638,7 +8003,10 @@ function getRepoAssetsForActiveApp() {
 
     try {
         const store = getProjectStore();
-        const project = getProjectByKey(store, window.activeResumedProjectKey);
+        const found = (typeof findProjectKeyInStore === 'function')
+            ? findProjectKeyInStore(store, window.activeResumedProjectKey)
+            : { project: store[window.activeResumedProjectKey] };
+        const project = found && found.project;
         if (project) {
             if (Array.isArray(project.pages)) {
                 project.pages.forEach(p => {
@@ -8792,29 +9160,7 @@ function updateRowEyeButtonState() {
 
         if (pendingExportAction === "renameFeature" && pendingFeatureRename) {
             const { newName, cellElement } = pendingFeatureRename;
-
-            // Sub-feature: Update ONLY the current cell
-            cellElement.innerText = newName;
-
-            // Register this specific area as a new feature
-            const tr = cellElement.closest('tr');
-            if (tr && tr.dataset.rect) {
-                try {
-                    const rect = JSON.parse(tr.dataset.rect);
-                    if (rect) {
-                        const newArea = {
-                            rect: rect,
-                            name: newName,
-                            pageName: (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''
-                        };
-                        registeredFeatureAreas.push(newArea);
-                        syncExistingRowsWithNewFeature(newArea);
-                    }
-                } catch (e) {
-                    console.error("Failed to parse row rect for sub-feature registration:", e);
-                }
-            }
-            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+            applyTableFeatureSubFeature(cellElement, newName);
         }
 
         pendingFeatureRename = null;
@@ -8876,45 +9222,12 @@ function updateRowEyeButtonState() {
                    const { oldName, newName, cellElement } = pendingFeatureRename;
 
                    if (currentAction === "renameFeature") {
-                        // Complete Rename: Update all matching cells in the table
-                        const allFeatureCells = document.querySelectorAll("#myTable .featureName");
-                        allFeatureCells.forEach(cell => {
-                            if (cell.innerText.trim() === oldName) {
-                                cell.innerText = newName;
-                            }
-                        });
-
-                        // Update internal registered storage (rename existing entry)
-                        registeredFeatureAreas.forEach(area => {
-                            if (area.name === oldName) {
-                                area.name = newName;
-                            }
-                        });
+                        applyTableFeatureRenameAll(oldName, newName);
                    } else if (currentAction === "createNewFeature") {
-                        // Create New: Update ONLY the current cell and register area
-                        cellElement.innerText = newName;
-
-                        const tr = cellElement.closest('tr');
-                        if (tr && tr.dataset.rect) {
-                            try {
-                                const rect = JSON.parse(tr.dataset.rect);
-                                if (rect) {
-                                    const newArea = {
-                                        rect: rect,
-                                        name: newName,
-                                        pageName: (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''
-                                    };
-                                    registeredFeatureAreas.push(newArea);
-                                    syncExistingRowsWithNewFeature(newArea);
-                                }
-                            } catch (e) {
-                                console.error("Failed to parse row rect for new feature registration:", e);
-                            }
-                        }
+                        applyTableFeatureSubFeature(cellElement, newName);
                    }
                }
                pendingFeatureRename = null;
-               if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 
            } else if (pendingExportAction === "download") {
                pendingExportAction = null;
@@ -9092,10 +9405,51 @@ function updateRowEyeButtonState() {
             // --- CONFIRM CLEAR ALL REPOSITORY ACTION ---
             } else if (pendingExportAction === "confirmClearRepositoryAction") {
                 pendingExportAction = null;
-                if (typeof window.setRepoProjectsStore === 'function') {
-                    window.setRepoProjectsStore({});
-                    if (typeof window.applyRepoChangeToHome === 'function') {
+                if (typeof window.getRepoProjectsStore === 'function' && typeof window.setRepoProjectsStore === 'function') {
+                    const store = window.getRepoProjectsStore() || {};
+                    const kept = {};
+                    Object.keys(store).forEach(k => {
+                        const live = (typeof window.isCurrentlyOpenRepoProject === 'function')
+                            ? window.isCurrentlyOpenRepoProject(k, store[k])
+                            : (k === window.activeResumedProjectKey);
+                        if (live) kept[k] = store[k];
+                    });
+                    window.setRepoProjectsStore(kept);
+                    if (Object.keys(kept).length === 0 && typeof window.applyRepoChangeToHome === 'function') {
                         window.applyRepoChangeToHome({ wipeSession: true, projectKey: window.activeResumedProjectKey });
+                    }
+                    if (typeof window.renderRepositoryView === 'function') {
+                        window.renderRepositoryView();
+                    }
+                }
+
+            } else if (pendingExportAction === "confirmDeleteRepoProjects") {
+                pendingExportAction = null;
+                const keys = (pendingRepoDelete && Array.isArray(pendingRepoDelete.projectKeys))
+                    ? pendingRepoDelete.projectKeys.slice()
+                    : [];
+                if (keys.length && typeof window.getRepoProjectsStore === 'function') {
+                    const store = window.getRepoProjectsStore();
+                    const liveKey = window.activeResumedProjectKey;
+                    const actuallyDeleted = [];
+                    keys.forEach(deletedKey => {
+                        if (!store[deletedKey]) return;
+                        const live = (typeof window.isCurrentlyOpenRepoProject === 'function')
+                            ? window.isCurrentlyOpenRepoProject(deletedKey, store[deletedKey])
+                            : (deletedKey === liveKey);
+                        if (live) return;
+                        delete store[deletedKey];
+                        actuallyDeleted.push(deletedKey);
+                    });
+                    window.setRepoProjectsStore(store);
+                    if (typeof window.applyRepoChangeToHome === 'function') {
+                        actuallyDeleted.forEach(deletedKey => {
+                            window.applyRepoChangeToHome({ projectKey: deletedKey, wipeSession: false });
+                        });
+                    }
+                    pendingRepoDelete = null;
+                    if (typeof window.setRepoMultiDeleteMode === 'function') {
+                        window.setRepoMultiDeleteMode(false);
                     }
                     if (typeof window.renderRepositoryView === 'function') {
                         window.renderRepositoryView();
@@ -9108,17 +9462,27 @@ function updateRowEyeButtonState() {
                 if (pendingRepoDelete && pendingRepoDelete.projectKey && typeof window.getRepoProjectsStore === 'function') {
                     const store = window.getRepoProjectsStore();
                     const deletedKey = pendingRepoDelete.projectKey;
-                    delete store[deletedKey];
-                    window.setRepoProjectsStore(store);
-                    if (typeof window.applyRepoChangeToHome === 'function') {
-                        window.applyRepoChangeToHome({
-                            projectKey: deletedKey,
-                            wipeSession: deletedKey === window.activeResumedProjectKey
-                        });
-                    }
-                    pendingRepoDelete = null;
-                    if (typeof window.renderRepositoryView === 'function') {
-                        window.renderRepositoryView();
+                    const live = (typeof window.isCurrentlyOpenRepoProject === 'function')
+                        ? window.isCurrentlyOpenRepoProject(deletedKey, store[deletedKey])
+                        : (deletedKey === window.activeResumedProjectKey);
+                    if (live) {
+                        pendingRepoDelete = null;
+                        if (typeof showCustomAlert === 'function') {
+                            showCustomAlert('Active Project', 'This project is currently open and cannot be deleted.', 'warning');
+                        }
+                    } else {
+                        delete store[deletedKey];
+                        window.setRepoProjectsStore(store);
+                        if (typeof window.applyRepoChangeToHome === 'function') {
+                            window.applyRepoChangeToHome({
+                                projectKey: deletedKey,
+                                wipeSession: false
+                            });
+                        }
+                        pendingRepoDelete = null;
+                        if (typeof window.renderRepositoryView === 'function') {
+                            window.renderRepositoryView();
+                        }
                     }
                 }
 
@@ -9237,6 +9601,10 @@ function updateRowEyeButtonState() {
 
         if ((pendingExportAction === "renameFeature" || pendingExportAction === "createNewFeature") && pendingFeatureRename) {
             pendingFeatureRename.cellElement.innerText = pendingFeatureRename.oldName;
+            pendingFeatureRename = null;
+            pendingExportAction = null;
+            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+            return;
         }
         pendingFeatureRename = null;
         pendingExportAction = null;
@@ -9252,10 +9620,14 @@ function updateRowEyeButtonState() {
     // Reset session + form lock (keeps table shell, clears rows) — see applyPostResetUI()
     function executeResetAction() {
             try {
-                // 0. Auto-archive any active session data to Repository before clearing
+                // Save current Home into Repository first, while the table still has data.
                 if (typeof archiveCurrentActiveSession === 'function') {
                     archiveCurrentActiveSession();
                 }
+
+                // Home is being cleared. Do not write that empty table back to Repository.
+                window._resettingHome = true;
+                window._restoringProject = true;
 
                 // 1. Safely hide status bars and errors
                 const statusBar = document.getElementById('sttus_bar_div');
@@ -9337,8 +9709,12 @@ function updateRowEyeButtonState() {
                     scenarioOutlineText.value = "";
                 }
 
-                if (typeof window.syncActiveProjectToRepo === 'function') {
-                    window.syncActiveProjectToRepo();
+                window.activeProjectSessionMode = null;
+                window.activeResumedProjectKey = null;
+                window.activeResumedAppName = null;
+                window._resumedProjectSnapshot = null;
+                if (typeof window.closeRepoWorkspaceToList === 'function') {
+                    window.closeRepoWorkspaceToList();
                 }
 
                 // 6. HELPER: Safely delete old screenshots without crashing the app
@@ -9425,6 +9801,8 @@ function updateRowEyeButtonState() {
             } catch (err) {
                 // Log any unexpected errors instead of completely freezing the UI
                 console.error("Reset encountered an error, but was caught safely:", err);
+            } finally {
+                window._restoringProject = false;
             }
         }
 
@@ -11468,14 +11846,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const featureModal = document.getElementById("createFeatureModal");
 
         function validateFeatureName(val) {
-            if (!val || val.trim() === '') return "Feature Name is required";
-            if (val.trim().length < 3) return "Feature Name must be at least 3 characters";
+            const formatErr = (typeof getFeatureNameFormatError === 'function')
+                ? getFeatureNameFormatError(val)
+                : "";
+            if (formatErr) return formatErr;
 
             const trimmed = val.trim();
-            const formatRegex = /^[A-Za-z][A-Za-z0-9_]*(\s[A-Za-z0-9_]+)*$/;
-            if (!formatRegex.test(trimmed)) {
-                return "Feature Name must start with a letter and can contain only letters, numbers, _, and single spaces.";
-            }
 
             const lower = trimmed.toLowerCase();
             const nameUsedAsFeature = (registeredFeatureAreas || []).some(
@@ -12489,6 +12865,8 @@ if (platformVersionField) {
     let currentSelectedProjectKey = null; // null = Root Projects list; string = inside project
     let currentRepoFilter = 'all';
     let currentRepoPlatformFilter = 'all'; // 'all' | 'iOS' | 'Android'
+    let repoSelectedProjectKeys = new Set();
+    let repoMultiDeleteMode = false;
     let repoSearchQuery = '';
     let repoProjectSearchQuery = '';
     let activeDrawerData = null; // Currently opened page / scenario in drawer
@@ -12502,22 +12880,58 @@ if (platformVersionField) {
     }
     window.setRepoProjectsStore = setProjectStore;
 
-    function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform) {
-        const targetKey = window.activeResumedProjectKey || key;
-        if (!store[targetKey]) {
-            const platform = fallbackPlatform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
-            const appName = window.activeResumedAppName || fallbackAppName || resolveActiveAppName();
+    function beginRepoWrite() {
+        if (!window._activeRepoWriteDepth) window._activeRepoWriteDepth = 0;
+        if (window._activeRepoWriteDepth === 0) {
+            window._activeRepoWriteStore = null;
+            window._activeRepoWriteStore = getProjectStore();
+        }
+        window._activeRepoWriteDepth += 1;
+        return window._activeRepoWriteStore;
+    }
 
-            store[targetKey] = {
-                projectId: (String(targetKey).includes('::') ? String(targetKey).split('::').pop() : null),
-                appName: appName,
-                platform: platform,
-                createdAt: Date.now(),
-                lastUpdated: Date.now(),
-                scenarios: [],
-                features: [],
-                pages: []
-            };
+    function endRepoWrite(persist) {
+        window._activeRepoWriteDepth = Math.max(0, (window._activeRepoWriteDepth || 1) - 1);
+        if (window._activeRepoWriteDepth === 0) {
+            const store = window._activeRepoWriteStore;
+            window._activeRepoWriteStore = null;
+            if (persist !== false && store) setProjectStore(store);
+        }
+    }
+
+    function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform) {
+        const preferredKey = window.activeResumedProjectKey || key;
+        const found = (typeof findProjectKeyInStore === 'function')
+            ? findProjectKeyInStore(store, preferredKey)
+            : { key: preferredKey, project: store[preferredKey] };
+        if (found && found.project) {
+            if (found.key && (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed')) {
+                window.activeResumedProjectKey = found.key;
+            }
+            if (!found.project.projectId) {
+                found.project.projectId = (found.key && String(found.key).includes('::'))
+                    ? String(found.key).split('::').pop()
+                    : createProjectId(store, found.project.appName, found.project.platform);
+            }
+            return found.project;
+        }
+
+        const targetKey = preferredKey;
+        const platform = fallbackPlatform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
+        const appName = window.activeResumedAppName || fallbackAppName || resolveActiveAppName();
+
+        store[targetKey] = {
+            projectId: (String(targetKey).includes('::') ? String(targetKey).split('::').pop() : createProjectId(store, appName, platform)),
+            appName: appName,
+            platform: platform,
+            createdAt: Date.now(),
+            lastUpdated: Date.now(),
+            scenarios: [],
+            features: [],
+            pages: []
+        };
+        if (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed') {
+            window.activeResumedProjectKey = targetKey;
         }
         return store[targetKey];
     }
@@ -12528,7 +12942,8 @@ if (platformVersionField) {
         const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
         const projectKey = window.activeResumedProjectKey || `${currentApp} (${currentPlatform})`;
 
-        const store = getProjectStore();
+        const store = beginRepoWrite();
+        try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
 
         const pName = pageName || '';
@@ -12540,14 +12955,28 @@ if (platformVersionField) {
             (pName && s.pageName && s.pageName.toLowerCase() === pName.toLowerCase())
         );
 
-        let scenElements = Array.isArray(elements) && elements.length > 0 ? elements : null;
         const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
-        if (!scenElements && extractFn) {
-            const tableRows = extractFn('myTable') || [];
-            if (tableRows.length > 0) {
-                scenElements = tableRows.filter(r => (r['PAGE NAME'] || '').trim().toLowerCase() === pName.trim().toLowerCase());
-                if (scenElements.length === 0) scenElements = tableRows;
-            }
+        const tableRows = extractFn ? (extractFn('myTable') || []) : [];
+        const pageKey = (pName || '').trim().toLowerCase();
+        const pageRows = pageKey
+            ? tableRows.filter(r => (r['PAGE NAME'] || '').trim().toLowerCase() === pageKey)
+            : tableRows;
+        const liveRows = pageRows.length > 0 ? pageRows : tableRows;
+
+        const existingEls = (existingIdx >= 0 && Array.isArray(project.scenarios[existingIdx].elements))
+            ? project.scenarios[existingIdx].elements
+            : [];
+        let scenElements;
+        if (Array.isArray(elements) && elements.length > 0) {
+            scenElements = elements;
+        } else if (liveRows.length > 0) {
+            scenElements = liveRows;
+        } else if (existingEls.length > 0 && tableRows.length > 0) {
+            scenElements = existingEls;
+        } else if (Array.isArray(elements) && elements.length === 0 && tableRows.length === 0) {
+            scenElements = [];
+        } else {
+            scenElements = existingEls;
         }
 
         const item = {
@@ -12555,7 +12984,7 @@ if (platformVersionField) {
             name: sName,
             pageName: pName,
             outline: scenarioOutline || '',
-            elements: scenElements || (existingIdx >= 0 && Array.isArray(project.scenarios[existingIdx].elements) ? project.scenarios[existingIdx].elements : []),
+            elements: scenElements,
             platform: currentPlatform,
             appName: currentApp,
             timestamp: Date.now(),
@@ -12579,7 +13008,9 @@ if (platformVersionField) {
         if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
 
         project.lastUpdated = Date.now();
-        setProjectStore(store);
+        } finally {
+            endRepoWrite(true);
+        }
     };
 
     window.saveFeatureToRepo = function(featureName, rect, fullPage, platform, appName) {
@@ -12588,9 +13019,12 @@ if (platformVersionField) {
         const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
         const projectKey = window.activeResumedProjectKey || `${currentApp} (${currentPlatform})`;
 
-        const store = getProjectStore();
+        const store = beginRepoWrite();
+        try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
-        const currentPage = (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '';
+        const currentPage = (typeof window.resolveHomePageNameForScrape === 'function')
+            ? window.resolveHomePageNameForScrape()
+            : ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '');
 
         const featureItem = {
             name: featureName.trim(),
@@ -12630,7 +13064,9 @@ if (platformVersionField) {
         }
 
         project.lastUpdated = Date.now();
-        setProjectStore(store);
+        } finally {
+            endRepoWrite(true);
+        }
     };
 
     window.removeFeatureCompletely = function(featureName, projectKey) {
@@ -12748,7 +13184,8 @@ if (platformVersionField) {
         const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
         const projectKey = window.activeResumedProjectKey || `${currentApp} (${currentPlatform})`;
 
-        const store = getProjectStore();
+        const store = beginRepoWrite();
+        try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
 
         const pName = pageName.trim();
@@ -12762,7 +13199,6 @@ if (platformVersionField) {
                 existing.elements = [];
                 existing.count = 0;
                 project.lastUpdated = Date.now();
-                setProjectStore(store);
             }
             return;
         }
@@ -12789,35 +13225,56 @@ if (platformVersionField) {
             project.pages.unshift(item);
         }
         project.lastUpdated = Date.now();
-        setProjectStore(store);
-    };
-
-    window.selectActiveRepoProject = function() {
-        if (window.activeResumedProjectKey) {
-            currentSelectedProjectKey = window.activeResumedProjectKey;
+        } finally {
+            endRepoWrite(true);
         }
     };
 
+    window.selectActiveRepoProject = function() {
+        // All Projects stays the default. A project is only Active after Launch.
+    };
+
+    window.closeRepoWorkspaceToList = function() {
+        currentSelectedProjectKey = null;
+        document.getElementById('tab-repository')?.classList.remove('is-workspace-open');
+    };
+
     window.syncActiveProjectToRepo = function() {
-        if (window._restoringProject || window._applyingRepoToHome || window._syncingHomeToRepo) return;
+        if (window._restoringProject || window._applyingRepoToHome || window._resettingHome) return;
+        if (!window.activeResumedProjectKey || (window.activeProjectSessionMode !== 'new' && window.activeProjectSessionMode !== 'resumed')) {
+            return;
+        }
+        if (window._syncingHomeToRepo) {
+            window._homeRepoSyncQueued = true;
+            return;
+        }
         window._syncingHomeToRepo = true;
+        const store = beginRepoWrite();
         try {
             const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
             const appName = window.activeResumedAppName || resolveActiveAppName();
             const projectKey = window.activeResumedProjectKey || `${appName} (${platform})`;
 
-            const store = getProjectStore();
             const project = getOrCreateProject(store, projectKey, appName, platform);
 
             const scenarioPageSet = new Set();
+            const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
+            const allElements = extractFn ? (extractFn('myTable') || []) : [];
 
-            // 1. Sync Scenarios (only if outline or name exists)
+            // 1. Sync Scenarios from the live Home table
             if (window.pageScenarioData) {
                 Object.keys(window.pageScenarioData).forEach(pName => {
                     const sData = window.pageScenarioData[pName];
                     if (sData && (sData.scenarioName || sData.scenarioOutline)) {
                         scenarioPageSet.add(pName.trim().toLowerCase());
-                        window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName);
+                        const pageEls = allElements.filter(r => (r['PAGE NAME'] || '').trim().toLowerCase() === pName.trim().toLowerCase());
+                        if (pageEls.length > 0) {
+                            window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName, pageEls);
+                        } else if (allElements.length === 0) {
+                            window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName, []);
+                        } else {
+                            window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName);
+                        }
                     }
                 });
             }
@@ -12835,8 +13292,6 @@ if (platformVersionField) {
             }
 
             // 3. Sync Standalone Pages & Scraped Elements
-            const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
-            const allElements = extractFn ? (extractFn('myTable') || []) : [];
             const pageGroups = {};
 
             if (allElements.length > 0) {
@@ -12850,8 +13305,10 @@ if (platformVersionField) {
             }
 
             // Always track active page even if 0 elements remain in myTable after deletion
-            const activePage = (document.getElementById('pagename_searchbox')?.value || '').trim();
-            if (activePage && activePage.toLowerCase() !== 'all') {
+            const activePage = (typeof window.resolveHomePageNameForScrape === 'function')
+                ? window.resolveHomePageNameForScrape()
+                : (document.getElementById('pagename_searchbox')?.value || '').trim();
+            if (activePage && activePage.toLowerCase() !== 'all' && allElements.length === 0) {
                 if (!pageGroups[activePage]) {
                     pageGroups[activePage] = [];
                 }
@@ -12867,7 +13324,6 @@ if (platformVersionField) {
 
             project.lastUpdated = Date.now();
             project.lastActivePageName = (document.getElementById('pagename_searchbox')?.value || '').trim() || project.lastActivePageName || '';
-            setProjectStore(store);
 
             try {
                 window._resumedProjectSnapshot = JSON.parse(JSON.stringify(project));
@@ -12877,16 +13333,18 @@ if (platformVersionField) {
 
             const repoTab = document.getElementById('tab-repository');
             const repoIsOpen = repoTab && repoTab.classList.contains('is-active');
-            if (repoIsOpen && window.activeResumedProjectKey && (!currentSelectedProjectKey || currentSelectedProjectKey === window.activeResumedProjectKey)) {
-                currentSelectedProjectKey = window.activeResumedProjectKey;
-            }
-            if (typeof window.renderRepositoryView === 'function') {
+            if (repoIsOpen && typeof window.renderRepositoryView === 'function') {
                 window.renderRepositoryView();
             }
         } catch (e) {
             console.error('Error in syncActiveProjectToRepo:', e);
         } finally {
+            endRepoWrite(true);
             window._syncingHomeToRepo = false;
+            if (window._homeRepoSyncQueued) {
+                window._homeRepoSyncQueued = false;
+                window.syncActiveProjectToRepo();
+            }
         }
     };
     window.archiveCurrentActiveSession = window.syncActiveProjectToRepo;
@@ -13051,6 +13509,40 @@ if (platformVersionField) {
         return null;
     }
 
+    const REPO_ICON_EYE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+    const REPO_ICON_DL = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>';
+    const REPO_ICON_TRASH = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>';
+
+    function repoTypeGlyph(type) {
+        if (type === 'scenario') {
+            return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+        }
+        if (type === 'feature') {
+            return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>';
+        }
+        return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>';
+    }
+
+    function repoAssetRowHtml(type, id, name, meta, selected) {
+        const label = type === 'scenario' ? 'Scenario' : (type === 'feature' ? 'Feature' : 'Page');
+        return `
+        <div class="repo-card repo-card--compact repo-asset-row ${selected ? 'is-selected' : ''}" data-repo-type="${type}" data-repo-id="${id}">
+            <span class="repo-asset-icon repo-asset-icon--${type}">${repoTypeGlyph(type)}</span>
+            <div class="repo-asset-copy">
+                <div class="repo-asset-title-row">
+                    <span class="repo-chip-type repo-chip-type--${type}">${label}</span>
+                    <span class="repo-chip-name" title="${escapeDummyHtml(name)}">${escapeDummyHtml(name)}</span>
+                </div>
+                <span class="repo-chip-meta">${escapeDummyHtml(meta)}</span>
+            </div>
+            <div class="repo-chip-actions">
+                <button type="button" class="repo-icon-btn repo-btn-view" data-action="view-json" data-id="${id}" data-type="${type}" title="Inspect JSON">${REPO_ICON_EYE}</button>
+                <button type="button" class="repo-icon-btn" data-action="download-json" data-id="${id}" data-type="${type}" title="Export JSON">${REPO_ICON_DL}</button>
+                <button type="button" class="repo-icon-btn repo-btn-del" data-action="delete-item" data-id="${id}" data-type="${type}" title="Delete">${REPO_ICON_TRASH}</button>
+            </div>
+        </div>`;
+    }
+
     function openRepoJsonSideView(item) {
         if (!item) return;
         try {
@@ -13106,6 +13598,7 @@ if (platformVersionField) {
             }
 
             if (codeEl) {
+                codeEl.classList.remove('is-placeholder');
                 if (typeof formatJsonToHtml === 'function') {
                     codeEl.innerHTML = formatJsonToHtml(jsonStr);
                 } else {
@@ -13120,6 +13613,8 @@ if (platformVersionField) {
                 scrollEl.scrollLeft = 0;
             }
 
+            if (typeof refreshRepoJsonFind === 'function') refreshRepoJsonFind();
+
             // Highlight selected card in horizontal strip
             document.querySelectorAll('#repoCardsContainer .repo-card').forEach(card => {
                 const cardId = card.getAttribute('data-repo-id');
@@ -13133,17 +13628,304 @@ if (platformVersionField) {
         }
     }
 
+    function showRepoJsonPlaceholder(title, message) {
+        const rightCol = document.getElementById('repoRightColumn');
+        const jsonBox = document.getElementById('repoJsonViewerBox');
+        const tabTitleEl = document.getElementById('repoJsonViewerTitle');
+        const codeEl = document.getElementById('repoJsonCodeContent');
+        const gutterEl = document.getElementById('repoJsonGutter');
+        if (rightCol) rightCol.style.display = 'flex';
+        if (jsonBox) jsonBox.style.display = 'flex';
+        if (tabTitleEl) tabTitleEl.textContent = title || 'workspace.json';
+        activeViewerItem = null;
+        currentViewerPayload = null;
+        const text = message || '// Select a scenario or scraped page to inspect JSON.';
+        if (codeEl) {
+            codeEl.textContent = text;
+            codeEl.classList.add('is-placeholder');
+        }
+        if (gutterEl) gutterEl.innerHTML = '<span>1</span>';
+        if (typeof refreshRepoJsonFind === 'function') refreshRepoJsonFind();
+        document.querySelectorAll('#repoCardsContainer .repo-card').forEach(card => {
+            card.classList.remove('is-selected');
+        });
+    }
+
+    let repoJsonFindHits = [];
+    let repoJsonFindIndex = -1;
+    let repoJsonFindCase = false;
+
+    function restoreRepoJsonHtml() {
+        const codeEl = document.getElementById('repoJsonCodeContent');
+        if (!codeEl) return;
+        if (codeEl.classList.contains('is-placeholder')) return;
+        if (!currentViewerPayload || !currentViewerPayload.data) return;
+        const jsonStr = JSON.stringify(currentViewerPayload.data, null, 2);
+        if (typeof formatJsonToHtml === 'function') {
+            codeEl.innerHTML = formatJsonToHtml(jsonStr);
+        } else {
+            codeEl.textContent = jsonStr;
+        }
+    }
+
+    function applyRepoJsonFindHighlights(query) {
+        const codeEl = document.getElementById('repoJsonCodeContent');
+        repoJsonFindHits = [];
+        if (!codeEl || !query) return;
+        const walker = document.createTreeWalker(codeEl, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const re = new RegExp(escaped, repoJsonFindCase ? 'g' : 'gi');
+        nodes.forEach(node => {
+            const text = node.nodeValue;
+            if (!text) return;
+            re.lastIndex = 0;
+            if (!re.test(text)) return;
+            re.lastIndex = 0;
+            const frag = document.createDocumentFragment();
+            let last = 0;
+            let match;
+            while ((match = re.exec(text))) {
+                if (!match[0]) {
+                    re.lastIndex += 1;
+                    continue;
+                }
+                if (match.index > last) frag.appendChild(document.createTextNode(text.slice(last, match.index)));
+                const mark = document.createElement('mark');
+                mark.className = 'json-find-hit';
+                mark.textContent = match[0];
+                frag.appendChild(mark);
+                repoJsonFindHits.push(mark);
+                last = match.index + match[0].length;
+            }
+            if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+            if (node.parentNode) node.parentNode.replaceChild(frag, node);
+        });
+    }
+
+    function setRepoJsonFindCurrent(index, scrollTo) {
+        repoJsonFindHits.forEach(hit => hit.classList.remove('is-current'));
+        if (!repoJsonFindHits.length) {
+            repoJsonFindIndex = -1;
+            return;
+        }
+        repoJsonFindIndex = ((index % repoJsonFindHits.length) + repoJsonFindHits.length) % repoJsonFindHits.length;
+        const current = repoJsonFindHits[repoJsonFindIndex];
+        if (!current) return;
+        current.classList.add('is-current');
+        if (scrollTo !== false) {
+            current.scrollIntoView({ block: 'center', inline: 'nearest' });
+        }
+    }
+
+    function updateRepoJsonFindCount() {
+        const countEl = document.getElementById('repoJsonFindCount');
+        if (!countEl) return;
+        const q = (document.getElementById('repoJsonFindInput')?.value || '').trim();
+        if (!q) {
+            countEl.textContent = 'No results';
+            countEl.classList.remove('is-empty');
+            return;
+        }
+        if (!repoJsonFindHits.length) {
+            countEl.textContent = 'No results';
+            countEl.classList.add('is-empty');
+            return;
+        }
+        countEl.classList.remove('is-empty');
+        countEl.textContent = `${repoJsonFindIndex + 1} of ${repoJsonFindHits.length}`;
+    }
+
+    function refreshRepoJsonFind(keepIndex) {
+        const input = document.getElementById('repoJsonFindInput');
+        const query = (input?.value || '').trim();
+        const prevIndex = repoJsonFindIndex;
+        restoreRepoJsonHtml();
+        if (!query) {
+            repoJsonFindHits = [];
+            repoJsonFindIndex = -1;
+            updateRepoJsonFindCount();
+            return;
+        }
+        applyRepoJsonFindHighlights(query);
+        if (!repoJsonFindHits.length) {
+            repoJsonFindIndex = -1;
+            updateRepoJsonFindCount();
+            return;
+        }
+        const nextIndex = keepIndex && prevIndex >= 0 ? prevIndex : 0;
+        setRepoJsonFindCurrent(nextIndex, true);
+        updateRepoJsonFindCount();
+    }
+    window.refreshRepoJsonFind = refreshRepoJsonFind;
+
+    function openRepoJsonFind() {
+        const widget = document.getElementById('repoJsonFindWidget');
+        const input = document.getElementById('repoJsonFindInput');
+        if (!widget || !input) return;
+        widget.hidden = false;
+        input.focus();
+        input.select();
+        refreshRepoJsonFind(true);
+    }
+    window.openRepoJsonFind = openRepoJsonFind;
+
+    function closeRepoJsonFind() {
+        const widget = document.getElementById('repoJsonFindWidget');
+        const input = document.getElementById('repoJsonFindInput');
+        if (widget) widget.hidden = true;
+        if (input) input.value = '';
+        restoreRepoJsonHtml();
+        repoJsonFindHits = [];
+        repoJsonFindIndex = -1;
+        updateRepoJsonFindCount();
+    }
+
+    (function bindRepoJsonFind() {
+        const input = document.getElementById('repoJsonFindInput');
+        const prevBtn = document.getElementById('repoJsonFindPrev');
+        const nextBtn = document.getElementById('repoJsonFindNext');
+        const caseBtn = document.getElementById('repoJsonFindCase');
+        const closeBtn = document.getElementById('repoJsonFindClose');
+        if (!input) return;
+
+        input.addEventListener('input', () => refreshRepoJsonFind(false));
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (!repoJsonFindHits.length) return;
+                setRepoJsonFindCurrent(repoJsonFindIndex + (e.shiftKey ? -1 : 1), true);
+                updateRepoJsonFindCount();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                closeRepoJsonFind();
+            }
+        });
+        if (prevBtn) prevBtn.addEventListener('click', () => {
+            if (!repoJsonFindHits.length) return;
+            setRepoJsonFindCurrent(repoJsonFindIndex - 1, true);
+            updateRepoJsonFindCount();
+        });
+        if (nextBtn) nextBtn.addEventListener('click', () => {
+            if (!repoJsonFindHits.length) return;
+            setRepoJsonFindCurrent(repoJsonFindIndex + 1, true);
+            updateRepoJsonFindCount();
+        });
+        if (caseBtn) caseBtn.addEventListener('click', () => {
+            repoJsonFindCase = !repoJsonFindCase;
+            caseBtn.classList.toggle('is-on', repoJsonFindCase);
+            caseBtn.setAttribute('aria-pressed', repoJsonFindCase ? 'true' : 'false');
+            refreshRepoJsonFind(true);
+        });
+        if (closeBtn) closeBtn.addEventListener('click', closeRepoJsonFind);
+
+        document.addEventListener('keydown', (e) => {
+            const repoTab = document.getElementById('tab-repository');
+            if (!repoTab || !repoTab.classList.contains('is-workspace-open')) return;
+            const key = String(e.key || '').toLowerCase();
+            if ((e.metaKey || e.ctrlKey) && key === 'f') {
+                e.preventDefault();
+                openRepoJsonFind();
+            } else if ((e.metaKey || e.ctrlKey) && key === 'g') {
+                if (document.getElementById('repoJsonFindWidget')?.hidden) return;
+                e.preventDefault();
+                if (!repoJsonFindHits.length) return;
+                setRepoJsonFindCurrent(repoJsonFindIndex + (e.shiftKey ? -1 : 1), true);
+                updateRepoJsonFindCount();
+            } else if (key === 'escape' && document.getElementById('repoJsonFindWidget') && !document.getElementById('repoJsonFindWidget').hidden) {
+                e.preventDefault();
+                closeRepoJsonFind();
+            }
+        });
+    })();
+
     function closeRepoSideView() {
         const workspace = document.getElementById('repoSplitWorkspace');
-        const rightCol = document.getElementById('repoRightColumn');
         if (workspace) workspace.classList.remove('is-split');
-        if (rightCol) rightCol.style.display = 'none';
 
         document.querySelectorAll('#repoCardsContainer .repo-card').forEach(card => {
             card.classList.remove('is-selected');
         });
         activeViewerItem = null;
         currentViewerPayload = null;
+    }
+
+    function isProtectedLiveProject(key) {
+        if (!key) return false;
+        const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+        const project = store[key] || (typeof getProjectByKey === 'function' ? getProjectByKey(store, key) : null);
+        if (typeof isCurrentlyOpenRepoProject === 'function') {
+            return !!isCurrentlyOpenRepoProject(key, project);
+        }
+        return window.activeResumedProjectKey === key;
+    }
+
+    function selectableProjectKeys(keys) {
+        return (keys || []).filter(k => k && !isProtectedLiveProject(k));
+    }
+
+    function visibleRepoProjectKeys() {
+        return Array.from(document.querySelectorAll('#repoProjectsGrid .repo-project-card'))
+            .map(c => c.getAttribute('data-project-key'))
+            .filter(Boolean);
+    }
+
+    function setRepoMultiDeleteMode(on) {
+        repoMultiDeleteMode = !!on;
+        if (!repoMultiDeleteMode) repoSelectedProjectKeys.clear();
+        const view = document.getElementById('repoProjectsView');
+        if (view) view.classList.toggle('is-multi-delete', repoMultiDeleteMode);
+        const enterBtn = document.getElementById('repoMultiDeleteBtn');
+        const tools = document.getElementById('repoBulkSelectTools');
+        if (enterBtn) enterBtn.hidden = repoMultiDeleteMode;
+        if (tools) tools.hidden = !repoMultiDeleteMode;
+        if (!repoMultiDeleteMode) {
+            const selectAll = document.getElementById('repoSelectAllProjects');
+            if (selectAll) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            }
+            const countEl = document.getElementById('repoDeleteSelectedCount');
+            if (countEl) countEl.textContent = '';
+            const deleteBtn = document.getElementById('repoDeleteSelectedBtn');
+            if (deleteBtn) deleteBtn.disabled = true;
+        }
+    }
+    window.setRepoMultiDeleteMode = setRepoMultiDeleteMode;
+
+    function updateRepoBulkBar(visibleKeys) {
+        const visible = Array.isArray(visibleKeys) ? visibleKeys : [];
+        const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+        Array.from(repoSelectedProjectKeys).forEach(k => {
+            if (!store[k] || isProtectedLiveProject(k)) repoSelectedProjectKeys.delete(k);
+        });
+        const selectableVisible = selectableProjectKeys(visible);
+        const selectedVisible = selectableVisible.filter(k => repoSelectedProjectKeys.has(k));
+        const count = repoSelectedProjectKeys.size;
+        const deleteBtn = document.getElementById('repoDeleteSelectedBtn');
+        const countEl = document.getElementById('repoDeleteSelectedCount');
+        const selectAll = document.getElementById('repoSelectAllProjects');
+        const enterBtn = document.getElementById('repoMultiDeleteBtn');
+        const tools = document.getElementById('repoBulkSelectTools');
+        const view = document.getElementById('repoProjectsView');
+        if (view) view.classList.toggle('is-multi-delete', repoMultiDeleteMode);
+        if (enterBtn) enterBtn.hidden = repoMultiDeleteMode;
+        if (tools) tools.hidden = !repoMultiDeleteMode;
+        if (countEl) countEl.textContent = count ? `(${count})` : '';
+        if (deleteBtn) deleteBtn.disabled = !repoMultiDeleteMode || count === 0;
+        if (selectAll) {
+            selectAll.checked = repoMultiDeleteMode && selectableVisible.length > 0 && selectedVisible.length === selectableVisible.length;
+            selectAll.indeterminate = repoMultiDeleteMode && selectedVisible.length > 0 && selectedVisible.length < selectableVisible.length;
+            selectAll.disabled = !repoMultiDeleteMode || selectableVisible.length === 0;
+        }
+        document.querySelectorAll('#repoProjectsGrid .repo-project-card').forEach(card => {
+            const key = card.getAttribute('data-project-key');
+            const on = repoMultiDeleteMode && repoSelectedProjectKeys.has(key);
+            card.classList.toggle('is-checked', on);
+            const cb = card.querySelector('.repo-project-checkbox');
+            if (cb) cb.checked = on;
+        });
     }
 
     window.renderRepositoryView = function(filter, query) {
@@ -13254,6 +14036,9 @@ if (platformVersionField) {
 
             if (filteredKeys.length === 0) {
                 grid.innerHTML = '';
+                setRepoMultiDeleteMode(false);
+                const enterBtn = document.getElementById('repoMultiDeleteBtn');
+                if (enterBtn) enterBtn.hidden = true;
                 if (emptyState) {
                     emptyState.style.display = 'flex';
                     if (emptyTitle) emptyTitle.textContent = projectKeys.length === 0 ? "No Saved App Projects Yet" : "No Matching Projects";
@@ -13263,9 +14048,17 @@ if (platformVersionField) {
             }
 
             if (emptyState) emptyState.style.display = 'none';
+            const enterBtn = document.getElementById('repoMultiDeleteBtn');
+            if (enterBtn && !repoMultiDeleteMode) enterBtn.hidden = false;
 
-            // Sort projects by lastUpdated desc
-            filteredKeys.sort((a, b) => (store[b].lastUpdated || 0) - (store[a].lastUpdated || 0));
+            // Opened Home session first; remaining projects by last updated
+            filteredKeys.sort((a, b) => {
+                const aLive = (typeof isCurrentlyOpenRepoProject === 'function') ? isCurrentlyOpenRepoProject(a, store[a]) : false;
+                const bLive = (typeof isCurrentlyOpenRepoProject === 'function') ? isCurrentlyOpenRepoProject(b, store[b]) : false;
+                if (aLive && !bLive) return -1;
+                if (!aLive && bLive) return 1;
+                return (store[b].lastUpdated || 0) - (store[a].lastUpdated || 0);
+            });
 
             let html = '';
             filteredKeys.forEach(k => {
@@ -13275,11 +14068,10 @@ if (platformVersionField) {
                 const totalPages = (p.pages || []).length;
                 const initial = (p.appName || 'A').charAt(0).toUpperCase();
                 const isIos = (p.platform || '').toLowerCase().includes('ios');
-                const platformBadge = isIos ? '🍎 iOS' : '🤖 Android';
+                const platformBadge = isIos ? 'iOS' : 'Android';
                 const platformBadgeClass = isIos ? 'is-ios' : 'is-android';
                 const avatarClass = isIos ? 'is-ios' : 'is-android';
 
-                // Extract asset names for preview tags
                 const assetNames = [];
                 (p.pages || []).forEach(pg => { if (pg.pageName && !assetNames.includes(pg.pageName)) assetNames.push(pg.pageName); });
                 (p.scenarios || []).forEach(sc => { if (sc.name && !assetNames.includes(sc.name)) assetNames.push(sc.name); });
@@ -13287,20 +14079,29 @@ if (platformVersionField) {
                 const remainingTags = assetNames.length - 3;
 
                 const displayName = (typeof getProjectCardTitle === 'function') ? getProjectCardTitle(p, k) : (p.appName || k);
-                const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(p, k) : '';
+                const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(p, k) : (p.projectId || '');
                 const nameTitle = shortId ? `${displayName} (${shortId})` : displayName;
+                const isLive = (typeof isCurrentlyOpenRepoProject === 'function')
+                    ? isCurrentlyOpenRepoProject(k, p)
+                    : (window.activeResumedProjectKey === k);
 
                 html += `
-                <div class="repo-project-card" data-project-key="${escapeDummyHtml(k)}">
+                <div class="repo-project-card${isLive ? ' is-live' : ''}${repoMultiDeleteMode && !isLive && repoSelectedProjectKeys.has(k) ? ' is-checked' : ''}" data-project-key="${escapeDummyHtml(k)}">
+                    ${repoMultiDeleteMode && !isLive ? `<label class="repo-project-check" data-action="select-project" title="Select project">
+                        <input type="checkbox" class="repo-project-checkbox" data-action="select-project" data-p-key="${escapeDummyHtml(k)}" ${repoSelectedProjectKeys.has(k) ? 'checked' : ''} />
+                    </label>` : ''}
                     <div class="repo-project-header">
                         <div class="repo-project-identity">
                             <div class="repo-project-icon-box ${avatarClass}">${escapeDummyHtml(initial)}</div>
                             <div class="repo-project-info">
-                                <h3 class="repo-project-name" title="${escapeDummyHtml(nameTitle)}">${escapeDummyHtml(displayName)}</h3>
-                                <span class="repo-project-date">
-                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-                                    <span>Active: ${formatDate(p.lastUpdated || p.createdAt)}${shortId ? ` · ${escapeDummyHtml(shortId)}` : ''}</span>
-                                </span>
+                                <div class="repo-project-name-row">
+                                    <h3 class="repo-project-name" title="${escapeDummyHtml(nameTitle)}">${escapeDummyHtml(displayName)}</h3>
+                                    ${isLive ? `<span class="repo-live-pill"><span class="repo-live-dot"></span>Active</span>` : ''}
+                                </div>
+                                <div class="repo-project-meta">
+                                    ${shortId ? `<span class="repo-project-id" title="Project ID">${escapeDummyHtml(shortId)}</span>` : ''}
+                                    <span class="repo-project-updated">Updated ${formatDate(p.lastUpdated || p.createdAt)}</span>
+                                </div>
                             </div>
                         </div>
                         <span class="repo-project-badge-pill ${platformBadgeClass}">${escapeDummyHtml(platformBadge)}</span>
@@ -13308,17 +14109,14 @@ if (platformVersionField) {
 
                     <div class="repo-project-stats-strip">
                         <div class="repo-pstat-item pstat-scenarios" title="${totalScen} Recorded Scenarios">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
                             <span class="repo-pstat-num">${totalScen}</span>
                             <span class="repo-pstat-lbl">Scenarios</span>
                         </div>
                         <div class="repo-pstat-item pstat-features" title="${totalFeat} Features">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
                             <span class="repo-pstat-num">${totalFeat}</span>
                             <span class="repo-pstat-lbl">Features</span>
                         </div>
                         <div class="repo-pstat-item pstat-pages" title="${totalPages} Scraped Pages">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
                             <span class="repo-pstat-num">${totalPages}</span>
                             <span class="repo-pstat-lbl">Pages</span>
                         </div>
@@ -13326,12 +14124,12 @@ if (platformVersionField) {
 
                     ${visibleTags.length > 0 ? `
                     <div class="repo-project-asset-tags">
-                        ${visibleTags.map(t => `<span class="repo-proj-tag" title="${escapeDummyHtml(t)}">🏷 ${escapeDummyHtml(t)}</span>`).join('')}
+                        ${visibleTags.map(t => `<span class="repo-proj-tag" title="${escapeDummyHtml(t)}">${escapeDummyHtml(t)}</span>`).join('')}
                         ${remainingTags > 0 ? `<span class="repo-proj-tag-more">+${remainingTags} more</span>` : ''}
                     </div>` : '<div class="repo-project-asset-tags"></div>'}
 
                     <div class="repo-project-footer">
-                        <div class="repo-open-link-btn">
+                        <div class="repo-open-link-btn" data-action="open-workspace">
                             <span>Open Workspace</span>
                             <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
                         </div>
@@ -13340,7 +14138,7 @@ if (platformVersionField) {
                                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                 <span>Export</span>
                             </button>
-                            <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-project-card" data-p-key="${escapeDummyHtml(k)}" title="Delete Project">
+                            <button type="button" class="repo-btn-sm repo-btn-del${isLive ? ' is-locked' : ''}" data-action="${isLive ? 'blocked-live-delete' : 'delete-project-card'}" data-p-key="${escapeDummyHtml(k)}" ${isLive ? 'disabled' : ''} title="${isLive ? 'Active project cannot be deleted' : 'Delete Project'}">
                                 <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
                                 <span>Delete</span>
                             </button>
@@ -13350,6 +14148,7 @@ if (platformVersionField) {
             });
 
             grid.innerHTML = html;
+            updateRepoBulkBar(filteredKeys);
             return;
         }
 
@@ -13360,6 +14159,13 @@ if (platformVersionField) {
         document.getElementById('tab-repository')?.classList.add('is-workspace-open');
         if (rootActions) rootActions.style.display = 'none';
         if (projectActions) projectActions.style.display = 'flex';
+        const wsDeleteBtn = document.getElementById('repoDeleteProjectBtn');
+        if (wsDeleteBtn) {
+            const liveOpen = isProtectedLiveProject(currentSelectedProjectKey);
+            wsDeleteBtn.disabled = liveOpen;
+            wsDeleteBtn.title = liveOpen ? 'Active project cannot be deleted' : 'Delete Project';
+            wsDeleteBtn.classList.toggle('is-locked', liveOpen);
+        }
         if (crumbDivider) crumbDivider.style.display = 'inline';
         if (crumbProject) {
             crumbProject.style.display = 'inline';
@@ -13433,8 +14239,8 @@ if (platformVersionField) {
         }
 
         if (items.length === 0) {
-            container.innerHTML = '<div style="padding: 16px 20px; color: #64748b; font-size: 12px; font-weight: 500;">No assets found in this project matching the selected filter.</div>';
-            closeRepoSideView();
+            container.innerHTML = '<div class="repo-strip-empty">No assets match this filter.</div>';
+            showRepoJsonPlaceholder('workspace.json', '// Select a scenario, feature, or scraped page to inspect JSON.');
             return;
         }
 
@@ -13472,51 +14278,14 @@ if (platformVersionField) {
                 });
                 const scenFeatList = Array.from(scenFeatNames);
 
-                html += `
-                <div class="repo-card ${isSelected ? 'is-selected' : ''}" data-repo-type="scenario" data-repo-id="${item.id}">
-                    <div class="repo-card-top">
-                        <div class="repo-badge-group">
-                            <span class="repo-badge repo-badge-scenario">Scenario</span>
-                            <span class="repo-badge repo-badge-platform">${escapeDummyHtml(item.platform || project.platform || 'Android')}</span>
-                        </div>
-                        <span class="repo-card-date">${formatDate(item.timestamp)}</span>
-                    </div>
-                    <h3 class="repo-card-title">${escapeDummyHtml(item.name)}</h3>
-                    <div class="repo-card-meta-row">
-                        <div class="repo-meta-item">
-                            <span class="repo-meta-label">Outline:</span>
-                            <span class="repo-meta-value">${escapeDummyHtml(item.outline || item.name || 'None')}</span>
-                        </div>
-                        <div class="repo-meta-item">
-                            <span class="repo-meta-label">Page:</span>
-                            <span class="repo-meta-value">${escapeDummyHtml(item.pageName || item.name || 'Default')}</span>
-                        </div>
-                    </div>
-                    <div class="repo-card-meta-row">
-                        <div class="repo-meta-item">
-                            <span class="repo-meta-label">Features:</span>
-                            <span class="repo-meta-value">${escapeDummyHtml(scenFeatList.join(', ') || 'None')}</span>
-                        </div>
-                    </div>
-                    <div class="repo-card-badge-pill">
-                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
-                        <span>${stepsCount} Scraped ${stepsCount === 1 ? 'Step' : 'Steps'}</span>
-                    </div>
-                    <div class="repo-card-actions">
-                        <button type="button" class="repo-btn-sm repo-btn-view" data-action="view-json" data-id="${item.id}" data-type="scenario" title="Inspect JSON">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                            <span>Inspect</span>
-                        </button>
-                        <button type="button" class="repo-btn-sm" data-action="download-json" data-id="${item.id}" data-type="scenario" title="Export as JSON file">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span>Export</span>
-                        </button>
-                        <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-item" data-id="${item.id}" data-type="scenario" title="Delete from project">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
-                            <span>Delete</span>
-                        </button>
-                    </div>
-                </div>`;
+                const scenFeatHint = scenFeatList.length ? ` · ${scenFeatList.join(', ')}` : '';
+                html += repoAssetRowHtml(
+                    'scenario',
+                    item.id,
+                    item.name,
+                    `${stepsCount} ${stepsCount === 1 ? 'step' : 'steps'} · ${item.pageName || item.name || '—'}${scenFeatHint}`,
+                    isSelected
+                );
             } else if (item.type === 'page') {
                 let elList = Array.isArray(item.elements) && item.elements.length > 0 ? item.elements : [];
                 if (elList.length === 0 && Array.isArray(project.pages)) {
@@ -13548,105 +14317,32 @@ if (platformVersionField) {
                 });
                 const pageFeatList = Array.from(pageFeatNames);
 
-                const elSnippets = elList.slice(0, 3).map(el => `
-                    <span class="repo-ctrl-chip" title="${escapeDummyHtml(el['CONTROL NAME'] || '')}">${escapeDummyHtml(el['CONTROL NAME'] || 'Control')}</span>
-                `).join('');
-                const remaining = elList.length - 3;
-
-                html += `
-                <div class="repo-card ${isSelected ? 'is-selected' : ''}" data-repo-type="page" data-repo-id="${item.id}">
-                    <div class="repo-card-top">
-                        <div class="repo-badge-group">
-                            <span class="repo-badge repo-badge-page">Page & Elements</span>
-                            <span class="repo-badge repo-badge-platform">${escapeDummyHtml(item.platform || project.platform || 'Android')}</span>
-                        </div>
-                        <span class="repo-card-date">${formatDate(item.timestamp)}</span>
-                    </div>
-                    <h3 class="repo-card-title">${escapeDummyHtml(item.pageName)}</h3>
-                    <div class="repo-card-meta-row">
-                        <div class="repo-meta-item">
-                            <span class="repo-meta-label">Features:</span>
-                            <span class="repo-meta-value">${escapeDummyHtml(pageFeatList.join(', ') || 'None')}</span>
-                        </div>
-                    </div>
-                    <div class="repo-card-badge-pill repo-pill-purple">
-                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
-                        <span>${elList.length} Scraped Controls</span>
-                    </div>
-                    ${elList.length > 0 ? `
-                    <div class="repo-card-controls-tags">
-                        ${elSnippets}
-                        ${remaining > 0 ? `<span class="repo-ctrl-chip-more">+${remaining} more</span>` : ''}
-                    </div>` : ''}
-                    <div class="repo-card-actions">
-                        <button type="button" class="repo-btn-sm repo-btn-view" data-action="view-json" data-id="${item.id}" data-type="page" title="Inspect JSON">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                            <span>Inspect</span>
-                        </button>
-                        <button type="button" class="repo-btn-sm" data-action="download-json" data-id="${item.id}" data-type="page" title="Export as JSON file">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span>Export</span>
-                        </button>
-                        <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-item" data-id="${item.id}" data-type="page" title="Delete from project">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
-                            <span>Delete</span>
-                        </button>
-                    </div>
-                </div>`;
+                const pageFeatHint = pageFeatList.length ? ` · ${pageFeatList.join(', ')}` : '';
+                html += repoAssetRowHtml(
+                    'page',
+                    item.id,
+                    item.pageName,
+                    `${elList.length} ${elList.length === 1 ? 'control' : 'controls'}${pageFeatHint}`,
+                    isSelected
+                );
             } else if (item.type === 'feature') {
-                html += `
-                <div class="repo-card ${isSelected ? 'is-selected' : ''}" data-repo-type="feature" data-repo-id="${item.id || item.name}">
-                    <div class="repo-card-top">
-                        <div class="repo-badge-group">
-                            <span class="repo-badge repo-badge-feature" style="background: rgba(34, 197, 94, 0.12); color: #16a34a; border-color: rgba(34, 197, 94, 0.25);">Feature Zone</span>
-                            <span class="repo-badge repo-badge-platform">${escapeDummyHtml(item.platform || project.platform || 'Android')}</span>
-                        </div>
-                        <span class="repo-card-date">${formatDate(item.timestamp)}</span>
-                    </div>
-                    <h3 class="repo-card-title">${escapeDummyHtml(item.name)}</h3>
-                    <div class="repo-card-meta-row">
-                        <div class="repo-meta-item">
-                            <span class="repo-meta-label">Page:</span>
-                            <span class="repo-meta-value">${escapeDummyHtml(item.pageName || 'Default')}</span>
-                        </div>
-                        <div class="repo-meta-item">
-                            <span class="repo-meta-label">Zone:</span>
-                            <span class="repo-meta-value">${item.fullPage ? 'Full Screen' : 'Bounding Box'}</span>
-                        </div>
-                    </div>
-                    <div class="repo-card-badge-pill" style="background: rgba(34, 197, 94, 0.08); color: #16a34a; border-color: rgba(34, 197, 94, 0.2);">
-                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
-                        <span>Feature Capture Zone</span>
-                    </div>
-                    <div class="repo-card-actions">
-                        <button type="button" class="repo-btn-sm repo-btn-view" data-action="view-json" data-id="${item.id || item.name}" data-type="feature" title="Inspect JSON">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                            <span>Inspect</span>
-                        </button>
-                        <button type="button" class="repo-btn-sm" data-action="download-json" data-id="${item.id || item.name}" data-type="feature" title="Export as JSON file">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                            <span>Export</span>
-                        </button>
-                        <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-item" data-id="${item.id || item.name}" data-type="feature" title="Delete feature">
-                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
-                            <span>Delete</span>
-                        </button>
-                    </div>
-                </div>`;
+                const featId = item.id || item.name;
+                html += repoAssetRowHtml(
+                    'feature',
+                    featId,
+                    item.name,
+                    `${item.pageName || '—'} · ${item.fullPage ? 'Full Screen' : 'Bounding Box'}`,
+                    isSelected
+                );
             }
         });
 
         container.innerHTML = html;
 
-        // Auto-select and preview item in the full-width viewer below
-        if (items.length > 0) {
-            const foundActive = activeViewerItem && items.find(x => x.id === activeViewerItem.id);
-            if (foundActive) {
-                openRepoJsonSideView(foundActive);
-            } else {
-                openRepoJsonSideView(items[0]);
-            }
-        }
+        const foundActive = activeViewerItem && items.find(x =>
+            x.type === activeViewerItem.type && (x.id === activeViewerItem.id || x.name === activeViewerItem.name)
+        );
+        openRepoJsonSideView(foundActive || items[0]);
     };
 
     // Global Click Delegation for Repository Tab
@@ -13661,14 +14357,112 @@ if (platformVersionField) {
 
         // 2. Open Project by clicking Project Card
         const projectCard = e.target.closest('.repo-project-card');
-        if (projectCard && !e.target.closest('[data-action]')) {
-            const pKey = projectCard.getAttribute('data-project-key');
+
+        if (e.target.closest('#repoMultiDeleteBtn')) {
+            const visibleKeys = visibleRepoProjectKeys();
+            const selectable = selectableProjectKeys(visibleKeys);
+            if (!selectable.length) {
+                showCustomAlert('Active Project', 'The opened Active project cannot be deleted. There are no other projects to select.', 'warning');
+                return;
+            }
+            setRepoMultiDeleteMode(true);
+            window.renderRepositoryView();
+            return;
+        }
+
+        if (e.target.closest('#repoCancelMultiDeleteBtn')) {
+            setRepoMultiDeleteMode(false);
+            window.renderRepositoryView();
+            return;
+        }
+
+        if (e.target.closest('[data-action="select-project"]') || e.target.classList.contains('repo-project-checkbox')) {
+            if (!repoMultiDeleteMode) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            const cb = e.target.closest('.repo-project-checkbox') || e.target.querySelector?.('.repo-project-checkbox');
+            const box = (e.target.type === 'checkbox') ? e.target : (e.target.closest('label')?.querySelector('input[type="checkbox"]'));
+            const checkbox = box || cb;
+            const pKey = checkbox?.getAttribute('data-p-key') || projectCard?.getAttribute('data-project-key');
+            if (pKey && isProtectedLiveProject(pKey)) {
+                if (checkbox) checkbox.checked = false;
+                repoSelectedProjectKeys.delete(pKey);
+                updateRepoBulkBar(visibleRepoProjectKeys());
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+            if (pKey) {
+                if (checkbox && checkbox.checked) repoSelectedProjectKeys.add(pKey);
+                else repoSelectedProjectKeys.delete(pKey);
+                updateRepoBulkBar(visibleRepoProjectKeys());
+            }
+            e.stopPropagation();
+            return;
+        }
+
+        if (e.target.closest('[data-action="open-workspace"]')) {
+            const pKey = projectCard?.getAttribute('data-project-key');
             if (pKey) {
                 currentSelectedProjectKey = pKey;
                 currentRepoFilter = 'all';
                 closeRepoSideView();
                 window.renderRepositoryView();
             }
+            return;
+        }
+
+        if (projectCard && !e.target.closest('[data-action]')) {
+            const pKey = projectCard.getAttribute('data-project-key');
+            if (repoMultiDeleteMode) {
+                if (pKey && !isProtectedLiveProject(pKey)) {
+                    if (repoSelectedProjectKeys.has(pKey)) repoSelectedProjectKeys.delete(pKey);
+                    else repoSelectedProjectKeys.add(pKey);
+                    updateRepoBulkBar(visibleRepoProjectKeys());
+                }
+                return;
+            }
+            if (pKey) {
+                currentSelectedProjectKey = pKey;
+                currentRepoFilter = 'all';
+                closeRepoSideView();
+                window.renderRepositoryView();
+            }
+            return;
+        }
+
+        if (e.target.closest('#repoSelectAllProjects') || e.target.closest('.repo-select-all')) {
+            if (!repoMultiDeleteMode) return;
+            const selectAll = document.getElementById('repoSelectAllProjects');
+            const visibleKeys = visibleRepoProjectKeys();
+            const selectable = selectableProjectKeys(visibleKeys);
+            const check = selectAll ? selectAll.checked : false;
+            selectable.forEach(k => {
+                if (check) repoSelectedProjectKeys.add(k);
+                else repoSelectedProjectKeys.delete(k);
+            });
+            updateRepoBulkBar(visibleKeys);
+            return;
+        }
+
+        if (e.target.closest('#repoDeleteSelectedBtn')) {
+            if (!repoMultiDeleteMode) return;
+            const keys = selectableProjectKeys(Array.from(repoSelectedProjectKeys));
+            if (!keys.length) {
+                showCustomAlert('Multi Delete', 'Select one or more projects to delete. The opened Active project cannot be deleted.', 'warning');
+                return;
+            }
+            pendingRepoDelete = { projectKeys: keys };
+            showConfirmDialog({
+                title: `Delete ${keys.length} project${keys.length === 1 ? '' : 's'}?`,
+                mainText: `Delete the <b>${keys.length}</b> selected project workspace${keys.length === 1 ? '' : 's'}?`,
+                subText: 'This cannot be undone. Saved scenarios, features, and scraped pages in these projects will be permanently removed.',
+                action: 'confirmDeleteRepoProjects',
+                theme: 'error',
+                okayBtnText: keys.length === 1 ? 'Delete Project' : 'Delete Selected'
+            });
             return;
         }
 
@@ -13692,10 +14486,19 @@ if (platformVersionField) {
             return;
         }
 
+        if (e.target.closest('[data-action="blocked-live-delete"]')) {
+            showCustomAlert('Active Project', 'This project is currently open. Close or Reset the Home session before deleting it.', 'warning');
+            return;
+        }
+
         // 4. Delete Project Card action
         const delProjCardBtn = e.target.closest('[data-action="delete-project-card"]') || e.target.closest('#repoDeleteProjectBtn');
         if (delProjCardBtn) {
             const pKey = delProjCardBtn.getAttribute('data-p-key') || currentSelectedProjectKey;
+            if (isProtectedLiveProject(pKey)) {
+                showCustomAlert('Active Project', 'This project is currently open. Close or Reset the Home session before deleting it.', 'warning');
+                return;
+            }
             const store = getProjectStore();
             const proj = getProjectByKey(store, pKey);
             if (proj) {
@@ -13789,18 +14592,28 @@ if (platformVersionField) {
                 showCustomAlert('Repository Empty', 'Repository is already clean.', 'info');
                 return;
             }
+            const deletableKeys = selectableProjectKeys(projectKeys);
+            if (!deletableKeys.length) {
+                showCustomAlert('Active Project', 'The opened Active project cannot be deleted. Reset or close the Home session first.', 'warning');
+                return;
+            }
+            const keptLive = projectKeys.length - deletableKeys.length;
             showConfirmDialog({
-                title: 'Clear Entire Repository?',
-                mainText: `Are you sure you want to delete all ${projectKeys.length} application project workspaces?`,
-                subText: 'This action cannot be undone. All saved scenarios, features, and scraped elements will be permanently deleted.',
+                title: keptLive ? 'Clear Other Projects?' : 'Clear Entire Repository?',
+                mainText: keptLive
+                    ? `Delete <b>${deletableKeys.length}</b> saved project${deletableKeys.length === 1 ? '' : 's'}? The currently open Active project will be kept.`
+                    : `Are you sure you want to delete all ${projectKeys.length} application project workspaces?`,
+                subText: keptLive
+                    ? 'This cannot be undone. Saved scenarios, features, and scraped pages in the other projects will be permanently removed.'
+                    : 'This action cannot be undone. All saved scenarios, features, and scraped elements will be permanently deleted.',
                 action: 'confirmClearRepositoryAction',
                 theme: 'error',
-                okayBtnText: 'Delete All'
+                okayBtnText: keptLive ? 'Delete Others' : 'Delete All'
             });
             return;
         }
 
-        // 10. View JSON: Clicking anywhere on an asset card or its Inspect button
+        // 10. View JSON: Clicking an asset chip or its Inspect button
         const clickedCard = e.target.closest('.repo-card');
         const viewJsonBtn = e.target.closest('[data-action="view-json"]');
         if ((clickedCard || viewJsonBtn) && !e.target.closest('[data-action="download-json"]') && !e.target.closest('[data-action="delete-item"]')) {
@@ -13823,6 +14636,11 @@ if (platformVersionField) {
                     openRepoJsonSideView({ type, ...item });
                 }
             }
+            return;
+        }
+
+        if (e.target.closest('#repoJsonFindBtn')) {
+            if (typeof openRepoJsonFind === 'function') openRepoJsonFind();
             return;
         }
 
