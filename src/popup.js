@@ -92,6 +92,7 @@
     let createFeatureMode = false;
     let pendingFeatureData = null;
     let registeredFeatureAreas = [];
+    window.registeredFeatureAreas = registeredFeatureAreas;
 
     function isFullPageFeatureArea(area) {
         if (!area) return false;
@@ -485,28 +486,44 @@
         const badgeWrapper = document.querySelector('.screen-name-badge');
         const pageNameInput = document.getElementById('pagename_searchbox');
         const badgeLabel = document.querySelector('.badge-label');
+        const infoWrapper = document.querySelector('.info-icon-wrapper');
 
         if (badgeWrapper) {
             badgeWrapper.classList.toggle('is-disabled', !enabled);
             if (!enabled) {
-                badgeWrapper.style.setProperty('pointer-events', 'none', 'important');
                 badgeWrapper.style.setProperty('cursor', 'not-allowed', 'important');
-                badgeWrapper.style.setProperty('opacity', '0.6', 'important');
+                badgeWrapper.style.setProperty('opacity', '0.85', 'important');
+                badgeWrapper.style.setProperty('border-color', '#cbd5e1', 'important');
                 if (badgeLabel) {
                     badgeLabel.style.setProperty('background-color', '#94a3b8', 'important');
                 }
                 if (pageNameInput) {
                     pageNameInput.disabled = true;
+                    pageNameInput.style.setProperty('pointer-events', 'none', 'important');
+                }
+                if (infoWrapper) {
+                    infoWrapper.style.setProperty('display', 'none', 'important');
+                    infoWrapper.style.setProperty('pointer-events', 'none', 'important');
+                    infoWrapper.style.setProperty('opacity', '0', 'important');
+                    infoWrapper.style.setProperty('visibility', 'hidden', 'important');
                 }
             } else {
                 badgeWrapper.style.removeProperty('pointer-events');
                 badgeWrapper.style.removeProperty('cursor');
                 badgeWrapper.style.removeProperty('opacity');
+                badgeWrapper.style.setProperty('border-color', '#2F8BCC', 'important');
                 if (badgeLabel) {
                     badgeLabel.style.setProperty('background-color', '#2F8BCC', 'important');
                 }
                 if (pageNameInput) {
                     pageNameInput.disabled = false;
+                    pageNameInput.style.removeProperty('pointer-events');
+                }
+                if (infoWrapper) {
+                    infoWrapper.style.removeProperty('display');
+                    infoWrapper.style.removeProperty('pointer-events');
+                    infoWrapper.style.removeProperty('opacity');
+                    infoWrapper.style.removeProperty('visibility');
                 }
             }
         }
@@ -532,6 +549,7 @@
     function applyPostResetUI() {
         resetFormLockActive = true;
         registeredFeatureAreas = [];
+        window.registeredFeatureAreas = registeredFeatureAreas;
         createFeatureMode = false;
 
         // Only Launch Application enabled if token is connected
@@ -1600,6 +1618,25 @@
                 // Fill iOS Bundle ID
                 document.getElementById("bundleID").value = this.value;
             }
+
+            // Prefill first page name with the selected app name
+            const appSelect = this;
+            let cleanApp = '';
+            if (appSelect.options && appSelect.selectedIndex >= 0) {
+                const opt = appSelect.options[appSelect.selectedIndex];
+                cleanApp = typeof getCleanAppName === 'function' ? getCleanAppName(opt.text || opt.innerText || appSelect.value) : (opt.text || appSelect.value);
+            }
+            if (cleanApp && cleanApp !== 'Select App' && cleanApp !== 'Active App' && cleanApp !== 'Loading Apps...') {
+                const currentVal = document.getElementById('pagename_searchbox')?.value.trim();
+                if (!currentVal || currentVal === 'DefaultPage' || currentVal === 'home' || currentVal === 'Page' || currentVal === '') {
+                    if (typeof window.setGlobalPageName === 'function') {
+                        window.setGlobalPageName(cleanApp);
+                    } else {
+                        const pageInput = document.getElementById('pagename_searchbox');
+                        if (pageInput) pageInput.value = cleanApp;
+                    }
+                }
+            }
         });
 
         // Receive the Android Activity from main.js and populate the field
@@ -1629,6 +1666,424 @@
         applyLaunchModeState();
     }
 
+    let pendingLaunchProjectData = null;
+
+    function triggerScreenshotLoader() {
+        if (process.platform !== 'win32') {
+            document.getElementById('overlay').style.display = 'block';
+        }
+        const appRunning = document.getElementById('AppRunningPopup');
+        if (appRunning) appRunning.style.display = 'none';
+        if (typeof showDummyDeviceMessage === 'function') {
+            showDummyDeviceMessage({
+                theme: 'loading',
+                title: 'Starting session and loading screen…'
+            });
+        }
+    }
+
+    function findExistingRepoProject(appName, platform) {
+        const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+        const cleanApp = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : (appName || '')).trim().toLowerCase();
+        const platNorm = (platform || 'Android').toLowerCase().includes('ios') ? 'iOS' : 'Android';
+
+        if (!cleanApp) return null;
+
+        const matches = [];
+        Object.keys(store).forEach(k => {
+            const proj = store[k];
+            if (!proj) return;
+            const pApp = (typeof getCleanAppName === 'function' ? getCleanAppName(proj.appName || '') : (proj.appName || '')).trim().toLowerCase();
+            const pPlat = (proj.platform || k || '').toLowerCase().includes('ios') ? 'iOS' : 'Android';
+            if (pApp === cleanApp && pPlat === platNorm) {
+                matches.push({ key: k, project: proj });
+            }
+        });
+        if (matches.length === 0) return null;
+        matches.sort((a, b) => (b.project.lastUpdated || 0) - (a.project.lastUpdated || 0));
+        return matches[0];
+    }
+
+    function restoreProjectDataToHomePage(project) {
+        if (!project) return;
+        const skipSyncPrev = window._restoringProject;
+        window._restoringProject = true;
+
+        // 1. Wipe existing rows in #myTable
+        const tbody = document.getElementById('myTable');
+        if (tbody) {
+            tbody.innerHTML = '';
+        }
+
+        // 2. Restore memory banks (must mutate the live arrays used by scrape/feature code)
+        window.registeredPageNames = new Set();
+        window.pageScenarioData = {};
+        registeredFeatureAreas = [];
+        window.registeredFeatureAreas = registeredFeatureAreas;
+
+        function restoreFeatureArea(f, pageName) {
+            if (!f || !f.name) return;
+            const name = String(f.name).trim();
+            if (!name) return;
+            const exists = registeredFeatureAreas.some(a => a && a.name && a.name.trim().toLowerCase() === name.toLowerCase());
+            if (exists) return;
+            registeredFeatureAreas.push({
+                name: name,
+                rect: f.rect || null,
+                fullPage: !!f.fullPage,
+                pageName: f.pageName || pageName || ''
+            });
+        }
+
+        (project.features || []).forEach(f => restoreFeatureArea(f, f && f.pageName));
+        (project.scenarios || []).forEach(s => {
+            (s.features || []).forEach(f => restoreFeatureArea(f, s.pageName || s.name));
+        });
+        (project.pages || []).forEach(pg => {
+            (pg.features || []).forEach(f => restoreFeatureArea(f, pg.pageName));
+        });
+
+        // Restore scenarios (names, outlines, and any captured elements)
+        if (Array.isArray(project.scenarios)) {
+            project.scenarios.forEach(s => {
+                if (!s) return;
+                const pName = s.pageName || s.name || (project.pages && project.pages[0] ? project.pages[0].pageName : 'DefaultPage');
+                if (s.name || s.outline) {
+                    window.pageScenarioData[pName] = {
+                        scenarioName: s.name || '',
+                        scenarioOutline: s.outline || ''
+                    };
+                }
+                if (pName && pName.toLowerCase() !== 'all') {
+                    window.registeredPageNames.add(pName);
+                }
+            });
+        }
+
+        // Restore pages and their table rows (pages first, then scenario-only element lists)
+        const allHeaders = Array.from(document.querySelectorAll('#mainTable thead tr > *'));
+        const allControlTypes = [
+            "TextBox", "Button", "RadioButton", "CheckBox", "Link",
+            "DropDownList", "Image", "TextArea", "FileUpload", "Label",
+            "Page", "AnchorTag", "Mouse", "Scroll", "Window",
+            "NewTab", "Parent"
+        ];
+
+        let rowCount = 0;
+        const seenRowKeys = new Set();
+
+        function appendRestoredElements(pageName, elements) {
+            if (!tbody || !Array.isArray(elements) || elements.length === 0) return;
+            const pName = pageName || 'DefaultPage';
+            elements.forEach(el => {
+                if (!el) return;
+                const name = (el['CONTROL NAME'] || el.ControlName || '').trim().toLowerCase();
+                const xpRaw = el['XPATH'] || el.ControlId || '';
+                const xp = (Array.isArray(xpRaw) ? xpRaw[0] : xpRaw);
+                const rowKey = pName.trim().toLowerCase() + '|' + name + '|' + String(xp || '').trim().toLowerCase();
+                if (name || String(xp || '').trim()) {
+                    if (seenRowKeys.has(rowKey)) return;
+                    seenRowKeys.add(rowKey);
+                }
+                const tr = tbody.insertRow(0);
+                tr.dataset.rect = JSON.stringify(el.rect || null);
+
+                let xpaths = Array.isArray(el['XPATH'] || el.ControlId)
+                    ? (el['XPATH'] || el.ControlId)
+                    : [(el['XPATH'] || el.ControlId || '')];
+
+                let selectOptionsHtml = xpaths.map(xp =>
+                    `<option value="${String(xp).replace(/"/g, '&quot;')}" onmousemove="onOptionHover('${String(xp).replace(/'/g, "\\'")}')">${xp}</option>`
+                ).join('');
+
+                let controlIdCellHtml = `<select class="xpath-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${selectOptionsHtml}</select>`;
+
+                let currentControlType = el['CONTROL TYPE'] || el.ControlType || "";
+                let optionsList = [...new Set([currentControlType, ...allControlTypes])].filter(Boolean);
+                let ctSelectOptionsHtml = optionsList.map(type =>
+                    `<option value="${type}" ${type === currentControlType ? 'selected' : ''}>${type}</option>`
+                ).join('');
+                let controlTypeCellHtml = `<select class="xpath-dropdown" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
+
+                const primaryLocator = (xpaths[0] || "").trim();
+                const identificationType = (el['IDENTIFICATION TYPE'] || el.IdentificationType || "").trim()
+                    || (typeof inferIdentificationType === "function" ? inferIdentificationType(primaryLocator) : "");
+
+                let rowDataMap = {
+                    "#": "",
+                    "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || "",
+                    "CONTROL TYPE": controlTypeCellHtml,
+                    "CONTROL ID": controlIdCellHtml,
+                    "PAGE NAME": el['PAGE NAME'] || el.PageName || pName,
+                    "IDENTIFICATION TYPE": identificationType,
+                    "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || "",
+                    "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pName,
+                    "NODE NAME": el['NODE NAME'] || el.NodeName || pName,
+                    "DELETE": `<img src="icon/icons8-delete_red.svg" id="del_${rowCount}" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; overflow: hidden; cursor: pointer; -webkit-user-drag: none; display:inline-block;">`,
+                    "FINGERPRINT": (el['FINGERPRINT'] || el.Fingerprint || "").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
+                    "APP URL": el['APP URL'] || el.AppUrl || (typeof getCurrentAppIdentity === 'function' ? getCurrentAppIdentity() : '')
+                };
+
+                let rowHtml = "";
+                allHeaders.forEach((th) => {
+                    var thText = (th.textContent || th.innerText || '').replace('Delete Column', '').replace('Add Column', '').trim().toUpperCase();
+                    var isHidden = window.getComputedStyle(th).display === 'none';
+                    var displayStyle = isHidden ? 'display: none !important;' : '';
+
+                    if (th.classList.contains('excel-header-corner')) {
+                        rowHtml += `<td class="row-index" style="${displayStyle}"></td>`;
+                    } else if (th.id === 'add_empty_column') {
+                        rowHtml += `<td class="add-col-cell" style="${displayStyle}">&nbsp;</td>`;
+                    } else if (th.classList.contains('custom-editable-header')) {
+                        rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
+                    } else if (thText.includes('CONTROL NAME')) {
+                        rowHtml += `<td class="cn pt-3-half" id="cn_${rowCount}" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["CONTROL NAME"]}</td>`;
+                    } else if (thText.includes('CONTROL TYPE')) {
+                        rowHtml += `<td class="ct pt-3-half" id="ct_${rowCount}" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["CONTROL TYPE"]}</td>`;
+                    } else if (thText.includes('CONTROL ID')) {
+                        rowHtml += `<td class="xpath pt-3-half" id="xpath_${rowCount}" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["CONTROL ID"]}</td>`;
+                    } else if (thText.includes('PAGE NAME')) {
+                        rowHtml += `<td class="page pt-3-half" id="page_${rowCount}" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["PAGE NAME"]}</td>`;
+                    } else if (thText.includes('IDENTIFICATION TYPE')) {
+                        rowHtml += `<td class="identificationType pt-3-half" id="identificationType_${rowCount}" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["IDENTIFICATION TYPE"]}</td>`;
+                    } else if (thText.includes('CONTROL VALUE')) {
+                        rowHtml += `<td class="controlValue pt-3-half" id="controlValue_${rowCount}" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["CONTROL VALUE"]}</td>`;
+                    } else if (thText.includes('FEATURE NAME')) {
+                        rowHtml += `<td class="featureName pt-3-half" id="featureName_${rowCount}" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["FEATURE NAME"]}</td>`;
+                    } else if (thText.includes('NODE NAME')) {
+                        rowHtml += `<td class="nodeName pt-3-half" id="nodeName_${rowCount}" contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">${rowDataMap["NODE NAME"]}</td>`;
+                    } else if (th.classList.contains('fingerprint')) {
+                        rowHtml += `<td class="fingerprint" style="display:none;">${rowDataMap["FINGERPRINT"]}</td>`;
+                    } else if (th.id === 'appUrl' || thText.includes('APP URL')) {
+                        rowHtml += `<td class="appUrl" style="display:none;">${rowDataMap["APP URL"] || ""}</td>`;
+                    } else if (thText.includes('DELETE')) {
+                        rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
+                            <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
+                            <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
+                        </td>`;
+                    } else {
+                        rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
+                    }
+                });
+
+                tr.innerHTML = rowHtml;
+                rowCount++;
+            });
+        }
+
+        if (Array.isArray(project.pages) && tbody) {
+            project.pages.forEach(pageObj => {
+                const pName = pageObj.pageName || 'DefaultPage';
+                if (pName && pName.toLowerCase() !== 'all') {
+                    window.registeredPageNames.add(pName);
+                }
+                appendRestoredElements(pName, pageObj.elements || []);
+            });
+        }
+
+        if (Array.isArray(project.scenarios)) {
+            project.scenarios.forEach(s => {
+                const pName = s.pageName || s.name || 'DefaultPage';
+                if (Array.isArray(s.elements) && s.elements.length > 0) {
+                    appendRestoredElements(pName, s.elements);
+                }
+            });
+        }
+
+        tableCreated = rowCount > 0;
+        const downloadBtn = document.getElementById('download');
+        const tableContainer = document.getElementById('table-container');
+        if (tableContainer) tableContainer.style.display = "block";
+        if (tableCreated && downloadBtn) {
+            downloadBtn.disabled = false;
+            downloadBtn.style.backgroundColor = '#2F8BCC';
+        }
+
+        if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
+        if (typeof updateRowNumbers === 'function') updateRowNumbers();
+        if (typeof initResizableTable === 'function') initResizableTable();
+        if (typeof applyPagination === 'function') applyPagination();
+        if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
+        if (typeof syncRegisteredPageNames === 'function') syncRegisteredPageNames();
+
+        // Show every restored page / scenario together when the project has multiple names
+        const pagesList = Array.from(window.registeredPageNames).filter(p => p && p.toLowerCase() !== 'all');
+        const scenarioCount = Object.keys(window.pageScenarioData || {}).length;
+        const savedActive = (project.lastActivePageName || '').trim();
+        let activePage = savedActive;
+        if (pagesList.length > 1 || scenarioCount > 1 || savedActive.toLowerCase() === 'all') {
+            activePage = 'All';
+        } else if (!activePage || (activePage.toLowerCase() !== 'all' && !pagesList.some(p => p.toLowerCase() === activePage.toLowerCase()))) {
+            activePage = pagesList.length > 0 ? pagesList[pagesList.length - 1] : (project.appName || 'home');
+        }
+        if (window.setGlobalPageName) {
+            window.setGlobalPageName(activePage);
+        }
+
+        const pageNameInput = document.getElementById('pagename_searchbox');
+        if (pageNameInput) {
+            pageNameInput.readOnly = true;
+            pageNameInput.style.cursor = 'default';
+        }
+        const confirmIcon = document.querySelector('.confirm-edit-icon');
+        const cancelIcon = document.querySelector('.cancel-edit-icon');
+        const addPageIcon = document.querySelector('.add-page-icon');
+        const editPenIcon = document.querySelector('.edit-icon');
+        const dropdownIcon = document.querySelector('.dropdown-icon, .page-dropdown-icon');
+        if (confirmIcon) confirmIcon.style.display = 'none';
+        if (cancelIcon) cancelIcon.style.display = 'none';
+        if (addPageIcon) addPageIcon.style.display = 'inline-block';
+        if (editPenIcon && activePage !== 'All') editPenIcon.style.display = 'inline-block';
+        if (dropdownIcon) dropdownIcon.style.display = 'inline-block';
+
+        if (typeof window.switchAppTab === "function") {
+            window.switchAppTab("home");
+        }
+
+        window._restoringProject = skipSyncPrev;
+    }
+    window.restoreProjectDataToHomePage = restoreProjectDataToHomePage;
+
+    function removeHomeRowsForPage(pageName) {
+        const tbody = document.getElementById('myTable');
+        if (!tbody || !pageName) return;
+        const key = String(pageName).trim().toLowerCase();
+        Array.from(tbody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)')).forEach(row => {
+            const pageCell = row.querySelector('.page');
+            const rowPage = pageCell ? pageCell.innerText.trim().toLowerCase() : '';
+            if (rowPage === key) row.remove();
+        });
+    }
+
+    function finishHomeTableRefresh() {
+        if (typeof updateRowNumbers === 'function') updateRowNumbers();
+        if (typeof applyPagination === 'function') applyPagination();
+        if (typeof adjustEmptyRows === 'function') {
+            const tbody = document.getElementById('myTable');
+            if (tbody && tbody.querySelectorAll('tr').length < 5) adjustEmptyRows();
+        }
+        if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
+    }
+
+    /**
+     * Repo → Home live link. Applies a repository delete/update to the Home
+     * workspace when it belongs to the currently launched project.
+     */
+    window.applyRepoChangeToHome = function(change) {
+        if (!change || window._restoringProject) return;
+        const activeKey = window.activeResumedProjectKey;
+        if (change.projectKey && activeKey && change.projectKey !== activeKey && !change.wipeSession) {
+            return;
+        }
+
+        window._applyingRepoToHome = true;
+        try {
+            if (change.wipeSession) {
+                const tbody = document.getElementById('myTable');
+                if (tbody) tbody.innerHTML = '';
+                window.pageScenarioData = {};
+                window.registeredPageNames = new Set();
+                if (typeof registeredFeatureAreas !== 'undefined') {
+                    registeredFeatureAreas = [];
+                    window.registeredFeatureAreas = registeredFeatureAreas;
+                }
+                const appName = window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '');
+                if (typeof window.setGlobalPageName === 'function' && appName) {
+                    window.setGlobalPageName(appName);
+                }
+                finishHomeTableRefresh();
+                return;
+            }
+
+            if (change.type === 'feature' && change.featureName && typeof window.removeFeatureCompletely === 'function') {
+                window.removeFeatureCompletely(change.featureName, change.projectKey);
+                finishHomeTableRefresh();
+                return;
+            }
+
+            if ((change.type === 'page' || change.type === 'scenario') && change.pageName) {
+                const pageName = String(change.pageName).trim();
+                removeHomeRowsForPage(pageName);
+                if (window.registeredPageNames) window.registeredPageNames.delete(pageName);
+                if (window.pageScenarioData) {
+                    delete window.pageScenarioData[pageName];
+                    Object.keys(window.pageScenarioData).forEach(k => {
+                        const s = window.pageScenarioData[k];
+                        if (s && (s.scenarioName || '').trim().toLowerCase() === pageName.toLowerCase()) {
+                            delete window.pageScenarioData[k];
+                        }
+                    });
+                }
+                const remaining = window.registeredPageNames
+                    ? Array.from(window.registeredPageNames).filter(p => p && p.trim() && p.toLowerCase() !== 'all')
+                    : [];
+                if (remaining.length === 0) {
+                    const appName = window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '');
+                    if (typeof window.setGlobalPageName === 'function' && appName) {
+                        window.setGlobalPageName(appName);
+                    }
+                } else if (remaining.length === 1) {
+                    if (typeof window.setGlobalPageName === 'function') window.setGlobalPageName(remaining[0]);
+                } else if (typeof window.setGlobalPageName === 'function') {
+                    window.setGlobalPageName('All');
+                }
+                finishHomeTableRefresh();
+            }
+        } finally {
+            window._applyingRepoToHome = false;
+        }
+    };
+
+    async function resumeExistingProjectAndLaunch(projectKey, fallbackProject, launchParams) {
+        if (window._resumeOldProjectLaunchInFlight) return;
+        window._resumeOldProjectLaunchInFlight = true;
+        try {
+            let snapshot = (typeof fetchRepoProjectSnapshot === 'function')
+                ? fetchRepoProjectSnapshot(projectKey, fallbackProject)
+                : null;
+            if (!snapshot && fallbackProject) {
+                try {
+                    snapshot = JSON.parse(JSON.stringify(fallbackProject));
+                } catch (_) {
+                    snapshot = fallbackProject;
+                }
+            }
+            if (!snapshot) {
+                console.warn('Continue with Old: no project snapshot found for', projectKey);
+                return;
+            }
+
+            window._resumedProjectSnapshot = snapshot;
+            window.activeProjectSessionMode = 'resumed';
+            window.activeResumedProjectKey = projectKey || (snapshot.projectId ? `${snapshot.appName} (${snapshot.platform})::${snapshot.projectId}` : `${snapshot.appName} (${snapshot.platform})`);
+            window.activeResumedAppName = snapshot.appName || resolveActiveAppName();
+
+            window._restoringProject = true;
+            restoreProjectDataToHomePage(snapshot);
+            window._restoringProject = false;
+
+            pendingLaunchProjectData = null;
+            window.pendingLaunchProjectData = null;
+            pendingExportAction = null;
+            window.pendingExportAction = null;
+
+            triggerScreenshotLoader();
+            resetFormLockActive = false;
+            initialData = launchParams;
+            await launchApp(launchParams);
+
+            window._restoringProject = true;
+            restoreProjectDataToHomePage(window._resumedProjectSnapshot || snapshot);
+            window._restoringProject = false;
+        } catch (err) {
+            console.error('Continue with Old failed:', err);
+            window._restoringProject = false;
+            throw err;
+        } finally {
+            window._resumeOldProjectLaunchInFlight = false;
+        }
+    }
+
     document.getElementById("Run").addEventListener('click', async () => {
             if (!canEnableLaunch()) {
                 showCustomAlert("Authentication Required", "Please paste and connect a valid token before launching the application.", "warning");
@@ -1645,17 +2100,6 @@
             var appPackage = document.getElementById('apppackage').value;
             var appActivity = document.getElementById('appactivity').value;
             var appiumURL = document.getElementById('appiumurl').value;
-
-            function triggerScreenshotLoader() {
-                if (process.platform !== 'win32') {
-                    document.getElementById('overlay').style.display = 'block';
-                }
-                document.getElementById('AppRunningPopup').style.display = 'none';
-                showDummyDeviceMessage({
-                    theme: 'loading',
-                    title: 'Starting session and loading screen…'
-                });
-            }
 
     // ===========================================================================
     // ===========================================================================
@@ -1691,19 +2135,167 @@
 
             // 2. Launch if Valid
             if (isValid) {
-                triggerScreenshotLoader();
-
                 // IMPORTANT: Create the exact 9-item array expected by launchApp
                 initialData = [plateformOption, deviceName, platformVersion, automationName, appiumURL, udidName, bundleID, appPackage, appActivity];
 
-                // Keep configuration fields enabled so user can always edit them
-                resetFormLockActive = false;
+                const appSelect = document.getElementById('appname');
+                let selectedAppName = '';
+                if (appSelect && appSelect.options && appSelect.selectedIndex >= 0) {
+                    const opt = appSelect.options[appSelect.selectedIndex];
+                    selectedAppName = (opt.text || opt.innerText || '').trim();
+                }
+                if (!selectedAppName || selectedAppName.toLowerCase() === 'select app' || selectedAppName.toLowerCase() === 'loading apps...') {
+                    selectedAppName = (appSelect?.value || appName || '').trim();
+                }
+                const activeApp = (typeof getCleanAppName === 'function' ? getCleanAppName(selectedAppName) : selectedAppName) || appName;
+                const existingInfo = typeof findExistingRepoProject === 'function' ? findExistingRepoProject(activeApp, plateformOption) : null;
 
+                if (existingInfo && existingInfo.project) {
+                    const p = existingInfo.project;
+                    const hasPages = Array.isArray(p.pages) && p.pages.length > 0;
+                    const hasScenarios = Array.isArray(p.scenarios) && p.scenarios.length > 0;
+                    const totalFeats = (typeof countProjectFeatures === 'function') ? countProjectFeatures(p) : ((p.features || []).length);
+                    const hasFeatures = totalFeats > 0;
+
+                    if (hasPages || hasScenarios || hasFeatures) {
+                        pendingLaunchProjectData = {
+                            key: existingInfo.key,
+                            project: p,
+                            initialData: initialData
+                        };
+                        window.pendingLaunchProjectData = pendingLaunchProjectData;
+                        pendingExportAction = "confirmExistingProjectLaunch";
+                        window.pendingExportAction = "confirmExistingProjectLaunch";
+
+                        const totalPages = (p.pages || []).length;
+                        const totalScens = (p.scenarios || []).length;
+
+                        showConfirmDialog({
+                            title: "Existing Project Found",
+                            mainText: `A saved project workspace for <b>${p.appName || activeApp}</b> (${p.platform || plateformOption}) already exists in repository.`,
+                            subText: `This project contains <b>${totalPages} page(s)</b>, <b>${totalScens} scenario(s)</b>, and <b>${totalFeats} feature(s)</b>.<br><br>Do you want to <b>Continue with Old</b> to retrieve all its data to the Home workspace, or <b>Create New</b> to start fresh?`,
+                            action: "confirmExistingProjectLaunch",
+                            theme: "info",
+                            okayBtnText: "Continue with Old",
+                            extraBtnText: "Create New",
+                            onOkay: async () => {
+                                if (window._resumeOldProjectLaunchInFlight) return;
+                                const launchParams = [
+                                    plateformOption,
+                                    deviceName,
+                                    platformVersion,
+                                    automationName,
+                                    appiumURL,
+                                    udidName,
+                                    bundleID,
+                                    appPackage,
+                                    appActivity
+                                ];
+                                await resumeExistingProjectAndLaunch(
+                                    existingInfo.key || `${p.appName} (${p.platform})`,
+                                    p,
+                                    launchParams
+                                );
+                            },
+                            onExtra: async () => {
+                                if (window._createNewProjectLaunchInFlight) return;
+                                window._createNewProjectLaunchInFlight = true;
+                                try {
+                                    const launchParams = [
+                                        plateformOption,
+                                        deviceName,
+                                        platformVersion,
+                                        automationName,
+                                        appiumURL,
+                                        udidName,
+                                        bundleID,
+                                        appPackage,
+                                        appActivity
+                                    ];
+                                    const uniqueInfo = (typeof createFreshRepoProject === 'function')
+                                        ? createFreshRepoProject(activeApp, plateformOption)
+                                        : { key: `${activeApp} (${plateformOption})::${Date.now().toString(36)}`, appName: activeApp };
+
+                                    pendingLaunchProjectData = null;
+                                    window.pendingLaunchProjectData = null;
+                                    pendingExportAction = null;
+                                    window.pendingExportAction = null;
+
+                                    if (typeof window.clearAllPagesAndScrapedDataForNewScenario === 'function') {
+                                        window.clearAllPagesAndScrapedDataForNewScenario();
+                                    }
+
+                                    if (typeof window.setGlobalPageName === 'function') {
+                                        window.setGlobalPageName(uniqueInfo.appName);
+                                    }
+
+                                    triggerScreenshotLoader();
+                                    resetFormLockActive = false;
+                                    if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+                                    initialData = launchParams;
+                                    await launchApp(launchParams);
+                                } finally {
+                                    window._createNewProjectLaunchInFlight = false;
+                                }
+                            },
+                            onCancel: () => {
+                                pendingLaunchProjectData = null;
+                                window.pendingLaunchProjectData = null;
+                                pendingExportAction = null;
+                                window.pendingExportAction = null;
+                                if (typeof unlockLaunchForm === 'function') {
+                                    unlockLaunchForm();
+                                }
+                            }
+                        });
+                        return;
+                    }
+                }
+
+                const store = getProjectStore();
+                const uniqueInfo = generateUniqueProjectKey(store, activeApp, plateformOption);
+                window.activeProjectSessionMode = 'new';
+                window.activeResumedProjectKey = uniqueInfo.key;
+                window.activeResumedAppName = uniqueInfo.appName;
+
+                if (!store[uniqueInfo.key]) {
+                    store[uniqueInfo.key] = {
+                        projectId: uniqueInfo.projectId || null,
+                        appName: uniqueInfo.appName,
+                        platform: plateformOption,
+                        createdAt: Date.now(),
+                        lastUpdated: Date.now(),
+                        lastActivePageName: uniqueInfo.appName,
+                        scenarios: [],
+                        features: [],
+                        pages: [buildInitialProjectPage(uniqueInfo.appName, plateformOption)]
+                    };
+                    persistProjectStore(store);
+                }
+
+                triggerScreenshotLoader();
+                resetFormLockActive = false;
+                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                 launchApp(initialData);
             }
         });
 
         async function launchApp(initialData) {
+            window.launchApp = launchApp;
+            if (!Array.isArray(initialData) || initialData.length < 9 || !initialData[0] || (!initialData[1] && !initialData[5])) {
+                const pOpt = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
+                initialData = [
+                    pOpt,
+                    document.getElementById('devicename')?.value || '',
+                    document.getElementById('platformversion')?.value || '',
+                    document.getElementById('automationName')?.value || '',
+                    document.getElementById('appiumurl')?.value || '',
+                    document.getElementById('udid')?.value || '',
+                    document.getElementById('bundleID')?.value || '',
+                    document.getElementById('apppackage')?.value || '',
+                    document.getElementById('appactivity')?.value || ''
+                ];
+            }
             var platform = initialData[0]; // Android or IOS/iOS
             var deviceName = initialData[1];
             var platformVersion = initialData[2];
@@ -1983,15 +2575,42 @@
                 addScenarioBtnAfterLaunch.style.backgroundColor = '#2F8BCC';
             }
 
+            // Set initial page name to the App Name as the first page
+            // Resumed projects already restored their saved page / table state — do not overwrite it.
+            if (window.activeProjectSessionMode !== 'resumed') {
+                const initialCleanApp = resolveActiveAppName();
+                if (initialCleanApp && initialCleanApp !== 'Active App' && initialCleanApp !== 'Select App' && initialCleanApp !== 'Loading Apps...') {
+                    const currentPageVal = document.getElementById('pagename_searchbox')?.value.trim();
+                    if (!currentPageVal || currentPageVal === 'DefaultPage' || currentPageVal === 'home' || currentPageVal === 'Page' || (window.registeredPageNames && window.registeredPageNames.size <= 1)) {
+                        if (typeof window.setGlobalPageName === 'function') {
+                            window.setGlobalPageName(initialCleanApp);
+                        } else {
+                            const pInput = document.getElementById('pagename_searchbox');
+                            if (pInput) pInput.value = initialCleanApp;
+                        }
+                    }
+                }
+            }
+
             try {
                 await loadFirstScreen();
                 refreshShouldLaunchApp = false;
                 if (typeof window.switchAppTab === "function") window.switchAppTab("home");
+                if (window.activeProjectSessionMode === 'resumed') {
+                    if (window._resumedProjectSnapshot && typeof restoreProjectDataToHomePage === 'function') {
+                        window._restoringProject = true;
+                        restoreProjectDataToHomePage(window._resumedProjectSnapshot);
+                        window._restoringProject = false;
+                    }
+                } else if (typeof window.syncActiveProjectToRepo === "function") {
+                    window.syncActiveProjectToRepo();
+                }
             } catch (screenErr) {
                 console.error("loadFirstScreen failed:", screenErr);
                 displayScreenshotError(screenErr);
             }
         }
+        window.launchApp = launchApp;
 
 
     async function startApp(initialData) {
@@ -2488,6 +3107,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             document.getElementById('scrapeUI').style.backgroundColor = '#2F8BCC';
             document.getElementById('algoQA').disabled = false;
             document.getElementById('algoQA').style.backgroundColor = '#2F8BCC';
+            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 
         } else {
             // Duplicate Page Name logic
@@ -2528,6 +3148,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
     // ===========================================================================
     let pendingExportAction = null;
     let rowToDelete = null;
+    let pendingRepoDelete = null;
 
        // Helper to check if table actually contains user data
            function hasValidTableData(tableId) {
@@ -2638,12 +3259,18 @@ document.getElementById("Scrape").addEventListener('click', async () => {
 
             const hasData = rowObj["CONTROL NAME"] || rowObj["XPATH"] || rowObj["CONTROL TYPE"] || rowObj["PAGE NAME"];
             if (hasData) {
+                try {
+                    rowObj.rect = row.dataset.rect ? JSON.parse(row.dataset.rect) : null;
+                } catch (_) {
+                    rowObj.rect = null;
+                }
                 extractedData.push(rowObj);
             }
         });
 
         return extractedData;
     }
+    window.extractAllTableData = extractAllTableData;
 
     function downloadTableAsJSON(tableId) {
         const statusBar = document.getElementById('sttus_bar_div');
@@ -2859,18 +3486,37 @@ document.getElementById("Scrape").addEventListener('click', async () => {
 
         if (e.target.classList.contains("featureName")) {
             const newFeatureNameValue = e.target.innerText.trim();
+            const tr = e.target.closest('tr');
+            const pageCell = tr ? tr.querySelector('.page') : null;
+            const rowPageName = (pageCell ? pageCell.innerText.trim() : '') || document.getElementById('pagename_searchbox')?.value || 'Default';
+
+            // If empty or set to page name, automatically replace with page name and remove feature if no longer used
+            if (newFeatureNameValue === "" || newFeatureNameValue.toLowerCase() === rowPageName.toLowerCase()) {
+                e.target.innerText = rowPageName;
+                if (oldFeatureNameValue && oldFeatureNameValue.toLowerCase() !== rowPageName.toLowerCase()) {
+                    const otherCellsUsingIt = Array.from(document.querySelectorAll('#myTable .featureName')).some(c => c !== e.target && c.innerText.trim().toLowerCase() === oldFeatureNameValue.toLowerCase());
+                    if (!otherCellsUsingIt && typeof window.removeFeatureCompletely === 'function') {
+                        window.removeFeatureCompletely(oldFeatureNameValue);
+                    }
+                }
+                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+                oldFeatureNameValue = "";
+                return;
+            }
 
             if (newFeatureNameValue !== oldFeatureNameValue && oldFeatureNameValue !== "") {
-                // Unique Name Check (Feature and Page Names)
+                // Unique Name Check (Feature, Page, and Scenario Names in active session and repository)
                 const isNameUsedAsFeature = registeredFeatureAreas.some(area => area.name.toLowerCase() === newFeatureNameValue.toLowerCase());
                 const isNameUsedAsPage = Array.from(window.registeredPageNames || []).some(p => p.toLowerCase() === newFeatureNameValue.toLowerCase());
+                const isNameInRepo = typeof isFeatureNameInRepo === 'function' && isFeatureNameInRepo(newFeatureNameValue);
 
-                if (isNameUsedAsFeature || isNameUsedAsPage) {
+                if (isNameUsedAsFeature || isNameUsedAsPage || isNameInRepo) {
                     pendingFeatureRename = {
                         oldName: oldFeatureNameValue,
                         cellElement: e.target
                     };
-                    showCustomAlert("Feature Already Exists", "This feature name is already used. Please try a different one.", "warning");
+                    const msg = isNameInRepo ? "This feature name already exists in the repository for this application. Please try a different one." : "This feature name is already used. Please try a different one.";
+                    showCustomAlert("Feature Already Exists", msg, "warning");
                 } else {
                     pendingFeatureRename = {
                         oldName: oldFeatureNameValue,
@@ -2904,6 +3550,16 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                 }
             }
             oldFeatureNameValue = "";
+        }
+
+        if (typeof window.syncActiveProjectToRepo === 'function') {
+            window.syncActiveProjectToRepo();
+        }
+    });
+
+    tableEl.addEventListener("change", (e) => {
+        if (typeof window.syncActiveProjectToRepo === 'function') {
+            window.syncActiveProjectToRepo();
         }
     });
 
@@ -4486,6 +5142,7 @@ function createAndAppendTable(dtControls) {
     initResizableTable();
 
     applyPagination();
+    if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 }
 
     function initResizableTable() {
@@ -6217,6 +6874,853 @@ function isGlobalPageNameValid(name) {
     return true;
 }
 
+const REPO_STORAGE_KEY = 'algoscraper_repository_projects_store_v2';
+const LEGACY_STORAGE_KEY = 'algoscraper_repository_store_v1';
+
+const KNOWN_APP_NAMES = {
+    'com.apple.mobilecal': 'Calendar',
+    'com.apple.preferences': 'Settings',
+    'com.apple.mobilesafari': 'Safari',
+    'com.apple.mobileaddressbook': 'Contacts',
+    'com.apple.mobiletimer': 'Clock',
+    'com.apple.reminders': 'Reminders',
+    'com.apple.calculator': 'Calculator',
+    'com.apple.mobilenotes': 'Notes',
+    'com.apple.camera': 'Camera',
+    'com.apple.mobileslideshow': 'Photos',
+    'com.apple.appstore': 'App Store',
+    'com.apple.maps': 'Maps',
+    'com.apple.music': 'Music',
+    'com.apple.health': 'Health',
+    'com.apple.weather': 'Weather',
+    'com.apple.mobilemail': 'Mail',
+    'com.apple.mobilephone': 'Phone',
+    'com.apple.mobilesms': 'Messages',
+    'com.apple.documentsapp': 'Files',
+    'com.apple.news': 'News',
+    'com.apple.podcasts': 'Podcasts',
+    'com.apple.stocks': 'Stocks',
+    'com.apple.tv': 'Apple TV',
+    'com.apple.tips': 'Tips',
+    'com.apple.facetime': 'FaceTime',
+    'com.android.settings': 'Settings',
+    'com.android.chrome': 'Chrome',
+    'com.android.camera': 'Camera',
+    'com.android.camera2': 'Camera',
+    'com.google.android.calendar': 'Calendar',
+    'com.google.android.apps.messaging': 'Messages',
+    'com.google.android.dialer': 'Phone',
+    'com.google.android.calculator': 'Calculator',
+    'com.google.android.deskclock': 'Clock',
+    'com.google.android.gm': 'Gmail',
+    'com.google.android.apps.photos': 'Photos',
+    'com.google.android.apps.maps': 'Google Maps',
+    'com.google.android.youtube': 'YouTube',
+    'com.ril.mobilecal': 'Calendar'
+};
+
+function getCleanAppName(raw) {
+    if (!raw) return 'App';
+    let str = String(raw).trim();
+    const lower = str.toLowerCase();
+    if (KNOWN_APP_NAMES[lower]) {
+        return KNOWN_APP_NAMES[lower];
+    }
+
+    if (/^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/.test(str)) {
+        const parts = str.split('.');
+        let last = parts[parts.length - 1] || str;
+        if (KNOWN_APP_NAMES[last.toLowerCase()]) {
+            return KNOWN_APP_NAMES[last.toLowerCase()];
+        }
+        if (last.toLowerCase().startsWith('mobile') && last.length > 6) {
+            last = last.substring(6);
+        }
+        return last.charAt(0).toUpperCase() + last.slice(1);
+    }
+    return str;
+}
+
+function resolveActiveAppName() {
+    if (window.activeResumedAppName) return window.activeResumedAppName;
+    const appSelect = document.getElementById('appname');
+    let val = '';
+    if (appSelect) {
+        if (appSelect.options && appSelect.selectedIndex >= 0 && appSelect.options[appSelect.selectedIndex]) {
+            const opt = appSelect.options[appSelect.selectedIndex];
+            val = (opt.text || opt.innerText || '').trim();
+        }
+        if (!val || val.toLowerCase() === 'loading apps...' || val.toLowerCase() === 'select app') {
+            val = (appSelect.value || '').trim();
+        }
+    }
+    if (!val || val.toLowerCase() === 'loading apps...' || val.toLowerCase() === 'select app') {
+        val = (document.getElementById('bundleID')?.value || document.getElementById('apppackage')?.value || '').trim();
+    }
+    if (!val || val.toLowerCase() === 'select app') {
+        val = 'Active App';
+    }
+    return getCleanAppName(val);
+}
+
+function createProjectId() {
+    return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+}
+
+function repoPlatformLabel(platform) {
+    return String(platform || 'Android').toLowerCase().includes('ios') ? 'iOS' : 'Android';
+}
+
+function generateUniqueProjectKey(store, baseAppName, platform, options) {
+    const forceNew = !!(options && options.forceNew);
+    const cleanApp = getCleanAppName(baseAppName) || 'App';
+    const plat = repoPlatformLabel(platform);
+    const existingKeys = Object.keys(store || {});
+    const keyTaken = (key) => existingKeys.some(k => k.toLowerCase() === String(key).toLowerCase());
+    const baseKey = `${cleanApp} (${plat})`;
+
+    const matchesAppPlatform = (k) => {
+        const proj = store[k];
+        const pApp = (typeof getCleanAppName === 'function'
+            ? getCleanAppName(proj && proj.appName ? proj.appName : String(k).split('::')[0].replace(/\s*\(.*?\)\s*$/, ''))
+            : String(k)).trim().toLowerCase();
+        const pPlat = ((proj && proj.platform) || k).toLowerCase().includes('ios') ? 'ios' : 'android';
+        return pApp === cleanApp.toLowerCase() && pPlat === plat.toLowerCase();
+    };
+
+    if (!forceNew) {
+        const exact = existingKeys.find(k => k.toLowerCase() === baseKey.toLowerCase());
+        if (exact) {
+            return { key: exact, appName: cleanApp, projectId: (store[exact] && store[exact].projectId) || null };
+        }
+        const anyForApp = existingKeys.some(matchesAppPlatform);
+        if (!anyForApp) {
+            return { key: baseKey, appName: cleanApp, projectId: null };
+        }
+    }
+
+    let projectId = createProjectId();
+    let key = `${baseKey}::${projectId}`;
+    while (keyTaken(key)) {
+        projectId = createProjectId();
+        key = `${baseKey}::${projectId}`;
+    }
+    return { key, appName: cleanApp, projectId };
+}
+window.generateUniqueProjectKey = generateUniqueProjectKey;
+
+function getProjectShortId(project, key) {
+    if (project && project.projectId) return project.projectId;
+    if (key && String(key).includes('::')) return String(key).split('::').pop();
+    return '';
+}
+
+function getProjectCardTitle(project, key) {
+    if (project && project.appName) return project.appName;
+    return String(key || '').split('::')[0].replace(/\s*\(.*?\)\s*$/, '').trim() || 'App';
+}
+
+function persistProjectStore(store) {
+    if (typeof window.setRepoProjectsStore === 'function') {
+        window.setRepoProjectsStore(store);
+        return;
+    }
+    try {
+        localStorage.setItem(REPO_STORAGE_KEY, JSON.stringify(store));
+    } catch (e) {
+        console.error('Error saving repo projects store:', e);
+    }
+}
+window.persistProjectStore = persistProjectStore;
+
+function fetchRepoProjectSnapshot(projectKey, hintProject) {
+    const clone = (p) => {
+        try {
+            return JSON.parse(JSON.stringify(p));
+        } catch (_) {
+            return p;
+        }
+    };
+    const richer = (a, b) => {
+        if (!a) return b;
+        if (!b) return a;
+        const score = (p) =>
+            ((p.pages || []).length) + ((p.scenarios || []).length) + ((p.features || []).length)
+            + ((p.pages || []).reduce((n, pg) => n + ((pg.elements || []).length), 0))
+            + ((p.scenarios || []).reduce((n, s) => n + ((s.elements || []).length), 0));
+        return score(b) > score(a) ? b : a;
+    };
+
+    try {
+        const store = getProjectStore();
+        let found = null;
+
+        if (projectKey && store[projectKey]) {
+            found = store[projectKey];
+        }
+
+        if (!found && projectKey) {
+            const lower = String(projectKey).toLowerCase();
+            const foundKey = Object.keys(store).find(k => k.toLowerCase() === lower);
+            if (foundKey) found = store[foundKey];
+        }
+
+        const idHint = (projectKey && String(projectKey).includes('::'))
+            ? String(projectKey).split('::').pop()
+            : ((hintProject && hintProject.projectId) || '');
+        if (!found && idHint) {
+            const byId = Object.keys(store).find(k =>
+                (store[k] && store[k].projectId === idHint) || String(k).endsWith('::' + idHint)
+            );
+            if (byId) found = store[byId];
+        }
+
+        if (!found) {
+            const hintApp = (typeof getCleanAppName === 'function'
+                ? getCleanAppName((hintProject && hintProject.appName) || '')
+                : ((hintProject && hintProject.appName) || '')).trim().toLowerCase();
+            const hintPlat = ((hintProject && hintProject.platform) || '').toLowerCase().includes('ios') ? 'ios' : 'android';
+            if (hintApp) {
+                const matches = Object.keys(store).filter(k => {
+                    const p = store[k];
+                    if (!p) return false;
+                    const pApp = (typeof getCleanAppName === 'function' ? getCleanAppName(p.appName || '') : (p.appName || '')).trim().toLowerCase();
+                    const pPlat = (p.platform || k).toLowerCase().includes('ios') ? 'ios' : 'android';
+                    return pApp === hintApp && pPlat === hintPlat;
+                });
+                matches.sort((a, b) => (store[b].lastUpdated || 0) - (store[a].lastUpdated || 0));
+                if (matches[0]) found = store[matches[0]];
+            }
+        }
+
+        const live = found ? clone(found) : null;
+        const hint = hintProject ? clone(hintProject) : null;
+        return richer(live, hint) || live || hint || null;
+    } catch (e) {
+        console.error('Error fetching repo project snapshot:', e);
+        return hintProject ? clone(hintProject) : null;
+    }
+}
+window.fetchRepoProjectSnapshot = fetchRepoProjectSnapshot;
+
+function createFreshRepoProject(baseAppName, platform) {
+    const store = getProjectStore();
+    const uniqueInfo = generateUniqueProjectKey(store, baseAppName, platform, { forceNew: true });
+
+    store[uniqueInfo.key] = {
+        projectId: uniqueInfo.projectId || null,
+        appName: uniqueInfo.appName,
+        platform: platform,
+        createdAt: Date.now(),
+        lastUpdated: Date.now(),
+        lastActivePageName: uniqueInfo.appName,
+        scenarios: [],
+        features: [],
+        pages: [buildInitialProjectPage(uniqueInfo.appName, platform)]
+    };
+    persistProjectStore(store);
+
+    window.activeProjectSessionMode = 'new';
+    window.activeResumedProjectKey = uniqueInfo.key;
+    window.activeResumedAppName = uniqueInfo.appName;
+
+    return uniqueInfo;
+}
+window.createFreshRepoProject = createFreshRepoProject;
+
+function repoNameKey(val) {
+    return String(val || '').trim().toLowerCase();
+}
+
+function buildInitialProjectPage(appName, platform) {
+    const name = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : appName) || 'App';
+    return {
+        id: 'page_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        pageName: name,
+        appName: name,
+        count: 0,
+        elements: [],
+        platform: platform,
+        isInitialPage: true,
+        timestamp: Date.now()
+    };
+}
+
+function seedInitialProjectPage(project, appName, platform) {
+    if (!project) return null;
+    if (!Array.isArray(project.pages)) project.pages = [];
+    const name = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : appName) || '';
+    if (!name) return null;
+    const existing = project.pages.find(pg => repoNameKey(pg.pageName) === repoNameKey(name));
+    if (existing) {
+        existing.isInitialPage = true;
+        if (!project.lastActivePageName) project.lastActivePageName = existing.pageName;
+        return existing;
+    }
+    const page = buildInitialProjectPage(name, platform || project.platform);
+    project.pages.unshift(page);
+    project.lastActivePageName = name;
+    return page;
+}
+
+function isKeptInitialPage(project, page) {
+    if (!page) return false;
+    if (page.isInitialPage) return true;
+    return repoNameKey(page.pageName) === repoNameKey(project && project.appName);
+}
+
+function isRepoNameOwnedByScenario(project, name) {
+    const key = repoNameKey(name);
+    if (!key || !project || !Array.isArray(project.scenarios)) return false;
+    return project.scenarios.some(s => repoNameKey(s.pageName) === key || repoNameKey(s.name) === key);
+}
+
+function getActiveHomePageName() {
+    const el = document.getElementById('pagename_searchbox');
+    return (el && el.value ? el.value : '').trim();
+}
+
+function isDistinctFeatureName(name, pageName) {
+    const n = String(name || '').trim();
+    if (!n || n.toLowerCase() === 'all') return false;
+    if (pageName && repoNameKey(n) === repoNameKey(pageName)) return false;
+    return true;
+}
+
+function mergeFeatureItems() {
+    const map = new Map();
+    Array.from(arguments).forEach(list => {
+        (list || []).forEach(f => {
+            const name = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
+            const pageHint = (f && typeof f === 'object') ? (f.pageName || '') : '';
+            if (!isDistinctFeatureName(name, pageHint)) return;
+            const k = repoNameKey(name);
+            if (!map.has(k)) {
+                map.set(k, {
+                    name: String(name).trim(),
+                    rect: (f && f.rect) || null,
+                    fullPage: !!(f && f.fullPage),
+                    pageName: pageHint,
+                    id: f && f.id,
+                    timestamp: f && f.timestamp
+                });
+            } else {
+                const cur = map.get(k);
+                if (!cur.rect && f && f.rect) cur.rect = f.rect;
+                if (f && f.fullPage) cur.fullPage = true;
+                if (!cur.pageName && pageHint) cur.pageName = pageHint;
+            }
+        });
+    });
+    return Array.from(map.values());
+}
+
+function featureItemsFromElements(elements, pageName) {
+    const items = [];
+    const seen = new Set();
+    (elements || []).forEach(el => {
+        const n = (el && (el['FEATURE NAME'] || el.FeatureName) || '').trim();
+        const elPage = pageName || (el && el['PAGE NAME']) || '';
+        if (!isDistinctFeatureName(n, elPage)) return;
+        const k = repoNameKey(n);
+        if (seen.has(k)) return;
+        seen.add(k);
+        items.push({ name: n, pageName: elPage });
+    });
+    return items;
+}
+
+function collectLiveFeatureItemsForPage(pageName) {
+    const areas = (typeof window.registeredFeatureAreas !== 'undefined' && Array.isArray(window.registeredFeatureAreas))
+        ? window.registeredFeatureAreas
+        : [];
+    const pageKey = repoNameKey(pageName);
+    return areas.filter(a => {
+        if (!a || !a.name) return false;
+        if (!isDistinctFeatureName(a.name, pageName)) return false;
+        if (!a.pageName || !pageKey) return true;
+        return repoNameKey(a.pageName) === pageKey;
+    }).map(a => ({
+        name: String(a.name).trim(),
+        rect: a.rect || null,
+        fullPage: !!a.fullPage,
+        pageName: a.pageName || pageName || ''
+    }));
+}
+
+function nestFeatureOnOwner(owner, featureItem) {
+    if (!owner || !featureItem || !featureItem.name) return false;
+    const pageName = owner.pageName || owner.name || featureItem.pageName || '';
+    if (!isDistinctFeatureName(featureItem.name, pageName)) return false;
+    owner.features = mergeFeatureItems(owner.features, [featureItem]);
+    return true;
+}
+
+function findFeatureOwnerInProject(project, pageName) {
+    if (!project) return null;
+    const key = repoNameKey(pageName);
+    if (key) {
+        const scen = (project.scenarios || []).find(s => repoNameKey(s.pageName) === key || repoNameKey(s.name) === key);
+        if (scen) return scen;
+        const pg = (project.pages || []).find(p => repoNameKey(p.pageName) === key);
+        if (pg) return pg;
+    }
+    return null;
+}
+
+function collectProjectFeatureNames(project) {
+    const names = new Set();
+    if (!project) return names;
+    const add = (n, pageName) => {
+        if (isDistinctFeatureName(n, pageName)) names.add(repoNameKey(n));
+    };
+    const fromOwner = (owner, pageName) => {
+        if (!owner) return;
+        (owner.features || []).forEach(f => add((f && f.name) || f, pageName));
+        (owner.elements || []).forEach(el => {
+            add(el && (el['FEATURE NAME'] || el.FeatureName), pageName || (el && el['PAGE NAME']));
+        });
+    };
+    (project.scenarios || []).forEach(s => fromOwner(s, s.pageName || s.name));
+    (project.pages || []).forEach(pg => fromOwner(pg, pg.pageName));
+    (project.features || []).forEach(f => add(f && f.name, f && f.pageName));
+    return names;
+}
+
+function countProjectFeatures(project) {
+    return collectProjectFeatureNames(project).size;
+}
+
+function listProjectFeatureDisplayNames(project) {
+    const map = new Map();
+    const add = (n, pageName) => {
+        if (!isDistinctFeatureName(n, pageName)) return;
+        const k = repoNameKey(n);
+        if (!map.has(k)) map.set(k, String(n).trim());
+    };
+    const fromOwner = (owner, pageName) => {
+        if (!owner) return;
+        (owner.features || []).forEach(f => add((f && f.name) || f, pageName));
+        (owner.elements || []).forEach(el => {
+            add(el && (el['FEATURE NAME'] || el.FeatureName), pageName || (el && el['PAGE NAME']));
+        });
+    };
+    if (!project) return [];
+    (project.scenarios || []).forEach(s => fromOwner(s, s.pageName || s.name));
+    (project.pages || []).forEach(pg => fromOwner(pg, pg.pageName));
+    (project.features || []).forEach(f => add(f && f.name, f && f.pageName));
+    return Array.from(map.values());
+}
+
+function migrateStandaloneFeaturesIntoOwners(project) {
+    if (!project || typeof project !== 'object') return false;
+    let modified = false;
+    if (!Array.isArray(project.features)) project.features = [];
+
+    // 1. Ensure any features in project.features are nested on owners
+    project.features.forEach(f => {
+        if (!f || !f.name) return;
+        let owner = findFeatureOwnerInProject(project, f.pageName);
+        if (!owner && (project.scenarios || []).length === 1) owner = project.scenarios[0];
+        if (!owner && (project.pages || []).length) owner = project.pages[0];
+        if (!owner && (project.scenarios || []).length) owner = project.scenarios[0];
+        if (owner && nestFeatureOnOwner(owner, f)) modified = true;
+    });
+
+    // 2. Vice-versa: if owners (scenarios / pages) have features, ensure they exist in project.features as cards
+    const existingNames = new Set(project.features.map(f => (f && f.name ? f.name.trim().toLowerCase() : '')));
+    const restoreToProjectFeatures = (feat, pageName) => {
+        if (!feat) return;
+        const name = typeof feat === 'string' ? feat.trim() : (feat.name ? feat.name.trim() : '');
+        if (!name || existingNames.has(name.toLowerCase())) return;
+        if (!isDistinctFeatureName(name, pageName)) return;
+
+        const featItem = {
+            id: (typeof feat === 'object' && feat.id) ? feat.id : ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+            name: name,
+            rect: (typeof feat === 'object' && feat.rect) ? feat.rect : null,
+            fullPage: (typeof feat === 'object') ? !!feat.fullPage : false,
+            pageName: (typeof feat === 'object' && feat.pageName) ? feat.pageName : (pageName || 'Default'),
+            platform: project.platform || 'Android',
+            timestamp: (typeof feat === 'object' && feat.timestamp) ? feat.timestamp : Date.now()
+        };
+        project.features.push(featItem);
+        existingNames.add(name.toLowerCase());
+        modified = true;
+    };
+
+    (project.scenarios || []).forEach(s => {
+        (s.features || []).forEach(f => restoreToProjectFeatures(f, s.pageName || s.name));
+        (s.elements || []).forEach(el => {
+            const fn = el && (el['FEATURE NAME'] || el.FeatureName);
+            if (fn) restoreToProjectFeatures(fn, s.pageName || (el && el['PAGE NAME']));
+        });
+    });
+
+    (project.pages || []).forEach(p => {
+        (p.features || []).forEach(f => restoreToProjectFeatures(f, p.pageName));
+        (p.elements || []).forEach(el => {
+            const fn = el && (el['FEATURE NAME'] || el.FeatureName);
+            if (fn) restoreToProjectFeatures(fn, p.pageName || (el && el['PAGE NAME']));
+        });
+    });
+
+    return modified;
+}
+
+function isRepoNameOwnedByFeature(project, name) {
+    const key = repoNameKey(name);
+    if (!key || !project) return false;
+    return collectProjectFeatureNames(project).has(key);
+}
+
+window.countProjectFeatures = countProjectFeatures;
+window.listProjectFeatureDisplayNames = listProjectFeatureDisplayNames;
+window.mergeFeatureItems = mergeFeatureItems;
+window.featureItemsFromElements = featureItemsFromElements;
+window.collectLiveFeatureItemsForPage = collectLiveFeatureItemsForPage;
+window.nestFeatureOnOwner = nestFeatureOnOwner;
+window.findFeatureOwnerInProject = findFeatureOwnerInProject;
+window.getActiveHomePageName = getActiveHomePageName;
+
+/**
+ * Ownership rules:
+ *  - Scenario owns its page name AND its features. That page is NOT a standalone page.
+ *  - Scraped pages own their features. Features are never inspectable repo assets.
+ *  - Features only count; they are nested on the owning scenario or page.
+ */
+function pruneProjectAssetOwnership(project) {
+    if (!project || typeof project !== 'object') return false;
+    let modified = false;
+
+    if (!Array.isArray(project.scenarios)) project.scenarios = [];
+    if (!Array.isArray(project.features)) project.features = [];
+    if (!Array.isArray(project.pages)) project.pages = [];
+
+    const scenarioKeys = new Set();
+    project.scenarios.forEach(s => {
+        const pageKey = repoNameKey(s.pageName);
+        const nameKey = repoNameKey(s.name);
+        if (pageKey) scenarioKeys.add(pageKey);
+        if (nameKey) scenarioKeys.add(nameKey);
+    });
+
+    project.scenarios.forEach(s => {
+        const sKey = repoNameKey(s.pageName || s.name);
+        const matchingPage = project.pages.find(pg => repoNameKey(pg.pageName) === sKey);
+        if (!matchingPage) return;
+        const mergedFeats = mergeFeatureItems(s.features, matchingPage.features, featureItemsFromElements(matchingPage.elements, matchingPage.pageName));
+        if (JSON.stringify(mergedFeats) !== JSON.stringify(s.features || [])) {
+            s.features = mergedFeats;
+            modified = true;
+        }
+        if ((!s.elements || s.elements.length === 0) && Array.isArray(matchingPage.elements) && matchingPage.elements.length > 0) {
+            s.elements = JSON.parse(JSON.stringify(matchingPage.elements));
+            modified = true;
+        }
+    });
+
+    project.scenarios.forEach(s => {
+        const nested = mergeFeatureItems(s.features, featureItemsFromElements(s.elements, s.pageName || s.name));
+        if (JSON.stringify(nested) !== JSON.stringify(s.features || [])) {
+            s.features = nested;
+            modified = true;
+        }
+    });
+
+    project.pages.forEach(pg => {
+        const nested = mergeFeatureItems(pg.features, featureItemsFromElements(pg.elements, pg.pageName));
+        if (JSON.stringify(nested) !== JSON.stringify(pg.features || [])) {
+            pg.features = nested;
+            modified = true;
+        }
+    });
+
+    if (migrateStandaloneFeaturesIntoOwners(project)) modified = true;
+
+    const featureKeys = collectProjectFeatureNames(project);
+
+    const keptPages = project.pages.filter(pg => {
+        const pKey = repoNameKey(pg.pageName);
+        if (!pKey) return false;
+        const hasElements = Array.isArray(pg.elements) && pg.elements.length > 0;
+        if (scenarioKeys.has(pKey) && !hasElements && !isKeptInitialPage(project, pg)) return false;
+        if (featureKeys.has(pKey) && !hasElements && !isKeptInitialPage(project, pg)) return false;
+        if (hasElements) return true;
+        return isKeptInitialPage(project, pg);
+    });
+    if (keptPages.length !== project.pages.length) {
+        project.pages = keptPages;
+        modified = true;
+    }
+
+    return modified;
+}
+window.pruneProjectAssetOwnership = pruneProjectAssetOwnership;
+
+function getProjectStore() {
+    let store = {};
+    try {
+        const raw = localStorage.getItem(REPO_STORAGE_KEY);
+        if (raw) {
+            store = JSON.parse(raw);
+        } else {
+            const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEY);
+            if (legacyRaw) {
+                const legacy = JSON.parse(legacyRaw);
+                const sc = Array.isArray(legacy.scenarios) ? legacy.scenarios : [];
+                const ft = Array.isArray(legacy.features) ? legacy.features : [];
+                const pg = Array.isArray(legacy.pages) ? legacy.pages : [];
+                if (sc.length > 0 || ft.length > 0 || pg.length > 0) {
+                    const rawAppName = sc[0]?.appName || ft[0]?.appName || pg[0]?.appName || 'Saved Session';
+                    const appName = getCleanAppName(rawAppName);
+                    const platform = sc[0]?.platform || ft[0]?.platform || pg[0]?.platform || 'Android';
+                    const key = `${appName} (${platform})`;
+                    store[key] = {
+                        appName: appName,
+                        platform: platform,
+                        createdAt: Date.now(),
+                        lastUpdated: Date.now(),
+                        scenarios: sc,
+                        features: ft,
+                        pages: pg
+                    };
+                }
+            }
+        }
+
+        if (typeof store !== 'object' || store === null) store = {};
+
+        // Purge empty projects, clean reverse-domain names, and deduplicate items per project
+        let modified = false;
+        Object.keys(store).forEach(k => {
+            const p = store[k];
+            if (!p) {
+                delete store[k];
+                modified = true;
+                return;
+            }
+
+            // Clean reverse-domain bundle IDs to a human-readable app name.
+            // Do not rewrite numbered copies like "Calendar 2" back to "Calendar".
+            const rawName = p.appName || k.replace(/\s*\(.*?\)\s*$/, '');
+            const keyAppPart = String(k).replace(/\s*\(.*?\)\s*$/, '').trim();
+            const isReverseDomainKey = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/.test(keyAppPart);
+            const isReverseDomainName = /^[a-zA-Z0-9_-]+(\.[a-zA-Z0-9_-]+)+$/.test(String(rawName).trim());
+            const cleanName = getCleanAppName(rawName);
+            const plat = p.platform || (k.includes('(iOS)') || k.includes('(IOS)') ? 'iOS' : 'Android');
+            if (isReverseDomainName || !p.appName) {
+                p.appName = cleanName;
+            }
+            p.platform = plat;
+
+            // 1. Deduplicate Features by feature name
+            if (Array.isArray(p.features)) {
+                const featMap = new Map();
+                p.features.forEach(f => {
+                    const fKey = (f.name || '').trim().toLowerCase();
+                    if (fKey && !featMap.has(fKey)) {
+                        featMap.set(fKey, f);
+                    }
+                });
+                if (p.features.length !== featMap.size) {
+                    p.features = Array.from(featMap.values());
+                    modified = true;
+                }
+            }
+
+            // 2. Deduplicate Scenarios by pageName or name
+            if (Array.isArray(p.scenarios)) {
+                const scenMap = new Map();
+                p.scenarios.forEach(s => {
+                    const sKey = (s.pageName || s.name || '').trim().toLowerCase();
+                    if (sKey && !scenMap.has(sKey)) {
+                        scenMap.set(sKey, s);
+                    }
+                });
+                if (p.scenarios.length !== scenMap.size) {
+                    p.scenarios = Array.from(scenMap.values());
+                    modified = true;
+                }
+            }
+
+            // 2.5 Scenario owns its page name; features are count-only; empty placeholders are not pages
+            if (typeof pruneProjectAssetOwnership === 'function') {
+                if (pruneProjectAssetOwnership(p)) {
+                    modified = true;
+                }
+            }
+
+            // 3. Deduplicate Standalone Scraped Pages by pageName
+            if (Array.isArray(p.pages)) {
+                const pageMap = new Map();
+                p.pages.forEach(pg => {
+                    const pKey = (pg.pageName || '').trim().toLowerCase();
+                    if (pKey && !pageMap.has(pKey)) {
+                        pageMap.set(pKey, pg);
+                    }
+                });
+                if (p.pages.length !== pageMap.size) {
+                    p.pages = Array.from(pageMap.values());
+                    modified = true;
+                }
+            }
+
+            // 3.5 Ensure every item has a valid, non-empty, unique ID
+            (p.scenarios || []).forEach((s, idx) => {
+                if (!s.id || s.id === 'undefined' || s.id === 'null') {
+                    s.id = 'scen_' + (s.name || s.pageName || 'scen').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + idx;
+                    modified = true;
+                }
+            });
+            (p.features || []).forEach((f, idx) => {
+                if (!f.id || f.id === 'undefined' || f.id === 'null') {
+                    f.id = 'feat_' + (f.name || 'feat').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + idx;
+                    modified = true;
+                }
+            });
+            (p.pages || []).forEach((pg, idx) => {
+                if (!pg.id || pg.id === 'undefined' || pg.id === 'null') {
+                    pg.id = 'page_' + (pg.pageName || 'page').replace(/[^a-zA-Z0-9_-]/g, '_') + '_' + idx;
+                    modified = true;
+                }
+            });
+
+            const total = (p.scenarios || []).length + (p.features || []).length + (p.pages || []).length;
+            if (total === 0 || (p.appName === 'Default App' && total === 0)) {
+                delete store[k];
+                modified = true;
+                return;
+            }
+
+            // Never remap unique-id keys such as "Calendar (iOS)::p_abc123"
+            const properKey = `${p.appName || cleanName} (${plat})`;
+            if (isReverseDomainKey && properKey !== k && String(k).indexOf('::') === -1) {
+                if (store[properKey]) {
+                    store[properKey].scenarios = (store[properKey].scenarios || []).concat(p.scenarios || []);
+                    store[properKey].features = (store[properKey].features || []).concat(p.features || []);
+                    store[properKey].pages = (store[properKey].pages || []).concat(p.pages || []);
+                } else {
+                    store[properKey] = p;
+                }
+                delete store[k];
+                modified = true;
+            }
+        });
+
+        if (modified) {
+            localStorage.setItem(REPO_STORAGE_KEY, JSON.stringify(store));
+        }
+    } catch (e) {
+        console.error('Error reading repo projects store:', e);
+        store = {};
+    }
+    return store;
+}
+window.getRepoProjectsStore = getProjectStore;
+
+function getRepoAssetsForActiveApp() {
+    const pages = new Set();
+    const scenarioNames = new Set();
+    const scenarioOutlines = new Set();
+    const featureNames = new Set();
+
+    // If the active session is in 'new' mode (or has NOT resumed an existing project from repo),
+    // do NOT validate against or block names from old repository projects!
+    if (window.activeProjectSessionMode === 'new' || !window.activeResumedProjectKey) {
+        return {
+            pages,
+            scenarioNames,
+            scenarioOutlines,
+            featureNames
+        };
+    }
+
+    try {
+        const store = getProjectStore();
+        const project = getProjectByKey(store, window.activeResumedProjectKey);
+        if (project) {
+            if (Array.isArray(project.pages)) {
+                project.pages.forEach(p => {
+                    if (p && p.pageName && p.pageName.trim()) {
+                        pages.add(p.pageName.trim().toLowerCase());
+                    }
+                    (p.features || []).forEach(f => {
+                        const n = (f && f.name) || (typeof f === 'string' ? f : '');
+                        if (n && n.trim()) featureNames.add(n.trim().toLowerCase());
+                    });
+                });
+            }
+            if (Array.isArray(project.scenarios)) {
+                project.scenarios.forEach(s => {
+                    if (s) {
+                        if (s.pageName && s.pageName.trim()) pages.add(s.pageName.trim().toLowerCase());
+                        if (s.name && s.name.trim()) scenarioNames.add(s.name.trim().toLowerCase());
+                        if (s.outline && s.outline.trim()) scenarioOutlines.add(s.outline.trim().toLowerCase());
+                        (s.features || []).forEach(f => {
+                            const n = (f && f.name) || (typeof f === 'string' ? f : '');
+                            if (n && n.trim()) featureNames.add(n.trim().toLowerCase());
+                        });
+                    }
+                });
+            }
+            if (Array.isArray(project.features)) {
+                project.features.forEach(f => {
+                    if (f && f.name && f.name.trim()) featureNames.add(f.name.trim().toLowerCase());
+                });
+            }
+        }
+    } catch (e) {
+        console.error("Error retrieving repo assets:", e);
+    }
+
+    return {
+        pages,
+        scenarioNames,
+        scenarioOutlines,
+        featureNames
+    };
+}
+
+function getRepoPageNamesForActiveApp() {
+    return getRepoAssetsForActiveApp().pages;
+}
+
+function isPageNameInRepo(name) {
+    if (!name || typeof name !== 'string') return false;
+    const lower = name.trim().toLowerCase();
+    const assets = getRepoAssetsForActiveApp();
+    return assets.pages.has(lower) || assets.scenarioNames.has(lower) || assets.featureNames.has(lower);
+}
+
+function isScenarioNameInRepo(name) {
+    if (!name || typeof name !== 'string') return false;
+    const lower = name.trim().toLowerCase();
+    const assets = getRepoAssetsForActiveApp();
+    return assets.scenarioNames.has(lower) || assets.pages.has(lower) || assets.featureNames.has(lower);
+}
+
+function isScenarioOutlineInRepo(outline) {
+    if (!outline || typeof outline !== 'string') return false;
+    const lower = outline.trim().toLowerCase();
+    const assets = getRepoAssetsForActiveApp();
+    return assets.scenarioOutlines.has(lower);
+}
+
+function isFeatureNameInRepo(name) {
+    if (!name || typeof name !== 'string') return false;
+    const lower = name.trim().toLowerCase();
+    const assets = getRepoAssetsForActiveApp();
+    return assets.featureNames.has(lower) || assets.pages.has(lower) || assets.scenarioNames.has(lower);
+}
+
+window.getRepoAssetsForActiveApp = getRepoAssetsForActiveApp;
+window.getRepoPageNamesForActiveApp = getRepoPageNamesForActiveApp;
+window.isPageNameInRepo = isPageNameInRepo;
+window.isScenarioNameInRepo = isScenarioNameInRepo;
+window.isScenarioOutlineInRepo = isScenarioOutlineInRepo;
+window.isFeatureNameInRepo = isFeatureNameInRepo;
+
 function syncRegisteredPageNames() {
     if (!window.registeredPageNames) window.registeredPageNames = new Set();
     // REMOVED the .clear() command so we don't wipe out empty pages!
@@ -7210,10 +8714,81 @@ function updateRowEyeButtonState() {
     const newExtraBtn = extraBtn.cloneNode(true);
     extraBtn.parentNode.replaceChild(newExtraBtn, extraBtn);
 
-   //popup extra button (for sub-feature)
+   //popup extra button (for sub-feature or Create New project launch)
    newExtraBtn.addEventListener('click', async () => {
-        document.getElementById('confirmationPopup').style.display = 'none';
-        document.getElementById('overlay').style.display = 'none';
+        try {
+            const extraBtnEl = document.getElementById('extra_btn');
+            const action = pendingExportAction || window.pendingExportAction;
+            const extraText = (extraBtnEl ? extraBtnEl.innerText : '').trim().toLowerCase();
+            const modalTitle = (document.getElementById('popup_title')?.innerText || '').trim().toLowerCase();
+            const isCreateNewAction = action === "confirmExistingProjectLaunch" || extraText.includes("create new") || modalTitle.includes("existing project");
+
+            // Primary Create New path is showConfirmDialog extraBtn.onclick / onExtra.
+            // Skip this listener so we do not create a second project or launch twice.
+            if (isCreateNewAction && extraBtnEl && typeof extraBtnEl.onclick === 'function') {
+                return;
+            }
+            if (isCreateNewAction && window._createNewProjectLaunchInFlight) {
+                return;
+            }
+
+            document.getElementById('confirmationPopup').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            if (extraBtnEl) extraBtnEl.style.display = 'none';
+
+            if (isCreateNewAction) {
+                window._createNewProjectLaunchInFlight = true;
+                try {
+                const launchData = pendingLaunchProjectData || window.pendingLaunchProjectData;
+                const existingProj = launchData ? launchData.project : null;
+                const activeApp = (existingProj && existingProj.appName) || resolveActiveAppName();
+                const plateformOption = (existingProj && existingProj.platform) || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android');
+
+                let dataToLaunch = launchData ? launchData.initialData : null;
+                if (!dataToLaunch || !Array.isArray(dataToLaunch) || dataToLaunch.length < 9) {
+                    dataToLaunch = [
+                        plateformOption,
+                        document.getElementById('devicename')?.value || '',
+                        document.getElementById('platformversion')?.value || '',
+                        document.getElementById('automationName')?.value || '',
+                        document.getElementById('appiumurl')?.value || '',
+                        document.getElementById('udid')?.value || '',
+                        document.getElementById('bundleID')?.value || '',
+                        document.getElementById('apppackage')?.value || '',
+                        document.getElementById('appactivity')?.value || ''
+                    ];
+                }
+
+                pendingLaunchProjectData = null;
+                window.pendingLaunchProjectData = null;
+                pendingExportAction = null;
+                window.pendingExportAction = null;
+
+                const uniqueInfo = (typeof createFreshRepoProject === 'function')
+                    ? createFreshRepoProject(activeApp, plateformOption)
+                    : { key: `${activeApp} (${plateformOption})::${Date.now().toString(36)}`, appName: activeApp };
+
+                if (typeof window.clearAllPagesAndScrapedDataForNewScenario === 'function') {
+                    window.clearAllPagesAndScrapedDataForNewScenario();
+                }
+
+                if (typeof window.setGlobalPageName === 'function') {
+                    window.setGlobalPageName(uniqueInfo.appName);
+                }
+
+                if (typeof triggerScreenshotLoader === 'function') triggerScreenshotLoader();
+                resetFormLockActive = false;
+                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+
+                const fnLaunch = (typeof launchApp === 'function') ? launchApp : window.launchApp;
+                if (typeof fnLaunch === 'function' && dataToLaunch) {
+                    await fnLaunch(dataToLaunch);
+                }
+                return;
+                } finally {
+                    window._createNewProjectLaunchInFlight = false;
+                }
+            }
 
         if (pendingExportAction === "renameFeature" && pendingFeatureRename) {
             const { newName, cellElement } = pendingFeatureRename;
@@ -7229,7 +8804,8 @@ function updateRowEyeButtonState() {
                     if (rect) {
                         const newArea = {
                             rect: rect,
-                            name: newName
+                            name: newName,
+                            pageName: (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''
                         };
                         registeredFeatureAreas.push(newArea);
                         syncExistingRowsWithNewFeature(newArea);
@@ -7238,14 +8814,30 @@ function updateRowEyeButtonState() {
                     console.error("Failed to parse row rect for sub-feature registration:", e);
                 }
             }
+            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
         }
 
         pendingFeatureRename = null;
         pendingExportAction = null;
+        } catch (extraErr) {
+            console.error("Error in newExtraBtn handler:", extraErr);
+        }
    });
 
    //popup okay button
    newOkayBtn.addEventListener('click', async () => {
+           const okayBtnEl = document.getElementById('okay_btn');
+           const continueAction = pendingExportAction || window.pendingExportAction;
+           const okayText = (okayBtnEl ? okayBtnEl.innerText : '').trim().toLowerCase();
+           const isContinueOldAction = continueAction === "confirmExistingProjectLaunch" || okayText.includes("continue with old");
+           // Primary path is showConfirmDialog okayBtn.onclick / onOkay.
+           if (isContinueOldAction && okayBtnEl && typeof okayBtnEl.onclick === 'function') {
+               return;
+           }
+           if (isContinueOldAction && window._resumeOldProjectLaunchInFlight) {
+               return;
+           }
+
            document.getElementById('confirmationPopup').style.display = 'none';
            document.getElementById('overlay').style.display = 'none';
 
@@ -7309,7 +8901,8 @@ function updateRowEyeButtonState() {
                                 if (rect) {
                                     const newArea = {
                                         rect: rect,
-                                        name: newName
+                                        name: newName,
+                                        pageName: (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''
                                     };
                                     registeredFeatureAreas.push(newArea);
                                     syncExistingRowsWithNewFeature(newArea);
@@ -7321,6 +8914,7 @@ function updateRowEyeButtonState() {
                    }
                }
                pendingFeatureRename = null;
+               if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 
            } else if (pendingExportAction === "download") {
                pendingExportAction = null;
@@ -7343,6 +8937,7 @@ function updateRowEyeButtonState() {
 
                    const tbody = document.getElementById('myTable');
                    if (tbody && tbody.querySelectorAll('tr').length < 5) adjustEmptyRows();
+                   if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                }
 
            // --- MULTI-DELETE LOGIC ---
@@ -7367,6 +8962,7 @@ function updateRowEyeButtonState() {
                    if (toggleMultiDeleteOpt && isMultiDeleteMode) {
                        toggleMultiDeleteOpt.click();
                    }
+                   if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                }
 
            // --- EXPLICIT PAGE DELETE LOGIC ---
@@ -7383,6 +8979,19 @@ function updateRowEyeButtonState() {
                    // Ensure Scenario Outline & Name are wiped from memory completely
                    if (window.pageScenarioData) {
                        delete window.pageScenarioData[page];
+                   }
+
+                   try {
+                       const store = getProjectStore();
+                       const appName = window.activeResumedAppName || resolveActiveAppName();
+                       const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
+                       const projectKey = window.activeResumedProjectKey || `${appName} (${platform})`;
+                       if (store[projectKey] && Array.isArray(store[projectKey].pages)) {
+                           store[projectKey].pages = store[projectKey].pages.filter(p => (p.pageName || '').trim().toLowerCase() !== page.trim().toLowerCase());
+                           persistProjectStore(store);
+                       }
+                   } catch (e) {
+                       console.error('Error removing deleted page from store:', e);
                    }
 
                    // 2. Remove all rows associated with this specific page
@@ -7467,6 +9076,7 @@ function updateRowEyeButtonState() {
                    }
 
                    window.pageToDelete = null;
+                   if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                }
 
             // --- CONFIRM RECORD SCENARIO (CLEAR ALL PAGES & START FRESH) ---
@@ -7478,6 +9088,109 @@ function updateRowEyeButtonState() {
                 if (typeof window.openScenarioModalDirectly === 'function') {
                     window.openScenarioModalDirectly("RECORD");
                 }
+
+            // --- CONFIRM CLEAR ALL REPOSITORY ACTION ---
+            } else if (pendingExportAction === "confirmClearRepositoryAction") {
+                pendingExportAction = null;
+                if (typeof window.setRepoProjectsStore === 'function') {
+                    window.setRepoProjectsStore({});
+                    if (typeof window.applyRepoChangeToHome === 'function') {
+                        window.applyRepoChangeToHome({ wipeSession: true, projectKey: window.activeResumedProjectKey });
+                    }
+                    if (typeof window.renderRepositoryView === 'function') {
+                        window.renderRepositoryView();
+                    }
+                }
+
+            // --- CONFIRM DELETE REPOSITORY PROJECT ---
+            } else if (pendingExportAction === "confirmDeleteRepoProject") {
+                pendingExportAction = null;
+                if (pendingRepoDelete && pendingRepoDelete.projectKey && typeof window.getRepoProjectsStore === 'function') {
+                    const store = window.getRepoProjectsStore();
+                    const deletedKey = pendingRepoDelete.projectKey;
+                    delete store[deletedKey];
+                    window.setRepoProjectsStore(store);
+                    if (typeof window.applyRepoChangeToHome === 'function') {
+                        window.applyRepoChangeToHome({
+                            projectKey: deletedKey,
+                            wipeSession: deletedKey === window.activeResumedProjectKey
+                        });
+                    }
+                    pendingRepoDelete = null;
+                    if (typeof window.renderRepositoryView === 'function') {
+                        window.renderRepositoryView();
+                    }
+                }
+
+            // --- CONFIRM DELETE INDIVIDUAL REPOSITORY ITEM ---
+            } else if (pendingExportAction === "confirmDeleteRepoItem") {
+                pendingExportAction = null;
+                if (pendingRepoDelete && pendingRepoDelete.projectKey && typeof window.getRepoProjectsStore === 'function') {
+                    const { projectKey, type, id } = pendingRepoDelete;
+                    const store = window.getRepoProjectsStore();
+                    const proj = store[projectKey];
+                    const homeChange = { projectKey, type };
+                    if (proj) {
+                        if (type === 'scenario') {
+                            const s = (proj.scenarios || []).find(x => x.id === id);
+                            homeChange.pageName = (s && (s.pageName || s.name)) || pendingRepoDelete.pageName;
+                            homeChange.scenarioName = (s && s.name) || pendingRepoDelete.scenarioName;
+                            proj.scenarios = (proj.scenarios || []).filter(x => x.id !== id);
+                        } else if (type === 'feature') {
+                            const featObj = (proj.features || []).find(f => f.id === id || f.name === id);
+                            const featName = (featObj ? featObj.name : null) || pendingRepoDelete.featureName || id;
+                            homeChange.featureName = featName;
+                            if (typeof window.removeFeatureCompletely === 'function') {
+                                window.removeFeatureCompletely(featName, projectKey);
+                            } else {
+                                proj.features = (proj.features || []).filter(f => f.id !== id && f.name !== id);
+                            }
+                        } else if (type === 'page') {
+                            const p = (proj.pages || []).find(x => x.id === id);
+                            homeChange.pageName = (p && p.pageName) || pendingRepoDelete.pageName;
+                            proj.pages = (proj.pages || []).filter(x => x.id !== id);
+                        }
+                        proj.lastUpdated = Date.now();
+                        window.setRepoProjectsStore(store);
+                    } else {
+                        homeChange.pageName = pendingRepoDelete.pageName;
+                        homeChange.featureName = pendingRepoDelete.featureName;
+                    }
+                    if (type !== 'feature' && !pendingRepoDelete._appliedHome && typeof window.applyRepoChangeToHome === 'function') {
+                        window.applyRepoChangeToHome(homeChange);
+                        pendingRepoDelete._appliedHome = true;
+                    }
+                    pendingRepoDelete = null;
+                    if (typeof window.renderRepositoryView === 'function') {
+                        window.renderRepositoryView();
+                    }
+                }
+
+            // --- CONFIRM EXISTING PROJECT LAUNCH (CONTINUE WITH OLD) ---
+            } else if (pendingExportAction === "confirmExistingProjectLaunch" || window.pendingExportAction === "confirmExistingProjectLaunch" || (document.getElementById('okay_btn')?.innerText || '').toLowerCase().includes("continue with old") || ((document.getElementById('popup_title')?.innerText || '').toLowerCase().includes("existing project") && (document.getElementById('okay_btn')?.innerText || '').toLowerCase().includes("continue"))) {
+                const launchData = pendingLaunchProjectData || window.pendingLaunchProjectData;
+                const proj = launchData ? launchData.project : null;
+                const projKey = launchData ? launchData.key : (proj ? `${proj.appName} (${proj.platform})` : null);
+                let dataToLaunch = launchData ? launchData.initialData : null;
+
+                const extraBtnEl = document.getElementById('extra_btn');
+                if (extraBtnEl) extraBtnEl.style.display = 'none';
+
+                if (!dataToLaunch) {
+                    dataToLaunch = [
+                        getSelectedPlatform(),
+                        document.getElementById('devicename')?.value || '',
+                        document.getElementById('platformversion')?.value || '',
+                        document.getElementById('automationName')?.value || '',
+                        document.getElementById('appiumurl')?.value || '',
+                        document.getElementById('udid')?.value || '',
+                        document.getElementById('bundleID')?.value || '',
+                        document.getElementById('apppackage')?.value || '',
+                        document.getElementById('appactivity')?.value || ''
+                    ];
+                }
+
+                await resumeExistingProjectAndLaunch(projKey, proj, dataToLaunch);
 
            // --- GENERAL RESET LOGIC ---
            } else if (pendingExportAction === "reset") {
@@ -7498,6 +9211,29 @@ function updateRowEyeButtonState() {
     newBackBtn.addEventListener('click', () => {
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('confirmationPopup').style.display = 'none';
+        const extraBtnEl = document.getElementById('extra_btn');
+        if (extraBtnEl) extraBtnEl.style.display = 'none';
+
+        const action = pendingExportAction || window.pendingExportAction;
+        const modalTitle = (document.getElementById('popup_title')?.innerText || '').trim().toLowerCase();
+        if (action === "confirmExistingProjectLaunch" || modalTitle.includes("existing project")) {
+            pendingLaunchProjectData = null;
+            window.pendingLaunchProjectData = null;
+            pendingExportAction = null;
+            window.pendingExportAction = null;
+            if (typeof unlockLaunchForm === 'function') {
+                unlockLaunchForm();
+            }
+            return;
+        }
+
+        if (pendingExportAction === "confirmExistingPageAction") {
+            pendingExistingPageAction = null;
+            const pageNameInput = document.getElementById('pagename_searchbox');
+            if (pageNameInput) {
+                pageNameInput.focus();
+            }
+        }
 
         if ((pendingExportAction === "renameFeature" || pendingExportAction === "createNewFeature") && pendingFeatureRename) {
             pendingFeatureRename.cellElement.innerText = pendingFeatureRename.oldName;
@@ -7516,7 +9252,10 @@ function updateRowEyeButtonState() {
     // Reset session + form lock (keeps table shell, clears rows) — see applyPostResetUI()
     function executeResetAction() {
             try {
-
+                // 0. Auto-archive any active session data to Repository before clearing
+                if (typeof archiveCurrentActiveSession === 'function') {
+                    archiveCurrentActiveSession();
+                }
 
                 // 1. Safely hide status bars and errors
                 const statusBar = document.getElementById('sttus_bar_div');
@@ -7596,6 +9335,10 @@ function updateRowEyeButtonState() {
 
                 if (scenarioOutlineText) {
                     scenarioOutlineText.value = "";
+                }
+
+                if (typeof window.syncActiveProjectToRepo === 'function') {
+                    window.syncActiveProjectToRepo();
                 }
 
                 // 6. HELPER: Safely delete old screenshots without crashing the app
@@ -8065,17 +9808,40 @@ function initPageNameLogic() {
     function isValidPageName(name) {
         if (!isGlobalPageNameValid(name)) return false;
 
-        // Duplicate Check (only when creating or renaming)
-        if (isEditMode) {
-            const trimmedName = name.trim();
-            // Sync before check to be absolutely sure
-            syncRegisteredPageNames();
+        const trimmedName = (name || '').trim();
+        const lowerName = trimmedName.toLowerCase();
+        // Sync before check to be absolutely sure
+        syncRegisteredPageNames();
 
-            // If renaming, ignore the original name
-            if (isRenameMode && trimmedName === renameTarget) return true;
+        // If renaming, ignore the original name
+        if (isRenameMode && lowerName === renameTarget.toLowerCase()) return true;
 
-            if (window.registeredPageNames && window.registeredPageNames.has(trimmedName)) return false;
+        if (window.registeredPageNames) {
+            for (let p of window.registeredPageNames) {
+                if (p && p.toLowerCase() === lowerName) return false;
+            }
         }
+
+        // Check active scenarios
+        if (window.pageScenarioData) {
+            for (let p in window.pageScenarioData) {
+                const scen = window.pageScenarioData[p];
+                if (scen && scen.scenarioName && scen.scenarioName.trim().toLowerCase() === lowerName) {
+                    return false;
+                }
+            }
+        }
+
+        // Check active features
+        if (Array.isArray(registeredFeatureAreas)) {
+            for (let f of registeredFeatureAreas) {
+                if (f && f.name && f.name.trim().toLowerCase() === lowerName) {
+                    return false;
+                }
+            }
+        }
+
+        if (typeof isPageNameInRepo === 'function' && isPageNameInRepo(trimmedName)) return false;
 
         return true;
     }
@@ -8183,6 +9949,14 @@ function initPageNameLogic() {
             }
         } else {
             if (pageEditIcon) pageEditIcon.style.display = 'inline-block';
+            if (pageNameInput) {
+                pageNameInput.readOnly = true;
+                pageNameInput.style.cursor = 'default';
+            }
+            if (confirmIcon) confirmIcon.style.display = 'none';
+            if (cancelIcon) cancelIcon.style.display = 'none';
+            if (addPageIcon) addPageIcon.style.display = 'inline-block';
+            if (dropdownIcon) dropdownIcon.style.display = 'inline-block';
 
             if (scenarioOutlineBar && scenarioOutlineText) {
                 const recWrap = document.getElementById('recordScenarioWrapper');
@@ -8210,6 +9984,7 @@ function initPageNameLogic() {
                 }
             }
         }
+        if (!window._restoringProject && !window._applyingRepoToHome && typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     };
 
     // --- MODERN DROPDOWN HOVER LOGIC ---
@@ -8422,14 +10197,25 @@ function initPageNameLogic() {
                 } else if (!isGlobalPageNameValid(val)) {
                     errorMsg = "Invalid Format: Must start with a letter and contain only alphanumeric chars or single spaces.";
                     isValid = false;
-                } else if (isEditMode) {
+                } else {
 
-                    // Gather all known pages from memory to prevent ANY duplicates
+                    // Gather all known pages, scenario names, and feature names from active memory
                     let allKnownPages = new Set(window.registeredPageNames || []);
 
-                    // Include pages that have scenario data but might not be in the table
+                    // Include pages and scenario names from scenario data
                     if (window.pageScenarioData) {
-                        Object.keys(window.pageScenarioData).forEach(p => allKnownPages.add(p));
+                        Object.keys(window.pageScenarioData).forEach(p => {
+                            allKnownPages.add(p);
+                            const s = window.pageScenarioData[p];
+                            if (s && s.scenarioName) allKnownPages.add(s.scenarioName);
+                        });
+                    }
+
+                    // Include active features
+                    if (Array.isArray(registeredFeatureAreas)) {
+                        registeredFeatureAreas.forEach(a => {
+                            if (a && a.name) allKnownPages.add(a.name);
+                        });
                     }
 
                     // CRITICAL FIX: Include the page we just navigated away from via the '+' icon.
@@ -8438,20 +10224,31 @@ function initPageNameLogic() {
                         allKnownPages.add(previousPageName);
                     }
 
+                    // Include repository assets for the current app / project
+                    const repoAssets = typeof getRepoAssetsForActiveApp === 'function' ? getRepoAssetsForActiveApp() : { pages: new Set(), scenarioNames: new Set(), featureNames: new Set() };
+                    repoAssets.pages.forEach(rp => allKnownPages.add(rp));
+                    repoAssets.scenarioNames.forEach(sn => allKnownPages.add(sn));
+                    repoAssets.featureNames.forEach(fn => allKnownPages.add(fn));
+
                     // Check for duplicates (Case-Insensitive for better UX)
                     let isDuplicate = false;
+                    let isRepoDup = false;
+                    const lowerTrimmed = trimmedName.toLowerCase();
                     for (let existingPage of allKnownPages) {
-                        if (existingPage.toLowerCase() === trimmedName.toLowerCase()) {
+                        if (existingPage.toLowerCase() === lowerTrimmed) {
                             // If we are renaming (pencil icon), it's allowed to match its own original name
-                            if (!(isRenameMode && typeof renameTarget !== 'undefined' && renameTarget.toLowerCase() === trimmedName.toLowerCase())) {
+                            if (!(isRenameMode && typeof renameTarget !== 'undefined' && renameTarget.toLowerCase() === lowerTrimmed)) {
                                 isDuplicate = true;
+                                if (repoAssets.pages.has(lowerTrimmed) || repoAssets.scenarioNames.has(lowerTrimmed) || repoAssets.featureNames.has(lowerTrimmed)) {
+                                    isRepoDup = true;
+                                }
                                 break;
                             }
                         }
                     }
 
                     if (isDuplicate) {
-                        errorMsg = "Page Name already exists.";
+                        errorMsg = isRepoDup ? "Page Name already exists in repository." : "Page Name already exists.";
                         isValid = false;
                     }
                 }
@@ -8552,7 +10349,12 @@ function initPageNameLogic() {
                 } else if (!isValidPageName(pageNameInput.value)) {
                     pageNameInput.focus();
                     flashPageNameError();
-                    showCustomAlert("Invalid Format", "Please provide a valid Page Name without special characters.", "warning");
+                    const trimmed = pageNameInput.value.trim();
+                    if (typeof isPageNameInRepo === 'function' && isPageNameInRepo(trimmed)) {
+                        showCustomAlert("Page Exists in Repository", `The page "${trimmed}" already exists in the repository for this application. Please choose a different page name.`, "warning");
+                    } else {
+                        showCustomAlert("Invalid Format", "Please provide a valid, unique Page Name without special characters.", "warning");
+                    }
                     return;
                 }
 
@@ -8580,6 +10382,33 @@ function initPageNameLogic() {
                                 pageCell.innerText = newName;
                             }
                         });
+                    }
+
+                    // 4. Update in Repository Store
+                    try {
+                        const store = getProjectStore();
+                        const appName = window.activeResumedAppName || resolveActiveAppName();
+                        const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
+                        const projectKey = window.activeResumedProjectKey || `${appName} (${platform})`;
+                        if (store[projectKey]) {
+                            if (Array.isArray(store[projectKey].pages)) {
+                                store[projectKey].pages.forEach(p => {
+                                    if (p && (p.pageName || '').trim().toLowerCase() === renameTarget.toLowerCase()) {
+                                        p.pageName = newName;
+                                    }
+                                });
+                            }
+                            if (Array.isArray(store[projectKey].scenarios)) {
+                                store[projectKey].scenarios.forEach(s => {
+                                    if (s && (s.pageName || '').trim().toLowerCase() === renameTarget.toLowerCase()) {
+                                        s.pageName = newName;
+                                    }
+                                });
+                            }
+                            persistProjectStore(store);
+                        }
+                    } catch (e) {
+                        console.error('Error updating renamed page in store:', e);
                     }
                 } else {
                     window.registeredPageNames.add(newName);
@@ -8942,13 +10771,21 @@ function initScenarioOutlineLogic() {
     // Real-Time Validation Triggers
     if (editScenarioNameInput) {
         editScenarioNameInput.addEventListener("input", function() {
+            const currentActivePage = document.getElementById('pagename_searchbox')?.value.trim() || "";
             const val = this.value.trim();
+            const lowerVal = val.toLowerCase();
+            const origName = (window.pageScenarioData && window.pageScenarioData[currentActivePage]?.scenarioName || "").trim().toLowerCase();
+
             if (!val) {
                 showEditError(this, "edit_scenario_error_icon", "edit_scenario_error_text", "Scenario Name is required");
             } else if (val.length < 3) {
                 showEditError(this, "edit_scenario_error_icon", "edit_scenario_error_text", "Scenario Name must be at least 3 characters");
             } else if (!/^[A-Za-z][A-Za-z0-9_]*(\s[A-Za-z0-9_]+)*$/.test(val)) {
                 showEditError(this, "edit_scenario_error_icon", "edit_scenario_error_text", "Must start with a letter and contain only alphanumeric chars or single spaces.");
+            } else if (window.pageScenarioData && Object.keys(window.pageScenarioData).some(p => p.toLowerCase() !== currentActivePage.toLowerCase() && window.pageScenarioData[p]?.scenarioName?.trim().toLowerCase() === lowerVal)) {
+                showEditError(this, "edit_scenario_error_icon", "edit_scenario_error_text", "Scenario Name already exists.");
+            } else if (typeof isScenarioNameInRepo === 'function' && isScenarioNameInRepo(val) && lowerVal !== origName) {
+                showEditError(this, "edit_scenario_error_icon", "edit_scenario_error_text", "Scenario Name already exists in repository.");
             } else {
                 clearEditError(this, "edit_scenario_error_icon");
             }
@@ -8957,11 +10794,19 @@ function initScenarioOutlineLogic() {
 
     if (editScenarioOutlineInput) {
         editScenarioOutlineInput.addEventListener("input", function() {
+            const currentActivePage = document.getElementById('pagename_searchbox')?.value.trim() || "";
             const val = this.value.trim();
+            const lowerVal = val.toLowerCase();
+            const origOutline = (window.pageScenarioData && window.pageScenarioData[currentActivePage]?.scenarioOutline || "").trim().toLowerCase();
+
             if (!val) {
                 showEditError(this, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline is required");
             } else if (val.length < 3) {
                 showEditError(this, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline must be at least 3 characters");
+            } else if (window.pageScenarioData && Object.keys(window.pageScenarioData).some(p => p.toLowerCase() !== currentActivePage.toLowerCase() && window.pageScenarioData[p]?.scenarioOutline?.trim().toLowerCase() === lowerVal)) {
+                showEditError(this, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline already exists.");
+            } else if (typeof isScenarioOutlineInRepo === 'function' && isScenarioOutlineInRepo(val) && lowerVal !== origOutline) {
+                showEditError(this, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline already exists in repository.");
             } else {
                 clearEditError(this, "edit_outline_error_icon");
             }
@@ -8984,6 +10829,8 @@ function initScenarioOutlineLogic() {
 
             const nameVal = editScenarioNameInput.value.trim();
             const outlineVal = editScenarioOutlineInput.value.trim();
+            const origName = (window.pageScenarioData && window.pageScenarioData[currentActivePage]?.scenarioName || "").trim().toLowerCase();
+            const origOutline = (window.pageScenarioData && window.pageScenarioData[currentActivePage]?.scenarioOutline || "").trim().toLowerCase();
 
             // Validate Name
             if (!nameVal) {
@@ -8995,6 +10842,12 @@ function initScenarioOutlineLogic() {
             } else if (!/^[A-Za-z][A-Za-z0-9_]*(\s[A-Za-z0-9_]+)*$/.test(nameVal)) {
                 showEditError(editScenarioNameInput, "edit_scenario_error_icon", "edit_scenario_error_text", "Must start with a letter and contain only alphanumeric chars or single spaces.");
                 isValid = false;
+            } else if (window.pageScenarioData && Object.keys(window.pageScenarioData).some(p => p.toLowerCase() !== currentActivePage.toLowerCase() && window.pageScenarioData[p]?.scenarioName?.trim().toLowerCase() === nameVal.toLowerCase())) {
+                showEditError(editScenarioNameInput, "edit_scenario_error_icon", "edit_scenario_error_text", "Scenario Name already exists.");
+                isValid = false;
+            } else if (typeof isScenarioNameInRepo === 'function' && isScenarioNameInRepo(nameVal) && nameVal.toLowerCase() !== origName) {
+                showEditError(editScenarioNameInput, "edit_scenario_error_icon", "edit_scenario_error_text", "Scenario Name already exists in repository.");
+                isValid = false;
             }
 
             // Validate Outline
@@ -9003,6 +10856,12 @@ function initScenarioOutlineLogic() {
                 isValid = false;
             } else if (outlineVal.length < 3) {
                 showEditError(editScenarioOutlineInput, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline must be at least 3 characters");
+                isValid = false;
+            } else if (window.pageScenarioData && Object.keys(window.pageScenarioData).some(p => p.toLowerCase() !== currentActivePage.toLowerCase() && window.pageScenarioData[p]?.scenarioOutline?.trim().toLowerCase() === outlineVal.toLowerCase())) {
+                showEditError(editScenarioOutlineInput, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline already exists.");
+                isValid = false;
+            } else if (typeof isScenarioOutlineInRepo === 'function' && isScenarioOutlineInRepo(outlineVal) && outlineVal.toLowerCase() !== origOutline) {
+                showEditError(editScenarioOutlineInput, "edit_outline_error_icon", "edit_outline_error_text", "Scenario Outline already exists in repository.");
                 isValid = false;
             }
 
@@ -9016,6 +10875,7 @@ function initScenarioOutlineLogic() {
 
             // Update main view Scenario Outline Box
             soInput.value = outlineVal;
+            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 
             // Close Modal
             editModal.style.display = "none";
@@ -9109,10 +10969,11 @@ function showCustomAlert(title, message, type) {
 }
 
 /// HELPER: Confirm modal (Cancel + Confirm) for destructive / export actions
-function showConfirmDialog({ title, mainText, subText, action, theme, okayBtnText, extraBtnText }) {
+function showConfirmDialog({ title, mainText, subText, action, theme, okayBtnText, extraBtnText, onOkay, onExtra, onCancel }) {
     setModalTheme(theme || "confirm");
 
-    document.getElementById('back_btn').style.display = 'inline-block';
+    const backBtn = document.getElementById('back_btn');
+    backBtn.style.display = 'inline-block';
 
     const okayBtn = document.getElementById('okay_btn');
     okayBtn.innerText = okayBtnText || 'Confirm';
@@ -9129,7 +10990,51 @@ function showConfirmDialog({ title, mainText, subText, action, theme, okayBtnTex
     document.getElementById('popup_main_text').innerHTML = mainText || "";
     document.getElementById('popup_sub_text').innerHTML = subText || "";
 
-    if (action) pendingExportAction = action;
+    if (action) {
+        pendingExportAction = action;
+        window.pendingExportAction = action;
+    }
+
+    if (typeof onExtra === 'function') {
+        extraBtn.onclick = async (e) => {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            document.getElementById('confirmationPopup').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            extraBtn.style.display = 'none';
+            extraBtn.onclick = null;
+            await onExtra();
+        };
+    } else {
+        extraBtn.onclick = null;
+    }
+
+    if (typeof onOkay === 'function') {
+        okayBtn.onclick = async (e) => {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            document.getElementById('confirmationPopup').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            const extraBtnEl = document.getElementById('extra_btn');
+            if (extraBtnEl) extraBtnEl.style.display = 'none';
+            okayBtn.onclick = null;
+            await onOkay();
+        };
+    } else {
+        okayBtn.onclick = null;
+    }
+
+    if (typeof onCancel === 'function') {
+        backBtn.onclick = (e) => {
+            if (e) { e.preventDefault(); e.stopPropagation(); }
+            document.getElementById('confirmationPopup').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+            const extraBtnEl = document.getElementById('extra_btn');
+            if (extraBtnEl) extraBtnEl.style.display = 'none';
+            backBtn.onclick = null;
+            onCancel();
+        };
+    } else {
+        backBtn.onclick = null;
+    }
 
     document.getElementById('confirmationPopup').style.display = 'block';
     document.getElementById('overlay').style.display = 'block';
@@ -9168,13 +11073,23 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!val || val.trim() === '') return "Page Name is required";
         if (val.trim().length < 3) return "Page Name must be at least 3 characters";
 
-        // Check if page already exists
+        // Check if page already exists in active memory
         const trimmedName = val.trim();
-        if (window.registeredPageNames && window.registeredPageNames.has(trimmedName)) {
-            // If in Record Scenario mode (renaming current page), allow it.
-            // But if in Add Scenario mode (new page), it must be unique.
-            if (!(currentScenarioMode === "RECORD" && trimmedName === initialModalPageName)) {
-                return "Page Name already exists.";
+        if (window.registeredPageNames) {
+            const isLocalDup = Array.from(window.registeredPageNames).some(p => p && p.toLowerCase() === trimmedName.toLowerCase());
+            if (isLocalDup) {
+                // If in Record Scenario mode (renaming current page), allow it.
+                // But if in Add Scenario mode (new page), it must be unique.
+                if (!(currentScenarioMode === "RECORD" && trimmedName.toLowerCase() === (initialModalPageName || '').toLowerCase())) {
+                    return "Page Name already exists.";
+                }
+            }
+        }
+
+        // Check if page already exists in repository
+        if (typeof isPageNameInRepo === 'function' && isPageNameInRepo(trimmedName)) {
+            if (!(currentScenarioMode === "RECORD" && trimmedName.toLowerCase() === (initialModalPageName || '').toLowerCase())) {
+                return "Page Name already exists in repository.";
             }
         }
 
@@ -9189,13 +11104,35 @@ document.addEventListener("DOMContentLoaded", () => {
         if (val.trim().length < 3) return "Scenario Name must be at least 3 characters";
         const regex = /^[A-Za-z][A-Za-z0-9_]*(\s[A-Za-z0-9_]+)*$/;
         if (!regex.test(val)) return "Scenario Name must start with a letter and can contain only letters, numbers, _, and single spaces.";
+
+        const trimmedVal = val.trim();
+        const lowerVal = trimmedVal.toLowerCase();
+
+        // Check active session scenario names
+        if (window.pageScenarioData) {
+            for (let p in window.pageScenarioData) {
+                const scen = window.pageScenarioData[p];
+                if (scen && scen.scenarioName && scen.scenarioName.trim().toLowerCase() === lowerVal) {
+                    if (!(currentScenarioMode === "RECORD" && p.toLowerCase() === (initialModalPageName || '').toLowerCase())) {
+                        return "Scenario Name already exists.";
+                    }
+                }
+            }
+        }
+
+        // Check repository scenario names for this application
+        if (typeof isScenarioNameInRepo === 'function' && isScenarioNameInRepo(trimmedVal)) {
+            const isSelfRename = currentScenarioMode === "RECORD" && initialModalPageName && window.pageScenarioData && window.pageScenarioData[initialModalPageName] && window.pageScenarioData[initialModalPageName].scenarioName && window.pageScenarioData[initialModalPageName].scenarioName.trim().toLowerCase() === lowerVal;
+            if (!isSelfRename) {
+                return "Scenario Name already exists in repository.";
+            }
+        }
+
         return "";
     }
 
     function validateScenarioOutline(val) {
-        if (!val || val.trim() === '') return "Scenario Outline is required";
-        if (val.trim().length < 3) return "Scenario Outline must be at least 3 characters";
-        return "";
+        return ""; // Scenario outline is optional and not validated
     }
 
     function showError(inputEl, iconId, textId, message) {
@@ -9268,9 +11205,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if(recScenarioOutlineInput) {
             recScenarioOutlineInput.addEventListener("input", function() {
-                const errorMsg = validateScenarioOutline(this.value);
-                if (errorMsg) showError(this, "rec_outline_error_icon", "rec_outline_error_text", errorMsg);
-                else clearError(this, "rec_outline_error_icon");
+                clearError(this, "rec_outline_error_icon");
             });
         }
 
@@ -9348,7 +11283,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // 7. Reset counters
             counter = 0;
-            initialData = [];
             xpath_id = 0;
             screenNameList = [];
         };
@@ -9436,6 +11370,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         function handleRecordScenarioClick() {
+            const pageNameEl = document.getElementById("pagename_searchbox");
+            const pageVal = (pageNameEl?.value || "").trim();
+
+            if (!pageVal || pageVal.toLowerCase() === "all" || (typeof isGlobalPageNameValid === "function" && !isGlobalPageNameValid(pageVal))) {
+                showCustomAlert(
+                    "Page Name Required",
+                    "Please enter a valid Page Name before recording a scenario.",
+                    "warning"
+                );
+                if (pageNameEl) {
+                    pageNameEl.focus();
+                    pageNameEl.style.borderColor = "red";
+                }
+                return;
+            }
+
             const pageCount = getUniquePageCount();
 
             // Only remove/clear pages if multiple pages have been created
@@ -9582,10 +11532,15 @@ document.addEventListener("DOMContentLoaded", () => {
                     const newArea = {
                         rect: pendingFeatureData.rect,
                         name: featureName,
-                        fullPage: !!pendingFeatureData.fullPage
+                        fullPage: !!pendingFeatureData.fullPage,
+                        pageName: (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''
                     };
                     registeredFeatureAreas.push(newArea);
                     syncExistingRowsWithNewFeature(newArea);
+                    if (typeof saveFeatureToRepo === 'function') {
+                        saveFeatureToRepo(featureName, newArea.rect, newArea.fullPage);
+                    }
+                    if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                     // Name shows only when hovering that feature — do not leave a sticky label
                     clearOverlay();
                 }
@@ -9659,11 +11614,7 @@ document.addEventListener("DOMContentLoaded", () => {
                    isValid = false;
                }
 
-               const outlineError = validateScenarioOutline(recScenarioOutlineInput.value);
-               if (outlineError) {
-                   showError(recScenarioOutlineInput, "rec_outline_error_icon", "rec_outline_error_text", outlineError);
-                   isValid = false;
-               }
+               clearError(recScenarioOutlineInput, "rec_outline_error_icon");
 
                if (!isValid) return;
 
@@ -9716,6 +11667,12 @@ document.addEventListener("DOMContentLoaded", () => {
                        };
                    }
                }
+
+               // Persist into Repository store
+               if (typeof saveScenarioToRepo === 'function') {
+                   saveScenarioToRepo(newPageName, newScenarioName, newScenarioOutline);
+               }
+               if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 
                // Update the main top searchbox and filter so the user sees the new page context
                // Note: Calling window.setGlobalPageName here automatically renders the outline we just saved!
@@ -10524,3 +12481,1499 @@ if (platformVersionField) {
         this.dataset.userEdited = 'true';
     });
 }
+
+/* =============================================================================
+   PERSISTENT PROJECT-BASED REPOSITORY ENGINE (Organized by App / Project)
+   ============================================================================= */
+(function initRepositoryEngine() {
+    let currentSelectedProjectKey = null; // null = Root Projects list; string = inside project
+    let currentRepoFilter = 'all';
+    let currentRepoPlatformFilter = 'all'; // 'all' | 'iOS' | 'Android'
+    let repoSearchQuery = '';
+    let repoProjectSearchQuery = '';
+    let activeDrawerData = null; // Currently opened page / scenario in drawer
+
+    function setProjectStore(store) {
+        try {
+            localStorage.setItem(REPO_STORAGE_KEY, JSON.stringify(store));
+        } catch (e) {
+            console.error('Error saving repo projects store:', e);
+        }
+    }
+    window.setRepoProjectsStore = setProjectStore;
+
+    function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform) {
+        const targetKey = window.activeResumedProjectKey || key;
+        if (!store[targetKey]) {
+            const platform = fallbackPlatform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
+            const appName = window.activeResumedAppName || fallbackAppName || resolveActiveAppName();
+
+            store[targetKey] = {
+                projectId: (String(targetKey).includes('::') ? String(targetKey).split('::').pop() : null),
+                appName: appName,
+                platform: platform,
+                createdAt: Date.now(),
+                lastUpdated: Date.now(),
+                scenarios: [],
+                features: [],
+                pages: []
+            };
+        }
+        return store[targetKey];
+    }
+
+    window.saveScenarioToRepo = function(pageName, scenarioName, scenarioOutline, platform, appName, elements) {
+        if (!scenarioName && !scenarioOutline) return;
+        const currentPlatform = platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
+        const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
+        const projectKey = window.activeResumedProjectKey || `${currentApp} (${currentPlatform})`;
+
+        const store = getProjectStore();
+        const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
+
+        const pName = pageName || '';
+        const sName = scenarioName || (pName ? `${pName} Scenario` : 'Scenario');
+
+        // Upsert / deduplicate by scenario name / pageName
+        const existingIdx = (project.scenarios || []).findIndex(s =>
+            (s.name && s.name.toLowerCase() === sName.toLowerCase()) ||
+            (pName && s.pageName && s.pageName.toLowerCase() === pName.toLowerCase())
+        );
+
+        let scenElements = Array.isArray(elements) && elements.length > 0 ? elements : null;
+        const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
+        if (!scenElements && extractFn) {
+            const tableRows = extractFn('myTable') || [];
+            if (tableRows.length > 0) {
+                scenElements = tableRows.filter(r => (r['PAGE NAME'] || '').trim().toLowerCase() === pName.trim().toLowerCase());
+                if (scenElements.length === 0) scenElements = tableRows;
+            }
+        }
+
+        const item = {
+            id: existingIdx >= 0 ? project.scenarios[existingIdx].id : ('scen_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+            name: sName,
+            pageName: pName,
+            outline: scenarioOutline || '',
+            elements: scenElements || (existingIdx >= 0 && Array.isArray(project.scenarios[existingIdx].elements) ? project.scenarios[existingIdx].elements : []),
+            platform: currentPlatform,
+            appName: currentApp,
+            timestamp: Date.now(),
+            features: mergeFeatureItems(
+                (existingIdx >= 0 && project.scenarios[existingIdx].features) || [],
+                featureItemsFromElements(scenElements || (existingIdx >= 0 ? project.scenarios[existingIdx].elements : []), pName),
+                collectLiveFeatureItemsForPage(pName)
+            )
+        };
+
+        if (existingIdx >= 0) {
+            project.scenarios[existingIdx] = item;
+        } else {
+            project.scenarios.unshift(item);
+        }
+
+        // Scenario page belongs ONLY to scenario, NOT to standalone pages
+        if (pName && Array.isArray(project.pages)) {
+            project.pages = project.pages.filter(pg => (pg.pageName || '').trim().toLowerCase() !== pName.trim().toLowerCase());
+        }
+        if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
+
+        project.lastUpdated = Date.now();
+        setProjectStore(store);
+    };
+
+    window.saveFeatureToRepo = function(featureName, rect, fullPage, platform, appName) {
+        if (!featureName) return;
+        const currentPlatform = platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
+        const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
+        const projectKey = window.activeResumedProjectKey || `${currentApp} (${currentPlatform})`;
+
+        const store = getProjectStore();
+        const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
+        const currentPage = (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '';
+
+        const featureItem = {
+            name: featureName.trim(),
+            rect: rect || null,
+            fullPage: !!fullPage,
+            pageName: currentPage,
+            timestamp: Date.now()
+        };
+
+        let owner = (typeof findFeatureOwnerInProject === 'function') ? findFeatureOwnerInProject(project, currentPage) : null;
+        if (!owner && typeof seedInitialProjectPage === 'function' && !(project.pages || []).length) {
+            seedInitialProjectPage(project, currentApp, currentPlatform);
+        }
+        if (!owner && (project.pages || []).length) {
+            owner = project.pages.find(pg => repoNameKey(pg.pageName) === repoNameKey(currentPage)) || project.pages[0];
+        }
+        if (!owner && (project.scenarios || []).length) {
+            owner = project.scenarios[0];
+        }
+        if (owner) nestFeatureOnOwner(owner, featureItem);
+
+        if (!Array.isArray(project.features)) project.features = [];
+        const existingFeatIdx = project.features.findIndex(f => f && f.name && f.name.trim().toLowerCase() === featureName.trim().toLowerCase());
+        const featObj = {
+            id: existingFeatIdx >= 0 ? (project.features[existingFeatIdx].id || ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6))) : ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+            name: featureName.trim(),
+            rect: rect || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].rect : null),
+            fullPage: !!fullPage,
+            pageName: currentPage || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].pageName : 'Default'),
+            platform: currentPlatform,
+            timestamp: existingFeatIdx >= 0 ? (project.features[existingFeatIdx].timestamp || Date.now()) : Date.now()
+        };
+        if (existingFeatIdx >= 0) {
+            project.features[existingFeatIdx] = { ...project.features[existingFeatIdx], ...featObj };
+        } else {
+            project.features.unshift(featObj);
+        }
+
+        project.lastUpdated = Date.now();
+        setProjectStore(store);
+    };
+
+    window.removeFeatureCompletely = function(featureName, projectKey) {
+        if (!featureName) return;
+        const cleanFeatName = featureName.trim().toLowerCase();
+        const targetProjectKey = projectKey || window.activeResumedProjectKey;
+
+        // 1. Remove from registeredFeatureAreas in memory
+        if (typeof registeredFeatureAreas !== 'undefined' && Array.isArray(registeredFeatureAreas)) {
+            registeredFeatureAreas = registeredFeatureAreas.filter(a => !a || !a.name || a.name.trim().toLowerCase() !== cleanFeatName);
+            window.registeredFeatureAreas = registeredFeatureAreas;
+        }
+
+        // 2. Remove canvas highlights and labels for this feature
+        const overlay = document.getElementById("overlayContainer");
+        if (overlay) {
+            overlay.querySelectorAll('.feature-area-label').forEach(el => {
+                if (el.textContent.trim().toLowerCase() === cleanFeatName) {
+                    const prev = el.previousElementSibling;
+                    if (prev && prev.classList.contains('feature-area-highlight')) {
+                        prev.remove();
+                    }
+                    el.remove();
+                }
+            });
+            overlay.querySelectorAll('.feature-area-highlight').forEach(el => {
+                if (el.dataset && el.dataset.featureName && el.dataset.featureName.toLowerCase() === cleanFeatName) {
+                    el.remove();
+                }
+            });
+        }
+
+        // 3. In live #myTable: update all cells having this feature name to their row's Page Name
+        const tableRows = document.querySelectorAll("#myTable tr:not(.empty-excel-row)");
+        tableRows.forEach(tr => {
+            const featCell = tr.querySelector('.featureName');
+            const pageCell = tr.querySelector('.page');
+            if (featCell && featCell.innerText.trim().toLowerCase() === cleanFeatName) {
+                const rowPageName = (pageCell ? pageCell.innerText.trim() : '') || document.getElementById('pagename_searchbox')?.value || 'Default';
+                featCell.innerText = rowPageName;
+            }
+        });
+
+        // 4. In Repository Store: remove from features array and update all page elements
+        const store = (typeof getProjectStore === 'function') ? getProjectStore() : ((typeof window.getRepoProjectsStore === 'function') ? window.getRepoProjectsStore() : {});
+        const pKeys = targetProjectKey && store[targetProjectKey] ? [targetProjectKey] : Object.keys(store);
+
+        pKeys.forEach(k => {
+            const proj = store[k];
+            if (proj) {
+                // Remove from proj.features
+                if (Array.isArray(proj.features)) {
+                    proj.features = proj.features.filter(f => !f || !f.name || f.name.trim().toLowerCase() !== cleanFeatName);
+                }
+                const stripOwnerFeatures = (owner) => {
+                    if (!owner || !Array.isArray(owner.features)) return;
+                    owner.features = owner.features.filter(f => !f || !((f.name || f) + '').trim() || ((f.name || f) + '').trim().toLowerCase() !== cleanFeatName);
+                };
+                (proj.scenarios || []).forEach(s => {
+                    stripOwnerFeatures(s);
+                    if (Array.isArray(s.elements)) {
+                        s.elements.forEach(el => {
+                            const curFeat = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
+                            if (curFeat === cleanFeatName) {
+                                const pName = el['PAGE NAME'] || s.pageName || 'Default';
+                                el['FEATURE NAME'] = pName;
+                                el.FeatureName = pName;
+                            }
+                        });
+                    }
+                });
+                // Update elements in proj.pages: replace FEATURE NAME with PAGE NAME
+                if (Array.isArray(proj.pages)) {
+                    proj.pages.forEach(pg => {
+                        stripOwnerFeatures(pg);
+                        const fallbackPage = pg.pageName || 'Default';
+                        if (Array.isArray(pg.elements)) {
+                            pg.elements.forEach(el => {
+                                const curFeat = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
+                                if (curFeat === cleanFeatName) {
+                                    const pName = el['PAGE NAME'] || fallbackPage;
+                                    el['FEATURE NAME'] = pName;
+                                    el.FeatureName = pName;
+                                }
+                            });
+                        }
+                    });
+                }
+                proj.lastUpdated = Date.now();
+            }
+        });
+
+        if (typeof setProjectStore === 'function') setProjectStore(store);
+        if (typeof window.setRepoProjectsStore === 'function') window.setRepoProjectsStore(store);
+
+        // 5. Close side view inspector if it is showing this deleted feature
+        if (typeof currentViewerPayload !== 'undefined' && currentViewerPayload && currentViewerPayload.data) {
+            const openName = (currentViewerPayload.data.name || '').trim().toLowerCase();
+            if (openName === cleanFeatName) {
+                if (typeof closeRepoSideView === 'function') {
+                    closeRepoSideView();
+                }
+            }
+        }
+
+        // 6. Re-render repository view if open
+        if (typeof window.renderRepositoryView === 'function') {
+            window.renderRepositoryView();
+        }
+    };
+
+    window.saveScrapedPageToRepo = function(pageName, elements, platform, appName) {
+        if (!pageName || typeof pageName !== 'string' || pageName.trim() === '' || pageName.trim().toLowerCase() === 'all') return;
+        const currentPlatform = platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
+        const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
+        const projectKey = window.activeResumedProjectKey || `${currentApp} (${currentPlatform})`;
+
+        const store = getProjectStore();
+        const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
+
+        const pName = pageName.trim();
+        const existingIdx = (project.pages || []).findIndex(p => p.pageName && p.pageName.trim().toLowerCase() === pName.toLowerCase());
+        const cleanElements = Array.isArray(elements) ? JSON.parse(JSON.stringify(elements)) : [];
+
+        // Empty extract (e.g. all rows deleted from table)
+        if (!cleanElements.length) {
+            if (existingIdx >= 0) {
+                const existing = project.pages[existingIdx];
+                existing.elements = [];
+                existing.count = 0;
+                project.lastUpdated = Date.now();
+                setProjectStore(store);
+            }
+            return;
+        }
+
+        const item = {
+            id: existingIdx >= 0 ? project.pages[existingIdx].id : ('page_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
+            pageName: pName,
+            appName: currentApp,
+            count: cleanElements.length,
+            elements: cleanElements,
+            platform: currentPlatform,
+            isInitialPage: existingIdx >= 0 ? !!project.pages[existingIdx].isInitialPage : false,
+            timestamp: Date.now(),
+            features: mergeFeatureItems(
+                (existingIdx >= 0 && project.pages[existingIdx].features) || [],
+                featureItemsFromElements(cleanElements, pName),
+                collectLiveFeatureItemsForPage(pName)
+            )
+        };
+
+        if (existingIdx >= 0) {
+            project.pages[existingIdx] = item;
+        } else {
+            project.pages.unshift(item);
+        }
+        project.lastUpdated = Date.now();
+        setProjectStore(store);
+    };
+
+    window.selectActiveRepoProject = function() {
+        if (window.activeResumedProjectKey) {
+            currentSelectedProjectKey = window.activeResumedProjectKey;
+        }
+    };
+
+    window.syncActiveProjectToRepo = function() {
+        if (window._restoringProject || window._applyingRepoToHome || window._syncingHomeToRepo) return;
+        window._syncingHomeToRepo = true;
+        try {
+            const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
+            const appName = window.activeResumedAppName || resolveActiveAppName();
+            const projectKey = window.activeResumedProjectKey || `${appName} (${platform})`;
+
+            const store = getProjectStore();
+            const project = getOrCreateProject(store, projectKey, appName, platform);
+
+            const scenarioPageSet = new Set();
+
+            // 1. Sync Scenarios (only if outline or name exists)
+            if (window.pageScenarioData) {
+                Object.keys(window.pageScenarioData).forEach(pName => {
+                    const sData = window.pageScenarioData[pName];
+                    if (sData && (sData.scenarioName || sData.scenarioOutline)) {
+                        scenarioPageSet.add(pName.trim().toLowerCase());
+                        window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName);
+                    }
+                });
+            }
+
+            // 2. Sync Features (only if features exist)
+            const liveFeatures = (typeof window.registeredFeatureAreas !== 'undefined' && Array.isArray(window.registeredFeatureAreas))
+                ? window.registeredFeatureAreas
+                : [];
+            if (Array.isArray(liveFeatures)) {
+                liveFeatures.forEach(area => {
+                    if (area && area.name) {
+                        window.saveFeatureToRepo(area.name, area.rect, area.fullPage, platform, appName);
+                    }
+                });
+            }
+
+            // 3. Sync Standalone Pages & Scraped Elements
+            const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
+            const allElements = extractFn ? (extractFn('myTable') || []) : [];
+            const pageGroups = {};
+
+            if (allElements.length > 0) {
+                allElements.forEach(el => {
+                    const p = (el['PAGE NAME'] || document.getElementById('pagename_searchbox')?.value || '').trim();
+                    if (p && p.toLowerCase() !== 'all') {
+                        if (!pageGroups[p]) pageGroups[p] = [];
+                        pageGroups[p].push(el);
+                    }
+                });
+            }
+
+            // Always track active page even if 0 elements remain in myTable after deletion
+            const activePage = (document.getElementById('pagename_searchbox')?.value || '').trim();
+            if (activePage && activePage.toLowerCase() !== 'all') {
+                if (!pageGroups[activePage]) {
+                    pageGroups[activePage] = [];
+                }
+            }
+
+            Object.keys(pageGroups).forEach(p => {
+                const key = p.trim().toLowerCase();
+                if (scenarioPageSet.has(key)) return;
+                window.saveScrapedPageToRepo(p, pageGroups[p], platform, appName);
+            });
+
+            if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
+
+            project.lastUpdated = Date.now();
+            project.lastActivePageName = (document.getElementById('pagename_searchbox')?.value || '').trim() || project.lastActivePageName || '';
+            setProjectStore(store);
+
+            try {
+                window._resumedProjectSnapshot = JSON.parse(JSON.stringify(project));
+            } catch (_) {
+                window._resumedProjectSnapshot = project;
+            }
+
+            const repoTab = document.getElementById('tab-repository');
+            const repoIsOpen = repoTab && repoTab.classList.contains('is-active');
+            if (repoIsOpen && window.activeResumedProjectKey && (!currentSelectedProjectKey || currentSelectedProjectKey === window.activeResumedProjectKey)) {
+                currentSelectedProjectKey = window.activeResumedProjectKey;
+            }
+            if (typeof window.renderRepositoryView === 'function') {
+                window.renderRepositoryView();
+            }
+        } catch (e) {
+            console.error('Error in syncActiveProjectToRepo:', e);
+        } finally {
+            window._syncingHomeToRepo = false;
+        }
+    };
+    window.archiveCurrentActiveSession = window.syncActiveProjectToRepo;
+
+    function formatDate(ts) {
+        if (!ts) return '';
+        const d = new Date(ts);
+        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    function downloadFile(filename, content, type = 'application/json') {
+        const blob = new Blob([content], { type });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+
+    // --- SIDE-BY-SIDE REPOSITORY WORKSPACE JSON ENGINE ---
+    let activeViewerItem = null;
+    let currentViewerPayload = null;
+
+    function getProjectByKey(store, key) {
+        if (!store || !key) return null;
+        if (store[key]) return store[key];
+        const targetLower = String(key).trim().toLowerCase();
+        const foundKey = Object.keys(store).find(k => k.trim().toLowerCase() === targetLower);
+        if (foundKey) return store[foundKey];
+        const idPart = String(key).includes('::') ? String(key).split('::').pop() : '';
+        if (idPart) {
+            const byId = Object.keys(store).find(k =>
+                (store[k] && store[k].projectId === idPart) || k.endsWith('::' + idPart)
+            );
+            if (byId) return store[byId];
+        }
+        return null;
+    }
+
+    function getItemJsonPayload(item, projectKey) {
+        if (!item) return null;
+        const store = getProjectStore();
+        const project = getProjectByKey(store, projectKey) || {};
+        const platform = item.platform || project.platform || 'Android';
+
+        if (item.type === 'page') {
+            let rawElList = Array.isArray(item.elements) && item.elements.length > 0 ? item.elements : [];
+            const pageName = item.pageName || 'page';
+
+            if (rawElList.length === 0 && Array.isArray(project.pages)) {
+                const matched = project.pages.find(p => p.id === item.id || (p.pageName && repoNameKey(p.pageName) === repoNameKey(pageName)));
+                if (matched && Array.isArray(matched.elements) && matched.elements.length > 0) {
+                    rawElList = matched.elements;
+                }
+            }
+            if (rawElList.length === 0 && typeof window.extractAllTableData === 'function') {
+                const tableRows = window.extractAllTableData('myTable') || [];
+                const matchingRows = tableRows.filter(r => repoNameKey(r['PAGE NAME']) === repoNameKey(pageName));
+                if (matchingRows.length > 0) {
+                    rawElList = matchingRows;
+                }
+            }
+
+            const cleanElList = rawElList.map(el => ({
+                "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
+                "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
+                "XPATH": el['XPATH'] || el.ControlId || '',
+                "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
+                "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || 'Name',
+                "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
+                "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
+                "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
+                "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
+                "APP URL": el['APP URL'] || el.AppUrl || ''
+            }));
+
+            const downloadPayload = {
+                "isRecordscenario": false,
+                "dashboardControls": cleanElList
+            };
+
+            return {
+                filename: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
+                badge: 'SCRAPED PAGE JSON',
+                badgeClass: 'repo-badge-page',
+                title: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
+                subtitle: `${cleanElList.length} UI ${cleanElList.length === 1 ? 'control' : 'controls'} • ${item.appName || project.appName || 'Application'} (${platform})`,
+                data: downloadPayload
+            };
+        } else if (item.type === 'scenario') {
+            // Find scraped steps for this scenario (from item.elements or fallback to project.pages)
+            let rawSteps = Array.isArray(item.elements) && item.elements.length > 0 ? item.elements : [];
+            if (rawSteps.length === 0 && Array.isArray(project.pages)) {
+                const matchedPage = project.pages.find(p =>
+                    (p.pageName && item.pageName && p.pageName.trim().toLowerCase() === item.pageName.trim().toLowerCase()) ||
+                    (p.pageName && item.name && p.pageName.trim().toLowerCase() === item.name.trim().toLowerCase())
+                );
+                if (matchedPage && Array.isArray(matchedPage.elements)) {
+                    rawSteps = matchedPage.elements;
+                }
+            }
+
+            const pageName = item.pageName || item.name || 'Default';
+            const cleanSteps = rawSteps.map(el => ({
+                "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
+                "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
+                "XPATH": el['XPATH'] || el.ControlId || '',
+                "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
+                "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || 'Name',
+                "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
+                "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
+                "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
+                "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
+                "APP URL": el['APP URL'] || el.AppUrl || ''
+            }));
+
+            const downloadPayload = {
+                "isRecordscenario": true,
+                "dashboardControls": {
+                    "APP URL": "",
+                    "SCENARIOS": [
+                        {
+                            "SCENARIO_NAME": item.name || pageName || "Scenario",
+                            "SCENARIO_OUTLINE": item.outline || item.name || "",
+                            "STEPS": cleanSteps
+                        }
+                    ]
+                }
+            };
+
+            return {
+                filename: `${(item.name || 'scenario').replace(/\s+/g, '_')}_scenario.json`,
+                badge: 'SCENARIO JSON',
+                badgeClass: 'repo-badge-scenario',
+                title: `${(item.name || 'scenario').replace(/\s+/g, '_')}_scenario.json`,
+                subtitle: `Scenario: ${item.name || 'Scenario'} • ${cleanSteps.length} scraped ${cleanSteps.length === 1 ? 'step' : 'steps'} • ${item.appName || project.appName || 'Application'} (${platform})`,
+                data: downloadPayload
+            };
+        } else if (item.type === 'feature') {
+            return {
+                filename: `${(item.name || 'feature').replace(/\s+/g, '_')}_feature.json`,
+                badge: 'FEATURE JSON',
+                badgeClass: 'repo-badge-feature',
+                title: `${(item.name || 'feature').replace(/\s+/g, '_')}_feature.json`,
+                subtitle: `Feature • ${item.pageName || 'Page'} (${platform})`,
+                data: {
+                    "type": "Feature",
+                    "project": projectKey,
+                    "name": item.name || "Feature",
+                    "pageName": item.pageName || "",
+                    "rect": item.rect || null,
+                    "fullPage": !!item.fullPage,
+                    "platform": platform,
+                    "timestamp": item.timestamp || Date.now(),
+                    "exportedAt": new Date(item.timestamp || Date.now()).toISOString()
+                }
+            };
+        }
+        return null;
+    }
+
+    function openRepoJsonSideView(item) {
+        if (!item) return;
+        try {
+            const payloadInfo = getItemJsonPayload(item, currentSelectedProjectKey);
+            if (!payloadInfo) return;
+
+            activeViewerItem = { ...item };
+            currentViewerPayload = payloadInfo;
+
+            const rightCol = document.getElementById('repoRightColumn');
+            const jsonBox = document.getElementById('repoJsonViewerBox');
+            const tabTitleEl = document.getElementById('repoJsonViewerTitle');
+            const crumbAppEl = document.getElementById('repoJsonCrumbApp');
+            const crumbPageEl = document.getElementById('repoJsonCrumbPage');
+            const crumbFileEl = document.getElementById('repoJsonCrumbFile');
+            const sizeEl = document.getElementById('repoJsonPayloadSize');
+            const statusInfoEl = document.getElementById('repoJsonStatusInfo');
+            const codeEl = document.getElementById('repoJsonCodeContent');
+            const gutterEl = document.getElementById('repoJsonGutter');
+
+            if (rightCol) rightCol.style.display = 'flex';
+            if (jsonBox) jsonBox.style.display = 'flex';
+
+            const jsonStr = JSON.stringify(payloadInfo.data, null, 2);
+            const lines = jsonStr.split('\n');
+            const lineCount = lines.length;
+            const bytes = new Blob([jsonStr]).size;
+            const sizeStr = bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+
+            const filename = payloadInfo.filename || payloadInfo.title || 'payload.json';
+
+            if (tabTitleEl) tabTitleEl.textContent = filename;
+            if (crumbAppEl) {
+                const proj = getProjectByKey(getProjectStore(), currentSelectedProjectKey);
+                crumbAppEl.textContent = (typeof getProjectCardTitle === 'function' && proj)
+                    ? getProjectCardTitle(proj, currentSelectedProjectKey)
+                    : (currentSelectedProjectKey || 'Project');
+            }
+            if (crumbPageEl) crumbPageEl.textContent = item.pageName || item.name || 'Workspace';
+            if (crumbFileEl) crumbFileEl.textContent = filename;
+            if (sizeEl) sizeEl.textContent = `${sizeStr} • ${lineCount} lines`;
+            if (statusInfoEl) {
+                statusInfoEl.textContent = item.type === 'scenario' ? 'Scenario JSON Standard' : (item.type === 'feature' ? 'Feature Zone JSON' : 'Page Controls JSON');
+            }
+
+            // Render line numbers in gutter as <span> elements matching line-height
+            if (gutterEl) {
+                let gutterHtml = '';
+                for (let i = 1; i <= lineCount; i++) {
+                    gutterHtml += `<span>${i}</span>`;
+                }
+                gutterEl.innerHTML = gutterHtml;
+            }
+
+            if (codeEl) {
+                if (typeof formatJsonToHtml === 'function') {
+                    codeEl.innerHTML = formatJsonToHtml(jsonStr);
+                } else {
+                    codeEl.textContent = jsonStr;
+                }
+            }
+
+            // Reset scroll position so line 1 is immediately at the top
+            const scrollEl = document.getElementById('repoJsonEditorScroll');
+            if (scrollEl) {
+                scrollEl.scrollTop = 0;
+                scrollEl.scrollLeft = 0;
+            }
+
+            // Highlight selected card in horizontal strip
+            document.querySelectorAll('#repoCardsContainer .repo-card').forEach(card => {
+                const cardId = card.getAttribute('data-repo-id');
+                const isMatch = (cardId && item.id && cardId === item.id) ||
+                                (cardId && item.name && cardId === item.name) ||
+                                (cardId && item.pageName && cardId === item.pageName);
+                card.classList.toggle('is-selected', !!isMatch);
+            });
+        } catch (err) {
+            console.error('Error in openRepoJsonSideView:', err);
+        }
+    }
+
+    function closeRepoSideView() {
+        const workspace = document.getElementById('repoSplitWorkspace');
+        const rightCol = document.getElementById('repoRightColumn');
+        if (workspace) workspace.classList.remove('is-split');
+        if (rightCol) rightCol.style.display = 'none';
+
+        document.querySelectorAll('#repoCardsContainer .repo-card').forEach(card => {
+            card.classList.remove('is-selected');
+        });
+        activeViewerItem = null;
+        currentViewerPayload = null;
+    }
+
+    window.renderRepositoryView = function(filter, query) {
+        if (filter !== undefined) currentRepoFilter = filter;
+        if (query !== undefined) {
+            if (currentSelectedProjectKey) repoSearchQuery = query.toLowerCase().trim();
+            else repoProjectSearchQuery = query.toLowerCase().trim();
+        }
+
+        const store = getProjectStore();
+        const projectKeys = Object.keys(store);
+
+        // Elements
+        const projectsView = document.getElementById('repoProjectsView');
+        const detailsView = document.getElementById('repoDetailsView');
+        const rootActions = document.getElementById('repoRootActions');
+        const projectActions = document.getElementById('repoProjectActions');
+        const crumbDivider = document.getElementById('repoCrumbDivider');
+        const crumbProject = document.getElementById('repoCrumbProject');
+        const crumbRoot = document.getElementById('repoCrumbRoot');
+        const emptyState = document.getElementById('repoEmptyState');
+        const emptyTitle = document.getElementById('repoEmptyTitle');
+        const emptyDesc = document.getElementById('repoEmptyDesc');
+        const headerDesc = document.getElementById('repoHeaderDesc');
+
+        // Calculate global repository stats
+        let globalScenarios = 0;
+        let globalFeatures = 0;
+        let globalPages = 0;
+        let iosCount = 0;
+        let androidCount = 0;
+
+        projectKeys.forEach(k => {
+            const p = store[k];
+            if (p) {
+                globalScenarios += (p.scenarios || []).length;
+                globalFeatures += (typeof countProjectFeatures === 'function') ? countProjectFeatures(p) : ((p.features || []).length);
+                globalPages += (p.pages || []).length;
+                const plat = (p.platform || '').toLowerCase();
+                if (plat.includes('ios')) iosCount++;
+                else if (plat.includes('android')) androidCount++;
+            }
+        });
+
+        const totalProjectsEl = document.getElementById('repoTotalProjectsCount');
+        const heroScenariosEl = document.getElementById('repoHeroTotalScenarios');
+        const heroFeaturesEl = document.getElementById('repoHeroTotalFeatures');
+        const heroPagesEl = document.getElementById('repoHeroTotalPages');
+        const tabPlatformAll = document.getElementById('repoTabPlatformAll');
+        const tabPlatformIos = document.getElementById('repoTabPlatformIos');
+        const tabPlatformAndroid = document.getElementById('repoTabPlatformAndroid');
+
+        if (totalProjectsEl) totalProjectsEl.textContent = projectKeys.length;
+        if (heroScenariosEl) heroScenariosEl.textContent = globalScenarios;
+        if (heroFeaturesEl) heroFeaturesEl.textContent = globalFeatures;
+        if (heroPagesEl) heroPagesEl.textContent = globalPages;
+        if (tabPlatformAll) tabPlatformAll.textContent = projectKeys.length;
+        if (tabPlatformIos) tabPlatformIos.textContent = iosCount;
+        if (tabPlatformAndroid) tabPlatformAndroid.textContent = androidCount;
+
+        const activeProj = currentSelectedProjectKey ? getProjectByKey(store, currentSelectedProjectKey) : null;
+
+        // If no project selected -> Render ROOT PROJECTS VIEW
+        if (!activeProj) {
+            currentSelectedProjectKey = null;
+            closeRepoSideView();
+
+            if (projectsView) projectsView.style.display = 'block';
+            if (detailsView) detailsView.style.display = 'none';
+            document.getElementById('tab-repository')?.classList.remove('is-workspace-open');
+            if (rootActions) rootActions.style.display = 'flex';
+            if (projectActions) projectActions.style.display = 'none';
+            if (crumbDivider) crumbDivider.style.display = 'none';
+            if (crumbProject) crumbProject.style.display = 'none';
+            if (crumbRoot) {
+                crumbRoot.classList.add('is-active');
+                crumbRoot.innerHTML = `
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    <span>Application Projects</span>`;
+            }
+            if (headerDesc) headerDesc.textContent = "Persistent workspaces organized by application. Inspect, export, and manage your captured scenarios and scraped elements.";
+
+            const grid = document.getElementById('repoProjectsGrid');
+            if (!grid) return;
+
+            let filteredKeys = projectKeys.slice();
+
+            // Filter by platform
+            if (currentRepoPlatformFilter !== 'all') {
+                filteredKeys = filteredKeys.filter(k => {
+                    const p = store[k];
+                    const plat = (p.platform || '').toLowerCase();
+                    return plat.includes(currentRepoPlatformFilter.toLowerCase());
+                });
+            }
+
+            // Filter by search query
+            if (repoProjectSearchQuery) {
+                filteredKeys = filteredKeys.filter(k => {
+                    const p = store[k];
+                    return k.toLowerCase().includes(repoProjectSearchQuery) ||
+                           (p.appName || '').toLowerCase().includes(repoProjectSearchQuery) ||
+                           (p.platform || '').toLowerCase().includes(repoProjectSearchQuery);
+                });
+            }
+
+            if (filteredKeys.length === 0) {
+                grid.innerHTML = '';
+                if (emptyState) {
+                    emptyState.style.display = 'flex';
+                    if (emptyTitle) emptyTitle.textContent = projectKeys.length === 0 ? "No Saved App Projects Yet" : "No Matching Projects";
+                    if (emptyDesc) emptyDesc.textContent = projectKeys.length === 0 ? "When you scrape UI elements, define feature areas, or record scenarios on the Home page, they will automatically be organized into project workspaces here." : "Try adjusting your platform filter or search query.";
+                }
+                return;
+            }
+
+            if (emptyState) emptyState.style.display = 'none';
+
+            // Sort projects by lastUpdated desc
+            filteredKeys.sort((a, b) => (store[b].lastUpdated || 0) - (store[a].lastUpdated || 0));
+
+            let html = '';
+            filteredKeys.forEach(k => {
+                const p = store[k];
+                const totalScen = (p.scenarios || []).length;
+                const totalFeat = (typeof countProjectFeatures === 'function') ? countProjectFeatures(p) : ((p.features || []).length);
+                const totalPages = (p.pages || []).length;
+                const initial = (p.appName || 'A').charAt(0).toUpperCase();
+                const isIos = (p.platform || '').toLowerCase().includes('ios');
+                const platformBadge = isIos ? '🍎 iOS' : '🤖 Android';
+                const platformBadgeClass = isIos ? 'is-ios' : 'is-android';
+                const avatarClass = isIos ? 'is-ios' : 'is-android';
+
+                // Extract asset names for preview tags
+                const assetNames = [];
+                (p.pages || []).forEach(pg => { if (pg.pageName && !assetNames.includes(pg.pageName)) assetNames.push(pg.pageName); });
+                (p.scenarios || []).forEach(sc => { if (sc.name && !assetNames.includes(sc.name)) assetNames.push(sc.name); });
+                const visibleTags = assetNames.slice(0, 3);
+                const remainingTags = assetNames.length - 3;
+
+                const displayName = (typeof getProjectCardTitle === 'function') ? getProjectCardTitle(p, k) : (p.appName || k);
+                const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(p, k) : '';
+                const nameTitle = shortId ? `${displayName} (${shortId})` : displayName;
+
+                html += `
+                <div class="repo-project-card" data-project-key="${escapeDummyHtml(k)}">
+                    <div class="repo-project-header">
+                        <div class="repo-project-identity">
+                            <div class="repo-project-icon-box ${avatarClass}">${escapeDummyHtml(initial)}</div>
+                            <div class="repo-project-info">
+                                <h3 class="repo-project-name" title="${escapeDummyHtml(nameTitle)}">${escapeDummyHtml(displayName)}</h3>
+                                <span class="repo-project-date">
+                                    <svg viewBox="0 0 24 24" width="10" height="10" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                                    <span>Active: ${formatDate(p.lastUpdated || p.createdAt)}${shortId ? ` · ${escapeDummyHtml(shortId)}` : ''}</span>
+                                </span>
+                            </div>
+                        </div>
+                        <span class="repo-project-badge-pill ${platformBadgeClass}">${escapeDummyHtml(platformBadge)}</span>
+                    </div>
+
+                    <div class="repo-project-stats-strip">
+                        <div class="repo-pstat-item pstat-scenarios" title="${totalScen} Recorded Scenarios">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                            <span class="repo-pstat-num">${totalScen}</span>
+                            <span class="repo-pstat-lbl">Scenarios</span>
+                        </div>
+                        <div class="repo-pstat-item pstat-features" title="${totalFeat} Features">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                            <span class="repo-pstat-num">${totalFeat}</span>
+                            <span class="repo-pstat-lbl">Features</span>
+                        </div>
+                        <div class="repo-pstat-item pstat-pages" title="${totalPages} Scraped Pages">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+                            <span class="repo-pstat-num">${totalPages}</span>
+                            <span class="repo-pstat-lbl">Pages</span>
+                        </div>
+                    </div>
+
+                    ${visibleTags.length > 0 ? `
+                    <div class="repo-project-asset-tags">
+                        ${visibleTags.map(t => `<span class="repo-proj-tag" title="${escapeDummyHtml(t)}">🏷 ${escapeDummyHtml(t)}</span>`).join('')}
+                        ${remainingTags > 0 ? `<span class="repo-proj-tag-more">+${remainingTags} more</span>` : ''}
+                    </div>` : '<div class="repo-project-asset-tags"></div>'}
+
+                    <div class="repo-project-footer">
+                        <div class="repo-open-link-btn">
+                            <span>Open Workspace</span>
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                        </div>
+                        <div class="repo-project-actions">
+                            <button type="button" class="repo-btn-sm" data-action="export-project-card" data-p-key="${escapeDummyHtml(k)}" title="Export Project as JSON">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <span>Export</span>
+                            </button>
+                            <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-project-card" data-p-key="${escapeDummyHtml(k)}" title="Delete Project">
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
+                                <span>Delete</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
+            });
+
+            grid.innerHTML = html;
+            return;
+        }
+
+        // --- DETAILS VIEW FOR SELECTED PROJECT ---
+        const project = activeProj;
+        if (projectsView) projectsView.style.display = 'none';
+        if (detailsView) detailsView.style.display = 'flex';
+        document.getElementById('tab-repository')?.classList.add('is-workspace-open');
+        if (rootActions) rootActions.style.display = 'none';
+        if (projectActions) projectActions.style.display = 'flex';
+        if (crumbDivider) crumbDivider.style.display = 'inline';
+        if (crumbProject) {
+            crumbProject.style.display = 'inline';
+            crumbProject.textContent = ((typeof getProjectCardTitle === 'function') ? getProjectCardTitle(project, currentSelectedProjectKey) : (project.appName || currentSelectedProjectKey))
+                + ((typeof getProjectShortId === 'function' && getProjectShortId(project, currentSelectedProjectKey)) ? ` · ${getProjectShortId(project, currentSelectedProjectKey)}` : '');
+        }
+        if (crumbRoot) {
+            crumbRoot.classList.remove('is-active');
+            crumbRoot.innerHTML = `
+                <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="19" y1="12" x2="5" y2="12"></line>
+                    <polyline points="12 19 5 12 12 5"></polyline>
+                </svg>
+                <span>All Projects</span>`;
+        }
+        if (headerDesc) headerDesc.textContent = `Viewing saved assets for ${project.appName} (${project.platform}). Preserved across resets and restarts.`;
+
+        // Update Project-level counters
+        const scCount = document.getElementById('repoScenarioCount');
+        const ftCount = document.getElementById('repoFeatureCount');
+        const pgCount = document.getElementById('repoPageCount');
+        const allCount = document.getElementById('repoAllCount');
+        const scenTabCount = document.getElementById('repoScenTabCount');
+        const featTabCount = document.getElementById('repoFeatTabCount');
+        const pageTabCount = document.getElementById('repoPageTabCount');
+
+        const totalScenarios = (project.scenarios || []).length;
+        const totalFeatures = (typeof countProjectFeatures === 'function') ? countProjectFeatures(project) : ((project.features || []).length);
+        const totalPages = (project.pages || []).length;
+        const totalAll = totalScenarios + totalFeatures + totalPages;
+
+        if (scCount) scCount.textContent = totalScenarios;
+        if (ftCount) ftCount.textContent = totalFeatures;
+        if (pgCount) pgCount.textContent = totalPages;
+        if (allCount) allCount.textContent = totalAll;
+        if (scenTabCount) scenTabCount.textContent = totalScenarios;
+        if (featTabCount) featTabCount.textContent = totalFeatures;
+        if (pageTabCount) pageTabCount.textContent = totalPages;
+
+        const container = document.getElementById('repoCardsContainer');
+        if (!container) return;
+
+        // Render items based on selected tab
+        let items = [];
+        if (currentRepoFilter === 'all' || currentRepoFilter === 'scenarios') {
+            (project.scenarios || []).forEach(s => items.push({ type: 'scenario', ...s }));
+        }
+        if (currentRepoFilter === 'all' || currentRepoFilter === 'pages') {
+            (project.pages || []).forEach(p => items.push({ type: 'page', ...p }));
+        }
+        if (currentRepoFilter === 'all' || currentRepoFilter === 'features') {
+            (project.features || []).forEach(f => items.push({ type: 'feature', ...f }));
+        }
+
+        // Sort items by timestamp desc
+        items.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+        // Filter by search query within project
+        if (repoSearchQuery) {
+            items = items.filter(item => {
+                const nameMatch = (item.name || '').toLowerCase().includes(repoSearchQuery);
+                const pageMatch = (item.pageName || '').toLowerCase().includes(repoSearchQuery);
+                const outlineMatch = (item.outline || '').toLowerCase().includes(repoSearchQuery);
+                const elementsMatch = item.elements && item.elements.some(el =>
+                    (el['CONTROL NAME'] || '').toLowerCase().includes(repoSearchQuery) ||
+                    (el['XPATH'] || '').toLowerCase().includes(repoSearchQuery)
+                );
+                const featuresMatch = (item.features || []).some(f => ((f && f.name) || '').toLowerCase().includes(repoSearchQuery));
+                return nameMatch || pageMatch || outlineMatch || elementsMatch || featuresMatch;
+            });
+        }
+
+        if (items.length === 0) {
+            container.innerHTML = '<div style="padding: 16px 20px; color: #64748b; font-size: 12px; font-weight: 500;">No assets found in this project matching the selected filter.</div>';
+            closeRepoSideView();
+            return;
+        }
+
+        let html = '';
+        items.forEach(item => {
+            const isSelected = activeViewerItem && activeViewerItem.id === item.id;
+            if (item.type === 'scenario') {
+                // Find scraped steps count for this scenario
+                const rawSteps = item.elements || [];
+                let stepsCount = Array.isArray(rawSteps) && rawSteps.length > 0 ? rawSteps.length : 0;
+                if (stepsCount === 0 && Array.isArray(project.pages)) {
+                    const matchedPage = project.pages.find(p =>
+                        (p.pageName && item.pageName && p.pageName.trim().toLowerCase() === item.pageName.trim().toLowerCase()) ||
+                        (p.pageName && item.name && p.pageName.trim().toLowerCase() === item.name.trim().toLowerCase())
+                    );
+                    if (matchedPage && Array.isArray(matchedPage.elements)) {
+                        stepsCount = matchedPage.elements.length;
+                    }
+                }
+
+                const scenFeatNames = new Set();
+                const pName = item.pageName || item.name || 'Default';
+                (item.features || []).forEach(f => {
+                    const fn = (f && f.name) || f;
+                    if (fn && isDistinctFeatureName(fn, pName)) scenFeatNames.add(String(fn).trim());
+                });
+                (rawSteps || []).forEach(el => {
+                    const fn = el && (el['FEATURE NAME'] || el.FeatureName);
+                    if (fn && isDistinctFeatureName(fn, pName)) scenFeatNames.add(String(fn).trim());
+                });
+                (project.features || []).forEach(f => {
+                    if (f && f.name && isDistinctFeatureName(f.name, pName)) {
+                        scenFeatNames.add(String(f.name).trim());
+                    }
+                });
+                const scenFeatList = Array.from(scenFeatNames);
+
+                html += `
+                <div class="repo-card ${isSelected ? 'is-selected' : ''}" data-repo-type="scenario" data-repo-id="${item.id}">
+                    <div class="repo-card-top">
+                        <div class="repo-badge-group">
+                            <span class="repo-badge repo-badge-scenario">Scenario</span>
+                            <span class="repo-badge repo-badge-platform">${escapeDummyHtml(item.platform || project.platform || 'Android')}</span>
+                        </div>
+                        <span class="repo-card-date">${formatDate(item.timestamp)}</span>
+                    </div>
+                    <h3 class="repo-card-title">${escapeDummyHtml(item.name)}</h3>
+                    <div class="repo-card-meta-row">
+                        <div class="repo-meta-item">
+                            <span class="repo-meta-label">Outline:</span>
+                            <span class="repo-meta-value">${escapeDummyHtml(item.outline || item.name || 'None')}</span>
+                        </div>
+                        <div class="repo-meta-item">
+                            <span class="repo-meta-label">Page:</span>
+                            <span class="repo-meta-value">${escapeDummyHtml(item.pageName || item.name || 'Default')}</span>
+                        </div>
+                    </div>
+                    <div class="repo-card-meta-row">
+                        <div class="repo-meta-item">
+                            <span class="repo-meta-label">Features:</span>
+                            <span class="repo-meta-value">${escapeDummyHtml(scenFeatList.join(', ') || 'None')}</span>
+                        </div>
+                    </div>
+                    <div class="repo-card-badge-pill">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
+                        <span>${stepsCount} Scraped ${stepsCount === 1 ? 'Step' : 'Steps'}</span>
+                    </div>
+                    <div class="repo-card-actions">
+                        <button type="button" class="repo-btn-sm repo-btn-view" data-action="view-json" data-id="${item.id}" data-type="scenario" title="Inspect JSON">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <span>Inspect</span>
+                        </button>
+                        <button type="button" class="repo-btn-sm" data-action="download-json" data-id="${item.id}" data-type="scenario" title="Export as JSON file">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>Export</span>
+                        </button>
+                        <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-item" data-id="${item.id}" data-type="scenario" title="Delete from project">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
+                            <span>Delete</span>
+                        </button>
+                    </div>
+                </div>`;
+            } else if (item.type === 'page') {
+                let elList = Array.isArray(item.elements) && item.elements.length > 0 ? item.elements : [];
+                if (elList.length === 0 && Array.isArray(project.pages)) {
+                    const matched = project.pages.find(p => p.id === item.id || (p.pageName && repoNameKey(p.pageName) === repoNameKey(item.pageName)));
+                    if (matched && Array.isArray(matched.elements) && matched.elements.length > 0) {
+                        elList = matched.elements;
+                    }
+                }
+                if (elList.length === 0 && typeof window.extractAllTableData === 'function') {
+                    const activeRows = window.extractAllTableData('myTable') || [];
+                    const matching = activeRows.filter(r => repoNameKey(r['PAGE NAME']) === repoNameKey(item.pageName));
+                    if (matching.length > 0) {
+                        elList = matching;
+                    }
+                }
+                const pageFeatNames = new Set();
+                (item.features || []).forEach(f => {
+                    const fn = (f && f.name) || f;
+                    if (fn && isDistinctFeatureName(fn, item.pageName)) pageFeatNames.add(String(fn).trim());
+                });
+                (elList || []).forEach(el => {
+                    const fn = el && (el['FEATURE NAME'] || el.FeatureName);
+                    if (fn && isDistinctFeatureName(fn, item.pageName)) pageFeatNames.add(String(fn).trim());
+                });
+                (project.features || []).forEach(f => {
+                    if (f && f.name && (f.pageName === item.pageName || !f.pageName || f.pageName === 'Default') && isDistinctFeatureName(f.name, item.pageName)) {
+                        pageFeatNames.add(String(f.name).trim());
+                    }
+                });
+                const pageFeatList = Array.from(pageFeatNames);
+
+                const elSnippets = elList.slice(0, 3).map(el => `
+                    <span class="repo-ctrl-chip" title="${escapeDummyHtml(el['CONTROL NAME'] || '')}">${escapeDummyHtml(el['CONTROL NAME'] || 'Control')}</span>
+                `).join('');
+                const remaining = elList.length - 3;
+
+                html += `
+                <div class="repo-card ${isSelected ? 'is-selected' : ''}" data-repo-type="page" data-repo-id="${item.id}">
+                    <div class="repo-card-top">
+                        <div class="repo-badge-group">
+                            <span class="repo-badge repo-badge-page">Page & Elements</span>
+                            <span class="repo-badge repo-badge-platform">${escapeDummyHtml(item.platform || project.platform || 'Android')}</span>
+                        </div>
+                        <span class="repo-card-date">${formatDate(item.timestamp)}</span>
+                    </div>
+                    <h3 class="repo-card-title">${escapeDummyHtml(item.pageName)}</h3>
+                    <div class="repo-card-meta-row">
+                        <div class="repo-meta-item">
+                            <span class="repo-meta-label">Features:</span>
+                            <span class="repo-meta-value">${escapeDummyHtml(pageFeatList.join(', ') || 'None')}</span>
+                        </div>
+                    </div>
+                    <div class="repo-card-badge-pill repo-pill-purple">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+                        <span>${elList.length} Scraped Controls</span>
+                    </div>
+                    ${elList.length > 0 ? `
+                    <div class="repo-card-controls-tags">
+                        ${elSnippets}
+                        ${remaining > 0 ? `<span class="repo-ctrl-chip-more">+${remaining} more</span>` : ''}
+                    </div>` : ''}
+                    <div class="repo-card-actions">
+                        <button type="button" class="repo-btn-sm repo-btn-view" data-action="view-json" data-id="${item.id}" data-type="page" title="Inspect JSON">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <span>Inspect</span>
+                        </button>
+                        <button type="button" class="repo-btn-sm" data-action="download-json" data-id="${item.id}" data-type="page" title="Export as JSON file">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>Export</span>
+                        </button>
+                        <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-item" data-id="${item.id}" data-type="page" title="Delete from project">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
+                            <span>Delete</span>
+                        </button>
+                    </div>
+                </div>`;
+            } else if (item.type === 'feature') {
+                html += `
+                <div class="repo-card ${isSelected ? 'is-selected' : ''}" data-repo-type="feature" data-repo-id="${item.id || item.name}">
+                    <div class="repo-card-top">
+                        <div class="repo-badge-group">
+                            <span class="repo-badge repo-badge-feature" style="background: rgba(34, 197, 94, 0.12); color: #16a34a; border-color: rgba(34, 197, 94, 0.25);">Feature Zone</span>
+                            <span class="repo-badge repo-badge-platform">${escapeDummyHtml(item.platform || project.platform || 'Android')}</span>
+                        </div>
+                        <span class="repo-card-date">${formatDate(item.timestamp)}</span>
+                    </div>
+                    <h3 class="repo-card-title">${escapeDummyHtml(item.name)}</h3>
+                    <div class="repo-card-meta-row">
+                        <div class="repo-meta-item">
+                            <span class="repo-meta-label">Page:</span>
+                            <span class="repo-meta-value">${escapeDummyHtml(item.pageName || 'Default')}</span>
+                        </div>
+                        <div class="repo-meta-item">
+                            <span class="repo-meta-label">Zone:</span>
+                            <span class="repo-meta-value">${item.fullPage ? 'Full Screen' : 'Bounding Box'}</span>
+                        </div>
+                    </div>
+                    <div class="repo-card-badge-pill" style="background: rgba(34, 197, 94, 0.08); color: #16a34a; border-color: rgba(34, 197, 94, 0.2);">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect></svg>
+                        <span>Feature Capture Zone</span>
+                    </div>
+                    <div class="repo-card-actions">
+                        <button type="button" class="repo-btn-sm repo-btn-view" data-action="view-json" data-id="${item.id || item.name}" data-type="feature" title="Inspect JSON">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                            <span>Inspect</span>
+                        </button>
+                        <button type="button" class="repo-btn-sm" data-action="download-json" data-id="${item.id || item.name}" data-type="feature" title="Export as JSON file">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                            <span>Export</span>
+                        </button>
+                        <button type="button" class="repo-btn-sm repo-btn-del" data-action="delete-item" data-id="${item.id || item.name}" data-type="feature" title="Delete feature">
+                            <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
+                            <span>Delete</span>
+                        </button>
+                    </div>
+                </div>`;
+            }
+        });
+
+        container.innerHTML = html;
+
+        // Auto-select and preview item in the full-width viewer below
+        if (items.length > 0) {
+            const foundActive = activeViewerItem && items.find(x => x.id === activeViewerItem.id);
+            if (foundActive) {
+                openRepoJsonSideView(foundActive);
+            } else {
+                openRepoJsonSideView(items[0]);
+            }
+        }
+    };
+
+    // Global Click Delegation for Repository Tab
+    document.addEventListener('click', function(e) {
+        // 1. Breadcrumb Root / Back to Projects buttons (Top and Inline)
+        if (e.target.closest('#repoCrumbRoot') || e.target.closest('#repoBackToProjectsBtn') || e.target.closest('#repoInlineBackBtn')) {
+            currentSelectedProjectKey = null;
+            closeRepoSideView();
+            window.renderRepositoryView();
+            return;
+        }
+
+        // 2. Open Project by clicking Project Card
+        const projectCard = e.target.closest('.repo-project-card');
+        if (projectCard && !e.target.closest('[data-action]')) {
+            const pKey = projectCard.getAttribute('data-project-key');
+            if (pKey) {
+                currentSelectedProjectKey = pKey;
+                currentRepoFilter = 'all';
+                closeRepoSideView();
+                window.renderRepositoryView();
+            }
+            return;
+        }
+
+        // 3. Export Project Card action
+        const exportProjCardBtn = e.target.closest('[data-action="export-project-card"]');
+        if (exportProjCardBtn) {
+            const pKey = exportProjCardBtn.getAttribute('data-p-key') || currentSelectedProjectKey;
+            const store = getProjectStore();
+            const proj = store[pKey];
+            if (proj) {
+                const bundle = {
+                    exportType: 'AlgoScraper_Project_Suite',
+                    projectKey: pKey,
+                    appName: proj.appName,
+                    platform: proj.platform,
+                    exportedAt: new Date().toISOString(),
+                    project: proj
+                };
+                downloadFile(`${(proj.appName || 'project').replace(/\s+/g, '_')}_project_suite.json`, JSON.stringify(bundle, null, 2));
+            }
+            return;
+        }
+
+        // 4. Delete Project Card action
+        const delProjCardBtn = e.target.closest('[data-action="delete-project-card"]') || e.target.closest('#repoDeleteProjectBtn');
+        if (delProjCardBtn) {
+            const pKey = delProjCardBtn.getAttribute('data-p-key') || currentSelectedProjectKey;
+            const store = getProjectStore();
+            const proj = getProjectByKey(store, pKey);
+            if (proj) {
+                pendingRepoDelete = { projectKey: pKey };
+                showConfirmDialog({
+                    title: `Delete Project: ${proj.appName}?`,
+                    mainText: `Are you sure you want to delete project "${proj.appName}" (${proj.platform})?`,
+                    subText: `This will delete all its saved scenarios, features, and scraped pages. If deleted from here, this action cannot be undone.`,
+                    action: 'confirmDeleteRepoProject',
+                    theme: 'error',
+                    okayBtnText: 'Delete Project'
+                });
+            }
+            return;
+        }
+
+        // 5. Export Project from Details Header
+        if (e.target.closest('#repoExportProjectBtn')) {
+            const store = getProjectStore();
+            const proj = getProjectByKey(store, currentSelectedProjectKey);
+            if (proj) {
+                const bundle = {
+                    exportType: 'AlgoScraper_Project_Suite',
+                    projectKey: currentSelectedProjectKey,
+                    appName: proj.appName,
+                    platform: proj.platform,
+                    exportedAt: new Date().toISOString(),
+                    project: proj
+                };
+                downloadFile(`${(proj.appName || 'project').replace(/\s+/g, '_')}_project_suite.json`, JSON.stringify(bundle, null, 2));
+            }
+            return;
+        }
+
+        // 5.5 Platform filter tabs on Root Projects page
+        const platFilterBtn = e.target.closest('#repoPlatformFilterTabs .repo-filter-btn');
+        if (platFilterBtn) {
+            document.querySelectorAll('#repoPlatformFilterTabs .repo-filter-btn').forEach(btn => btn.classList.remove('is-active'));
+            platFilterBtn.classList.add('is-active');
+            currentRepoPlatformFilter = platFilterBtn.getAttribute('data-platform-filter') || 'all';
+            window.renderRepositoryView();
+            return;
+        }
+
+        // 6. Filter tabs inside Project Details
+        const filterBtn = e.target.closest('#repoDetailsView .repo-filter-btn');
+        if (filterBtn) {
+            document.querySelectorAll('#repoDetailsView .repo-filter-btn').forEach(btn => btn.classList.remove('is-active'));
+            filterBtn.classList.add('is-active');
+            const f = filterBtn.getAttribute('data-filter') || 'all';
+            window.renderRepositoryView(f);
+            return;
+        }
+
+        // 7. Metric cards click to filter inside Project Details
+        const metricCard = e.target.closest('#repoDetailsView .repo-metric-card');
+        if (metricCard) {
+            const f = metricCard.getAttribute('data-repo-filter');
+            if (f) {
+                document.querySelectorAll('#repoDetailsView .repo-filter-btn').forEach(btn => {
+                    btn.classList.toggle('is-active', btn.getAttribute('data-filter') === f);
+                });
+                window.renderRepositoryView(f);
+            }
+            return;
+        }
+
+        // 8. Export All Button (Root)
+        if (e.target.closest('#repoExportAllBtn')) {
+            const store = getProjectStore();
+            const projectKeys = Object.keys(store);
+            if (projectKeys.length === 0) {
+                showCustomAlert('Repository Empty', 'There are no saved application projects to export.', 'warning');
+                return;
+            }
+            const bundle = {
+                exportType: 'AlgoScraper_Full_Repository',
+                exportDate: new Date().toISOString(),
+                totalProjects: projectKeys.length,
+                projects: store
+            };
+            downloadFile(`algoscraper_full_repository_export_${Date.now()}.json`, JSON.stringify(bundle, null, 2));
+            return;
+        }
+
+        // 9. Clear All Button (Root)
+        if (e.target.closest('#repoClearAllBtn')) {
+            const store = getProjectStore();
+            const projectKeys = Object.keys(store);
+            if (projectKeys.length === 0) {
+                showCustomAlert('Repository Empty', 'Repository is already clean.', 'info');
+                return;
+            }
+            showConfirmDialog({
+                title: 'Clear Entire Repository?',
+                mainText: `Are you sure you want to delete all ${projectKeys.length} application project workspaces?`,
+                subText: 'This action cannot be undone. All saved scenarios, features, and scraped elements will be permanently deleted.',
+                action: 'confirmClearRepositoryAction',
+                theme: 'error',
+                okayBtnText: 'Delete All'
+            });
+            return;
+        }
+
+        // 10. View JSON: Clicking anywhere on an asset card or its Inspect button
+        const clickedCard = e.target.closest('.repo-card');
+        const viewJsonBtn = e.target.closest('[data-action="view-json"]');
+        if ((clickedCard || viewJsonBtn) && !e.target.closest('[data-action="download-json"]') && !e.target.closest('[data-action="delete-item"]')) {
+            const targetEl = viewJsonBtn || clickedCard;
+            const cardEl = clickedCard || targetEl.closest('.repo-card');
+            const id = targetEl.getAttribute('data-id') || (cardEl ? cardEl.getAttribute('data-repo-id') : null) || targetEl.getAttribute('data-repo-id');
+            const type = targetEl.getAttribute('data-type') || (cardEl ? cardEl.getAttribute('data-repo-type') : null) || targetEl.getAttribute('data-repo-type');
+            const store = getProjectStore();
+            const project = getProjectByKey(store, currentSelectedProjectKey);
+            if (project) {
+                let item = null;
+                if (type === 'page') {
+                    item = (project.pages || []).find(p => p.id === id || (p.pageName && p.pageName === id));
+                } else if (type === 'scenario') {
+                    item = (project.scenarios || []).find(s => s.id === id || (s.name && s.name === id) || (s.pageName && s.pageName === id));
+                } else if (type === 'feature') {
+                    item = (project.features || []).find(f => f.id === id || f.name === id || (f.name && f.name.toLowerCase() === (id || '').toLowerCase()));
+                }
+                if (item) {
+                    openRepoJsonSideView({ type, ...item });
+                }
+            }
+            return;
+        }
+
+        // 11. Copy JSON from Side View
+        if (e.target.closest('#repoJsonCopyBtn')) {
+            if (currentViewerPayload && currentViewerPayload.data) {
+                const jsonStr = JSON.stringify(currentViewerPayload.data, null, 2);
+                navigator.clipboard.writeText(jsonStr).then(() => {
+                    const btn = document.getElementById('repoJsonCopyBtn');
+                    if (btn) {
+                        const origHtml = btn.innerHTML;
+                        btn.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied!</span>`;
+                        setTimeout(() => { btn.innerHTML = origHtml; }, 1800);
+                    }
+                }).catch(err => {
+                    console.error('Copy JSON failed:', err);
+                });
+            }
+            return;
+        }
+
+        // 12. Download JSON from Side View
+        if (e.target.closest('#repoJsonDownloadBtn')) {
+            if (currentViewerPayload && currentViewerPayload.data) {
+                const jsonStr = JSON.stringify(currentViewerPayload.data, null, 2);
+                downloadFile(currentViewerPayload.filename || 'download.json', jsonStr, 'application/json');
+            }
+            return;
+        }
+
+        // 13. Close JSON Side View
+        if (e.target.closest('#repoJsonCloseBtn')) {
+            closeRepoSideView();
+            return;
+        }
+
+        // 14. Item Card Actions inside Project (Download JSON, Delete)
+        const dlJsonBtn = e.target.closest('[data-action="download-json"]');
+        if (dlJsonBtn) {
+            const id = dlJsonBtn.getAttribute('data-id');
+            const type = dlJsonBtn.getAttribute('data-type');
+            const store = getProjectStore();
+            const project = getProjectByKey(store, currentSelectedProjectKey);
+            if (project) {
+                let item = null;
+                if (type === 'page') item = (project.pages || []).find(p => p.id === id);
+                else if (type === 'scenario') item = (project.scenarios || []).find(s => s.id === id);
+                else if (type === 'feature') item = (project.features || []).find(f => f.id === id || (f.name && f.name === id));
+                if (item) {
+                    const payloadInfo = getItemJsonPayload({ type, ...item }, currentSelectedProjectKey);
+                    if (payloadInfo && payloadInfo.data) {
+                        downloadFile(payloadInfo.filename, JSON.stringify(payloadInfo.data, null, 2), 'application/json');
+                    }
+                }
+            }
+            return;
+        }
+
+        const delItemBtn = e.target.closest('[data-action="delete-item"]');
+        if (delItemBtn) {
+            const id = delItemBtn.getAttribute('data-id');
+            const type = delItemBtn.getAttribute('data-type');
+            const store = getProjectStore();
+            const project = getProjectByKey(store, currentSelectedProjectKey);
+            if (!project) return;
+
+            const scenItem = type === 'scenario' ? (project.scenarios || []).find(s => s.id === id) : null;
+            const pageItem = type === 'page' ? (project.pages || []).find(p => p.id === id) : null;
+            const featItem = type === 'feature' ? (project.features || []).find(f => f.id === id || f.name === id) : null;
+            const featDisplayName = featItem ? featItem.name : 'this feature';
+
+            pendingRepoDelete = {
+                projectKey: currentSelectedProjectKey,
+                type,
+                id,
+                pageName: (scenItem && (scenItem.pageName || scenItem.name)) || (pageItem && pageItem.pageName) || '',
+                scenarioName: scenItem && scenItem.name,
+                featureName: featItem && featItem.name
+            };
+            const label = type === 'scenario' ? 'Scenario' : (type === 'feature' ? 'Feature' : 'Page & Elements');
+
+            showConfirmDialog({
+                title: `Delete Saved ${label}?`,
+                mainText: `Do you really want to delete ${type === 'feature' ? `feature "<b>${escapeDummyHtml(featDisplayName)}</b>"` : `this ${label}`}?`,
+                subText: `If deleted from here, this action cannot be undone and you will not be able to recover it.${type === 'feature' ? ' The feature will be removed completely from the application, and any table rows assigned to this feature will automatically be updated to their page name.' : ' Home will update at the same time.'}`,
+                action: 'confirmDeleteRepoItem',
+                theme: 'error',
+                okayBtnText: 'Delete',
+                onOkay: () => {
+                    if (type === 'feature') {
+                        const featName = (featItem && featItem.name) || id;
+                        if (typeof window.removeFeatureCompletely === 'function') {
+                            window.removeFeatureCompletely(featName, currentSelectedProjectKey);
+                        }
+                    } else if (type === 'scenario') {
+                        project.scenarios = (project.scenarios || []).filter(s => s.id !== id);
+                        project.lastUpdated = Date.now();
+                        window.setRepoProjectsStore(store);
+                        if (typeof window.applyRepoChangeToHome === 'function') {
+                            window.applyRepoChangeToHome({
+                                projectKey: currentSelectedProjectKey,
+                                type: 'scenario',
+                                pageName: pendingRepoDelete.pageName,
+                                scenarioName: pendingRepoDelete.scenarioName
+                            });
+                            pendingRepoDelete._appliedHome = true;
+                        }
+                    } else if (type === 'page') {
+                        project.pages = (project.pages || []).filter(p => p.id !== id);
+                        project.lastUpdated = Date.now();
+                        window.setRepoProjectsStore(store);
+                        if (typeof window.applyRepoChangeToHome === 'function') {
+                            window.applyRepoChangeToHome({
+                                projectKey: currentSelectedProjectKey,
+                                type: 'page',
+                                pageName: pendingRepoDelete.pageName
+                            });
+                            pendingRepoDelete._appliedHome = true;
+                        }
+                    }
+                    if (typeof window.renderRepositoryView === 'function') {
+                        window.renderRepositoryView();
+                    }
+                }
+            });
+            return;
+        }
+    });
+
+    // Escape key closes side view
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const rightCol = document.getElementById('repoRightColumn');
+            if (rightCol && rightCol.style.display !== 'none') {
+                closeRepoSideView();
+            }
+        }
+    });
+
+    // Search input listeners
+    const projectSearchInput = document.getElementById('repoProjectSearchInput');
+    if (projectSearchInput) {
+        projectSearchInput.addEventListener('input', function() {
+            window.renderRepositoryView(currentRepoFilter, this.value);
+        });
+    }
+
+    const searchInput = document.getElementById('repoSearchInput');
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            window.renderRepositoryView(currentRepoFilter, this.value);
+        });
+    }
+})();
