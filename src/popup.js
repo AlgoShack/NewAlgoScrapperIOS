@@ -12,6 +12,12 @@
      *   Windows builds: Android only (IOS option removed; no XCUITest runtime)
      *   macOS builds: Android + iOS
      *
+     * FEATURE LOGIC (OS / device parity — do not fork by win32/darwin)
+     *   Create Feature, name format rules, global name uniqueness, “already created”
+     *   area checks, screen signatures, table rename, and repo feature counts share
+     *   ONE code path for: Windows Android, Mac Android, Mac iOS — real device,
+     *   emulator, or simulator. Only locators / page-source capture differ by platform.
+     *
      * USER FLOWS (what happens end-to-end)
      *   1) Launch Application → ensure-appium IPC → wd.Builder session → soft-open app
      *      → loadFirstScreen (screenshot + page source into #zoomFrame)
@@ -1884,7 +1890,7 @@
         if (!realtimeDeviceMonitorInterval) {
             startRealtimeDeviceMonitoring();
         }
-    }, 1000);
+    }, 500);
 
     let realtimeDeviceMonitorInterval = null;
     let lastKnownDeviceFingerprint = "";
@@ -1904,11 +1910,6 @@
                 const freshDevices = await refreshConnectedDevicesList();
                 const freshFingerprint = computeDeviceFingerprint(freshDevices);
 
-                // Initialize lastKnownDeviceFingerprint if empty
-                if (!lastKnownDeviceFingerprint && freshFingerprint) {
-                    lastKnownDeviceFingerprint = freshFingerprint;
-                }
-
                 // --- 1. ACTIVE SESSION REAL-TIME VALIDATION ---
                 if (driver) {
                     const activePlatform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
@@ -1920,15 +1921,20 @@
 
                     if (!isDeviceStillConnected) {
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
+                        lastKnownDeviceFingerprint = "";
                         markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`));
-                        lastKnownDeviceFingerprint = freshFingerprint;
                         return;
                     }
                 }
 
                 // --- 2. IDLE / FORM REAL-TIME UPDATE ---
-                if (!driver && freshFingerprint !== lastKnownDeviceFingerprint) {
-                    const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint;
+                const deviceSelect = document.getElementById('devicename');
+                const appSelect = document.getElementById('appname');
+                const isUiShowingNoDevice = !deviceSelect || !deviceSelect.value || deviceSelect.value === 'No device connected' || (appSelect && appSelect.value === 'No device connected');
+                const deviceStateChanged = (freshFingerprint !== lastKnownDeviceFingerprint) || (freshDevices.length > 0 && isUiShowingNoDevice) || (freshDevices.length === 0 && !isUiShowingNoDevice);
+
+                if (!driver && deviceStateChanged) {
+                    const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !isUiShowingNoDevice;
                     lastKnownDeviceFingerprint = freshFingerprint;
 
                     const closeDeviceDisconnectedAlertIfOpen = () => {
@@ -1975,26 +1981,20 @@
                     if (matching.length > 0) {
                         closeDeviceDisconnectedAlertIfOpen();
 
-                        if (!isCurrentSelectedStillConnected || !currentUdid || !currentDeviceOption || currentDeviceOption === 'No device connected') {
-                            const selected = populateDeviceDropdown(matching);
-                            if (selected) {
-                                if (normalizePlatformName(selected.platform) === 'Android') {
-                                    ipcRenderer.invoke("get-android-version", selected.id).then((ver) => {
-                                        if (ver) {
-                                            const pv = document.getElementById('platformversion');
-                                            if (pv) {
-                                                pv.value = ver;
-                                                pv.dataset.userEdited = 'true';
-                                            }
+                        const selected = populateDeviceDropdown(matching);
+                        if (selected) {
+                            if (normalizePlatformName(selected.platform) === 'Android') {
+                                ipcRenderer.invoke("get-android-version", selected.id).then((ver) => {
+                                    if (ver) {
+                                        const pv = document.getElementById('platformversion');
+                                        if (pv) {
+                                            pv.value = ver;
+                                            pv.dataset.userEdited = 'true';
                                         }
-                                    }).catch(() => {});
-                                }
-                                ipcRenderer.send("get-installed-apps", selected);
+                                    }
+                                }).catch(() => {});
                             }
-                        } else {
-                            populateDeviceDropdown(matching);
-                            const deviceSelect = document.getElementById('devicename');
-                            if (deviceSelect && deviceName) deviceSelect.value = deviceName;
+                            ipcRenderer.send("get-installed-apps", selected);
                         }
 
                         if (typeof setPlatformAppDeviceEditable === 'function') {
@@ -2020,7 +2020,7 @@
             } catch (pollErr) {
                 console.warn("[Real-time Monitor] polling tick skipped:", pollErr);
             }
-        }, 2000);
+        }, 1500);
     }
     document.getElementById('devicename').addEventListener('change', async function() {
         const platformSelect = document.getElementById('platformname');
@@ -5426,6 +5426,7 @@ async function performTouch(x, y) {
 function extractContentNodes(xmlDoc) {
     if (!xmlDoc) return [];
     const all = xmlDoc.getElementsByTagName("*");
+    // Same ignore set for Windows + Mac Android and Mac iOS so screen signatures stay comparable
     const ignoreTypes = new Set([
         "AppiumAUT", "XCUIElementTypeApplication", "XCUIElementTypeWindow",
         "hierarchy", "android.widget.FrameLayout", "android.view.ViewGroup",
@@ -5444,6 +5445,19 @@ function extractContentNodes(xmlDoc) {
             tag.includes("HomeIndicator") ||
             tag.includes("ActivityIndicator") ||
             tag.includes("ScrollBar")
+        ) {
+            continue;
+        }
+
+        // Android system chrome (real device + emulator on Windows/Mac) — same idea as iOS StatusBar skip
+        const pkg = String(node.getAttribute("package") || "").toLowerCase();
+        if (pkg === "com.android.systemui") continue;
+        const rid = String(node.getAttribute("resource-id") || "").toLowerCase();
+        if (
+            rid.includes("status_bar") ||
+            rid.includes("navigation_bar") ||
+            rid.includes("/nav_bar") ||
+            rid.endsWith(":id/navigationbarbackground")
         ) {
             continue;
         }
@@ -7988,6 +8002,7 @@ function getAllPossibleXPaths(node) {
 
 
 // --- GLOBAL PAGE NAME VALIDATOR ---
+/** Feature name format rules — identical on Windows/Mac for Android + iOS (real/emulator/simulator). */
 function getFeatureNameFormatError(val) {
     if (!val || String(val).trim() === '') return "Feature Name is required.";
     const trimmed = String(val).trim();
@@ -9057,7 +9072,7 @@ function isFeatureNameInRepo(name) {
     return assets.featureNames.has(lower) || assets.pages.has(lower) || assets.scenarioNames.has(lower);
 }
 
-/** True if feature name is already used anywhere in the live session or active repo project. */
+/** True if feature name is already used anywhere in the live session or active repo project (all OS/devices). */
 function isFeatureNameAlreadyUsed(name, excludeName) {
     const lower = String(name || '').trim().toLowerCase();
     if (!lower) return false;
@@ -13122,7 +13137,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const featureModal = document.getElementById("createFeatureModal");
 
         function validateFeatureName(val) {
-            // Format rules always apply on every page (min length, max 3 words, etc.)
+            // Shared rules for Windows/Mac + Android/iOS + real/emulator/simulator (no OS fork)
             const formatErr = (typeof getFeatureNameFormatError === 'function')
                 ? getFeatureNameFormatError(val)
                 : "";
