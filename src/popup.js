@@ -2328,7 +2328,7 @@
                     "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || "",
                     "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pName,
                     "NODE NAME": el['NODE NAME'] || el.NodeName || pName,
-                    "DELETE": `<img src="icon/icons8-delete_red.svg" id="del_${rowCount}" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; overflow: hidden; cursor: pointer; -webkit-user-drag: none; display:inline-block;">`,
+                    "DELETE": `<img src="icon/icons8-delete_red.svg" id="del_${rowCount}" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; overflow: hidden; cursor: pointer; -webkit-user-drag: none; display:inline-block;">`,
                     "FINGERPRINT": (el['FINGERPRINT'] || el.Fingerprint || "").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
                     "APP URL": el['APP URL'] || el.AppUrl || (typeof getCurrentAppIdentity === 'function' ? getCurrentAppIdentity() : '')
                 };
@@ -2368,7 +2368,7 @@
                     } else if (thText.includes('DELETE')) {
                         rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
                             <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
-                            <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
+                            <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
                         </td>`;
                     } else {
                         rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
@@ -5937,7 +5937,7 @@ async function performSwipe(startX, startY, endX, endY) {
                    } else if (thText.includes('DELETE')) {
                        rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
                            <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
-                           <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
+                           <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
                        </td>`;
                    }else {
                        rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
@@ -6158,7 +6158,7 @@ function createAndAppendTable(dtControls) {
                             "CONTROL VALUE": dtControls[i].ControlValue || "", // UPDATED to catch the passed value
                             "FEATURE NAME": dtControls[i].FeatureName || pageName,
                             "NODE NAME": pageName,
-                            "DELETE": `<img src="icon/icons8-delete_red.svg" id="del_${td_id}" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; overflow: hidden; cursor: pointer; -webkit-user-drag: none; display:inline-block;">`,
+                            "DELETE": `<img src="icon/icons8-delete_red.svg" id="del_${td_id}" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; overflow: hidden; cursor: pointer; -webkit-user-drag: none; display:inline-block;">`,
                             "FINGERPRINT": (dtControls[i].Fingerprint || "").replace(/</g, "&lt;").replace(/>/g, "&gt;"),
                             "APP URL": getCurrentAppIdentity()
                         };
@@ -6202,7 +6202,7 @@ function createAndAppendTable(dtControls) {
             } else if (thText.includes('DELETE')) {
                 rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
                     <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
-                    <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin-left: auto; margin-right: 1px; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
+                    <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
                 </td>`;
             }else {
                 rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
@@ -14771,6 +14771,242 @@ if (platformVersionField) {
         URL.revokeObjectURL(url);
     }
 
+    function guessAppNameFromImport(data, fileName) {
+        const fromFile = String(fileName || '')
+            .replace(/\.json$/i, '')
+            .replace(/_\d{4}.*$/, '')
+            .replace(/_project_suite$/i, '')
+            .replace(/algoscraper_full_repository_export_\d+/i, '')
+            .trim();
+        if (fromFile && !/^imported/i.test(fromFile) && fromFile.length >= 2) {
+            return fromFile.split(/[_\-]/)[0] || fromFile;
+        }
+        if (data && data.appName) return String(data.appName).trim();
+        if (data && data.project && data.project.appName) return String(data.project.appName).trim();
+        const rows = Array.isArray(data && data.dashboardControls)
+            ? data.dashboardControls
+            : (data && data.dashboardControls && Array.isArray(data.dashboardControls.SCENARIOS)
+                ? (data.dashboardControls.SCENARIOS[0] && data.dashboardControls.SCENARIOS[0].STEPS) || []
+                : (Array.isArray(data) ? data : []));
+        const pageHit = (rows || []).find(r => r && (r['PAGE NAME'] || r.pageName));
+        if (pageHit) return String(pageHit['PAGE NAME'] || pageHit.pageName).trim();
+        return (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '') || 'Imported App';
+    }
+
+    function buildProjectFromScrapedExport(data, meta) {
+        const platform = (meta && meta.platform)
+            || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : '')
+            || (document.getElementById('platformname')?.value || 'Android');
+        const appName = getCleanAppName((meta && meta.appName) || guessAppNameFromImport(data, meta && meta.fileName)) || 'Imported App';
+        const pagesMap = {};
+        const featuresMap = new Map();
+        const scenarios = [];
+
+        const ensurePage = (pageName) => {
+            const pName = String(pageName || appName || 'DefaultPage').trim() || appName;
+            if (!pagesMap[pName]) {
+                pagesMap[pName] = {
+                    id: 'page_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                    pageName: pName,
+                    appName,
+                    count: 0,
+                    elements: [],
+                    features: [],
+                    platform,
+                    timestamp: Date.now()
+                };
+            }
+            return pagesMap[pName];
+        };
+
+        const ingestElement = (el) => {
+            if (!el || typeof el !== 'object') return;
+            const pageName = String(el['PAGE NAME'] || el.pageName || appName || 'DefaultPage').trim() || appName;
+            const page = ensurePage(pageName);
+            page.elements.push(el);
+            page.count = page.elements.length;
+
+            const featName = String(el['FEATURE NAME'] || el.FeatureName || '').trim();
+            if (!featName) return;
+            if (featName.toLowerCase() === 'all') return;
+            if (featName.toLowerCase() === pageName.toLowerCase()) return;
+            const fKey = featName.toLowerCase() + '::' + pageName.toLowerCase();
+            if (featuresMap.has(fKey)) return;
+            const featureItem = {
+                id: 'feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                name: featName,
+                pageName,
+                timestamp: Date.now(),
+                rect: el.rect || null
+            };
+            featuresMap.set(fKey, featureItem);
+            page.features.push(featureItem);
+        };
+
+        if (data && data.isRecordscenario && data.dashboardControls && Array.isArray(data.dashboardControls.SCENARIOS)) {
+            data.dashboardControls.SCENARIOS.forEach((sc, idx) => {
+                const steps = Array.isArray(sc.STEPS) ? sc.STEPS : [];
+                const pageName = (steps[0] && (steps[0]['PAGE NAME'] || steps[0].pageName)) || appName;
+                const scenario = {
+                    id: 'scen_' + Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 5),
+                    name: String(sc.SCENARIO_NAME || sc.name || 'Scenario').trim() || 'Scenario',
+                    outline: String(sc.SCENARIO_OUTLINE || sc.outline || ''),
+                    pageName,
+                    elements: steps.slice(),
+                    features: [],
+                    platform,
+                    appName,
+                    timestamp: Date.now()
+                };
+                steps.forEach(ingestElement);
+                const page = pagesMap[pageName];
+                if (page && Array.isArray(page.features)) {
+                    scenario.features = page.features.map(f => ({ ...f }));
+                }
+                scenarios.push(scenario);
+            });
+        } else if (data && Array.isArray(data.dashboardControls)) {
+            data.dashboardControls.forEach(ingestElement);
+        } else if (Array.isArray(data)) {
+            data.forEach(ingestElement);
+        } else if (data && Array.isArray(data.elements)) {
+            data.elements.forEach(ingestElement);
+        } else {
+            return null;
+        }
+
+        const pages = Object.values(pagesMap);
+        if (!pages.length && !scenarios.length) {
+            pages.push({
+                id: 'page_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+                pageName: appName,
+                appName,
+                count: 0,
+                elements: [],
+                features: [],
+                platform,
+                isInitialPage: true,
+                timestamp: Date.now()
+            });
+        }
+
+        return {
+            appName,
+            platform,
+            createdAt: Date.now(),
+            lastUpdated: Date.now(),
+            lastActivePageName: (pages[0] && pages[0].pageName) || appName,
+            scenarios,
+            features: Array.from(featuresMap.values()),
+            pages
+        };
+    }
+
+    function importProjectsFromJsonData(data, options) {
+        if (!data || typeof data !== 'object') {
+            throw new Error('Invalid JSON file.');
+        }
+
+        const fileName = (options && options.fileName) || '';
+        const platformHint = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : '')
+            || (document.getElementById('platformname')?.value || 'Android');
+        let incoming = {};
+        let forceNewKeys = new Set();
+
+        if (data.exportType === 'AlgoScraper_Full_Repository' && data.projects && typeof data.projects === 'object') {
+            incoming = data.projects;
+        } else if (data.exportType === 'AlgoScraper_Project_Suite' && data.project) {
+            const key = data.projectKey
+                || `${data.appName || data.project.appName || 'Imported'} (${data.platform || data.project.platform || platformHint})`;
+            incoming[key] = data.project;
+        } else if (
+            data.isRecordscenario === true
+            || data.isRecordscenario === false
+            || Array.isArray(data.dashboardControls)
+            || (data.dashboardControls && Array.isArray(data.dashboardControls.SCENARIOS))
+            || Array.isArray(data)
+            || Array.isArray(data.elements)
+        ) {
+            const built = buildProjectFromScrapedExport(data, {
+                fileName,
+                appName: guessAppNameFromImport(data, fileName),
+                platform: platformHint
+            });
+            if (!built) {
+                throw new Error('Could not read scraped controls from this JSON file.');
+            }
+            incoming.__algo_scraped_import__ = built;
+            forceNewKeys.add('__algo_scraped_import__');
+        } else {
+            const keys = Object.keys(data);
+            const looksLikeStore = keys.some(k => {
+                const p = data[k];
+                return p && typeof p === 'object' && (p.appName || p.pages || p.scenarios || p.features || p.platform);
+            });
+            if (!looksLikeStore) {
+                throw new Error('This file is not a valid AlgoScraper JSON. Use a project export or Home download JSON.');
+            }
+            incoming = data;
+        }
+
+        const incomingKeys = Object.keys(incoming);
+        if (!incomingKeys.length) {
+            throw new Error('No projects found in this file.');
+        }
+
+        const store = beginRepoWrite();
+        let added = 0;
+        let updated = 0;
+        let skipped = 0;
+        try {
+            incomingKeys.forEach(rawKey => {
+                let proj = incoming[rawKey];
+                if (!proj || typeof proj !== 'object') return;
+
+                let targetKey = rawKey;
+                const shouldForceNew = forceNewKeys.has(rawKey) || rawKey === '__algo_scraped_import__';
+                if (shouldForceNew) {
+                    const uniqueInfo = (typeof generateUniqueProjectKey === 'function')
+                        ? generateUniqueProjectKey(store, proj.appName || guessAppNameFromImport(proj, fileName), proj.platform || platformHint, { forceNew: true })
+                        : { key: `${proj.appName || 'Imported'} (${proj.platform || platformHint})::p_${Date.now().toString(36)}`, projectId: 'p_' + Date.now().toString(36), appName: proj.appName };
+                    targetKey = uniqueInfo.key;
+                    proj = {
+                        ...proj,
+                        projectId: uniqueInfo.projectId || proj.projectId || null,
+                        appName: uniqueInfo.appName || proj.appName,
+                        platform: proj.platform || platformHint,
+                        createdAt: proj.createdAt || Date.now(),
+                        lastUpdated: Date.now()
+                    };
+                    if (!Array.isArray(proj.pages)) proj.pages = [];
+                    if (!Array.isArray(proj.scenarios)) proj.scenarios = [];
+                    if (!Array.isArray(proj.features)) proj.features = [];
+                } else if (!proj.projectId) {
+                    proj.projectId = (String(targetKey).includes('::') ? String(targetKey).split('::').pop() : null)
+                        || ((typeof createProjectId === 'function') ? createProjectId(store, proj.appName, proj.platform || platformHint) : ('p_' + Date.now().toString(36)));
+                }
+
+                if (typeof isProtectedLiveProject === 'function' && isProtectedLiveProject(targetKey)) {
+                    skipped++;
+                    return;
+                }
+                if (store[targetKey]) updated++;
+                else added++;
+                store[targetKey] = proj;
+            });
+        } finally {
+            endRepoWrite(true);
+        }
+
+        if (typeof window.renderRepositoryView === 'function') {
+            window.renderRepositoryView();
+        }
+
+        return { added, updated, skipped, total: incomingKeys.length };
+    }
+    window.importProjectsFromJsonData = importProjectsFromJsonData;
+    window.buildProjectFromScrapedExport = buildProjectFromScrapedExport;
+
     // --- SIDE-BY-SIDE REPOSITORY WORKSPACE JSON ENGINE ---
     let activeViewerItem = null;
     let currentViewerPayload = null;
@@ -15460,15 +15696,22 @@ if (platformVersionField) {
             }
 
             if (filteredKeys.length === 0) {
-                grid.innerHTML = '';
+                grid.innerHTML = `
+                    <div class="repo-empty-state" style="grid-column: 1 / -1;">
+                        <div class="repo-empty-icon">
+                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#2F8BCC" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <p class="repo-empty-title">${projectKeys.length === 0 ? 'No Saved App Projects Yet' : 'No Matching Projects'}</p>
+                        <p class="repo-empty-desc">${projectKeys.length === 0
+                            ? 'When you scrape UI elements, define features, or record scenarios on Home, they appear here as project workspaces.'
+                            : 'Try adjusting your platform filter or search query.'}</p>
+                    </div>`;
                 setRepoMultiDeleteMode(false);
                 const enterBtn = document.getElementById('repoMultiDeleteBtn');
                 if (enterBtn) enterBtn.hidden = true;
-                if (emptyState) {
-                    emptyState.style.display = 'flex';
-                    if (emptyTitle) emptyTitle.textContent = projectKeys.length === 0 ? "No Saved App Projects Yet" : "No Matching Projects";
-                    if (emptyDesc) emptyDesc.textContent = projectKeys.length === 0 ? "When you scrape UI elements, define feature areas, or record scenarios on the Home page, they will automatically be organized into project workspaces here." : "Try adjusting your platform filter or search query.";
-                }
+                if (emptyState) emptyState.style.display = 'none';
                 return;
             }
 
@@ -15560,7 +15803,7 @@ if (platformVersionField) {
                         </div>
                         <div class="repo-project-actions">
                             <button type="button" class="repo-btn-sm" data-action="export-project-card" data-p-key="${escapeDummyHtml(k)}" title="Export Project as JSON">
-                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><path d="M9 15l6-6"></path><path d="M10 9h5v5"></path></svg>
                                 <span>Export</span>
                             </button>
                             <button type="button" class="repo-btn-sm repo-btn-del${isLive ? ' is-locked' : ''}" data-action="${isLive ? 'blocked-live-delete' : 'delete-project-card'}" data-p-key="${escapeDummyHtml(k)}" ${isLive ? 'disabled' : ''} title="${isLive ? 'Active project cannot be deleted' : 'Delete Project'}">
@@ -15588,8 +15831,12 @@ if (platformVersionField) {
         if (wsDeleteBtn) {
             const liveOpen = isProtectedLiveProject(currentSelectedProjectKey);
             wsDeleteBtn.disabled = liveOpen;
-            wsDeleteBtn.title = liveOpen ? 'Active project cannot be deleted' : 'Delete Project';
+            wsDeleteBtn.title = liveOpen
+                ? 'Active project is open on Home — reset or close the session to delete it'
+                : 'Delete Project';
             wsDeleteBtn.classList.toggle('is-locked', liveOpen);
+            const label = wsDeleteBtn.querySelector('span');
+            if (label) label.textContent = liveOpen ? 'Active Project' : 'Delete Project';
         }
         if (crumbDivider) crumbDivider.style.display = 'inline';
         if (crumbProject) {
@@ -15991,50 +16238,69 @@ if (platformVersionField) {
             return;
         }
 
-        // 8. Export All Button (Root)
-        if (e.target.closest('#repoExportAllBtn')) {
-            const store = getProjectStore();
-            const projectKeys = Object.keys(store);
-            if (projectKeys.length === 0) {
-                showCustomAlert('Repository Empty', 'There are no saved application projects to export.', 'warning');
-                return;
+        // 8. Import Projects (Root)
+        if (e.target.closest('#repoImportProjectsBtn')) {
+            const fileInput = document.getElementById('repoImportFileInput');
+            if (fileInput) {
+                fileInput.value = '';
+                fileInput.click();
             }
-            const bundle = {
-                exportType: 'AlgoScraper_Full_Repository',
-                exportDate: new Date().toISOString(),
-                totalProjects: projectKeys.length,
-                projects: store
-            };
-            downloadFile(`algoscraper_full_repository_export_${Date.now()}.json`, JSON.stringify(bundle, null, 2));
             return;
         }
 
-        // 9. Clear All Button (Root)
-        if (e.target.closest('#repoClearAllBtn')) {
-            const store = getProjectStore();
-            const projectKeys = Object.keys(store);
-            if (projectKeys.length === 0) {
-                showCustomAlert('Repository Empty', 'Repository is already clean.', 'info');
-                return;
-            }
-            const deletableKeys = selectableProjectKeys(projectKeys);
-            if (!deletableKeys.length) {
-                showCustomAlert('Active Project', 'The opened Active project cannot be deleted. Reset or close the Home session first.', 'warning');
-                return;
-            }
-            const keptLive = projectKeys.length - deletableKeys.length;
-            showConfirmDialog({
-                title: keptLive ? 'Clear Other Projects?' : 'Clear Entire Repository?',
-                mainText: keptLive
-                    ? `Delete <b>${deletableKeys.length}</b> saved project${deletableKeys.length === 1 ? '' : 's'}? The currently open Active project will be kept.`
-                    : `Are you sure you want to delete all ${projectKeys.length} application project workspaces?`,
-                subText: keptLive
-                    ? 'This cannot be undone. Saved scenarios, features, and scraped pages in the other projects will be permanently removed.'
-                    : 'This action cannot be undone. All saved scenarios, features, and scraped elements will be permanently deleted.',
-                action: 'confirmClearRepositoryAction',
-                theme: 'error',
-                okayBtnText: keptLive ? 'Delete Others' : 'Delete All'
-            });
+        // 9. Refresh projects list (Root) — show loader, reload, then done popup
+        if (e.target.closest('#repoRefreshBtn')) {
+            const overlayEl = document.getElementById('overlay');
+            const loaderEl = document.getElementById('AppRunningPopup');
+            if (overlayEl) overlayEl.style.display = 'block';
+            if (loaderEl) loaderEl.style.display = 'flex';
+
+            const finishRefresh = () => {
+                try {
+                    if (!window._activeRepoWriteDepth) {
+                        window._activeRepoWriteStore = null;
+                    }
+                    currentSelectedProjectKey = null;
+                    currentRepoFilter = 'all';
+                    currentRepoPlatformFilter = 'all';
+                    repoProjectSearchQuery = '';
+                    repoSearchQuery = '';
+                    repoMultiDeleteMode = false;
+                    repoSelectedProjectKeys = new Set();
+
+                    const searchEl = document.getElementById('repoProjectSearchInput');
+                    if (searchEl) searchEl.value = '';
+                    document.querySelectorAll('#repoProjectsView [data-platform-filter]').forEach(btn => {
+                        const isAll = (btn.getAttribute('data-platform-filter') || 'all') === 'all';
+                        btn.classList.toggle('is-active', isAll);
+                    });
+
+                    const detailsView = document.getElementById('repoDetailsView');
+                    const projectsView = document.getElementById('repoProjectsView');
+                    if (detailsView) detailsView.style.display = 'none';
+                    if (projectsView) {
+                        projectsView.style.display = 'block';
+                        projectsView.classList.remove('is-multi-delete');
+                    }
+                    document.getElementById('tab-repository')?.classList.remove('is-workspace-open');
+
+                    if (typeof window.renderRepositoryView === 'function') {
+                        window.renderRepositoryView('all', '');
+                    }
+
+                    if (loaderEl) loaderEl.style.display = 'none';
+                    if (overlayEl) overlayEl.style.display = 'none';
+                    showCustomAlert('Refresh Done', 'Projects list has been refreshed from persistent storage.', 'success');
+                } catch (err) {
+                    console.error('Repository refresh failed:', err);
+                    if (loaderEl) loaderEl.style.display = 'none';
+                    if (overlayEl) overlayEl.style.display = 'none';
+                    showCustomAlert('Refresh Failed', (err && err.message) ? err.message : 'Could not refresh projects.', 'error');
+                }
+            };
+
+            // Keep loader visible briefly so users see the loading state
+            setTimeout(finishRefresh, 450);
             return;
         }
 
@@ -16217,6 +16483,43 @@ if (platformVersionField) {
     if (searchInput) {
         searchInput.addEventListener('input', function() {
             window.renderRepositoryView(currentRepoFilter, this.value);
+        });
+    }
+
+    const repoImportFileInput = document.getElementById('repoImportFileInput');
+    if (repoImportFileInput) {
+        repoImportFileInput.addEventListener('change', function() {
+            const file = this.files && this.files[0];
+            this.value = '';
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function() {
+                try {
+                    const parsed = JSON.parse(String(reader.result || ''));
+                    const result = importProjectsFromJsonData(parsed, { fileName: file.name || '' });
+                    const parts = [];
+                    if (result.added) parts.push(`<b>${result.added}</b> added`);
+                    if (result.updated) parts.push(`<b>${result.updated}</b> updated`);
+                    if (result.skipped) parts.push(`<b>${result.skipped}</b> skipped (active project)`);
+                    showCustomAlert(
+                        'Import Complete',
+                        parts.length
+                            ? `Imported projects successfully.<br><br>${parts.join('<br>')}`
+                            : 'No projects were imported.',
+                        result.added || result.updated ? 'success' : 'info'
+                    );
+                } catch (err) {
+                    showCustomAlert(
+                        'Import Failed',
+                        (err && err.message) ? err.message : 'Could not import this file.',
+                        'error'
+                    );
+                }
+            };
+            reader.onerror = function() {
+                showCustomAlert('Import Failed', 'Could not read the selected file.', 'error');
+            };
+            reader.readAsText(file);
         });
     }
 })();

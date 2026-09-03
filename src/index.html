@@ -736,28 +736,31 @@
                 <p class="repo-header-desc" id="repoHeaderDesc">Persistent workspaces organized by application. Inspect, export, and manage your captured scenarios and scraped elements.</p>
             </div>
             <div class="repo-header-actions" id="repoRootActions">
-                <button type="button" id="repoExportAllBtn" class="pill-btn repo-action-btn repo-btn-primary" title="Export All Repository Data as JSON">
+                <button type="button" id="repoImportProjectsBtn" class="pill-btn repo-action-btn repo-btn-primary" title="Import a project export or Home download JSON">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        <path d="M12 11v6"></path>
+                        <path d="m9 14 3 3 3-3"></path>
                     </svg>
-                    <span>Export Repository</span>
+                    <span>Import Projects</span>
                 </button>
-                <button type="button" id="repoClearAllBtn" class="pill-btn repo-action-btn repo-btn-danger" title="Clear All Saved Items">
+                <input type="file" id="repoImportFileInput" accept=".json,application/json" style="display: none;" />
+                <button type="button" id="repoRefreshBtn" class="pill-btn repo-action-btn repo-btn-secondary" title="Refresh projects from storage">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <polyline points="3 6 5 6 21 6"></polyline>
-                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                        <polyline points="23 4 23 10 17 10"></polyline>
+                        <polyline points="1 20 1 14 7 14"></polyline>
+                        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
                     </svg>
-                    <span>Clear All</span>
+                    <span>Refresh</span>
                 </button>
             </div>
             <div class="repo-header-actions" id="repoProjectActions" style="display: none;">
                 <button type="button" id="repoExportProjectBtn" class="pill-btn repo-action-btn repo-btn-primary" title="Export Project as JSON">
                     <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-                        <polyline points="7 10 12 15 17 10"></polyline>
-                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <path d="M9 15l6-6"></path>
+                        <path d="M10 9h5v5"></path>
                     </svg>
                     <span>Export Project</span>
                 </button>

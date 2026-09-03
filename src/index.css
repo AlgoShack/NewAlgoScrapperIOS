@@ -1036,12 +1036,41 @@ th .resizer:hover {
     cursor: pointer;
     fill: #ffffff !important;
     transition: all 0.15s ease;
+    margin: 0 auto !important;
+    vertical-align: middle;
 }
 
 #headerDeleteIcon:hover {
     transform: scale(1.1);
     fill: #ffffff !important;
     opacity: 0.9;
+}
+
+/* Keep delete header + row icons in the same centered column */
+#mainTable #delete_header {
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#mainTable td.delete-cell {
+    text-align: center !important;
+    vertical-align: middle !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+
+#mainTable td.delete-cell .deleteBtn {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    max-width: 17px;
+    vertical-align: middle;
+}
+
+#mainTable td.delete-cell .bulk-delete-cb {
+    margin: 0 auto !important;
+    vertical-align: middle;
 }
 
 
@@ -7249,6 +7278,31 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   background: #2574ab;
 }
 
+.repo-btn-secondary {
+  background: #ffffff !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
+}
+
+.repo-btn-secondary:hover {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+  transform: none !important;
+}
+
+.repo-btn-secondary svg {
+  stroke: #334155 !important;
+}
+
+#repoRootActions .repo-action-btn,
+#repoProjectActions .repo-action-btn {
+  height: 32px !important;
+  border-radius: 7px !important;
+  padding: 0 12px !important;
+}
+
 .repo-btn-danger {
   background: #dc2626;
   color: #ffffff;
@@ -7918,9 +7972,32 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 #repoDeleteProjectBtn.is-locked,
 #repoDeleteProjectBtn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-  pointer-events: none;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  pointer-events: auto !important;
+  background: #f8fafc !important;
+  color: #94a3b8 !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+#repoDeleteProjectBtn.is-locked span,
+#repoDeleteProjectBtn:disabled span {
+  color: #94a3b8 !important;
+}
+
+#repoDeleteProjectBtn.is-locked svg,
+#repoDeleteProjectBtn:disabled svg {
+  stroke: #94a3b8 !important;
+}
+
+#repoDeleteProjectBtn.is-locked:hover,
+#repoDeleteProjectBtn:disabled:hover {
+  background: #f8fafc !important;
+  color: #94a3b8 !important;
+  border-color: #e2e8f0 !important;
+  transform: none !important;
 }
 
 .repo-empty-state {
@@ -8005,15 +8082,21 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .repo-btn-secondary {
-  background: #ffffff;
-  color: #334155;
-  border-color: #cbd5e1;
+  background: #ffffff !important;
+  color: #334155 !important;
+  border: 1px solid #cbd5e1 !important;
+  box-shadow: none !important;
 }
 
 .repo-btn-secondary:hover {
-  background: #f1f5f9;
-  color: #0f172a;
-  border-color: #94a3b8;
+  background: #f1f5f9 !important;
+  color: #0f172a !important;
+  border-color: #94a3b8 !important;
+  transform: none !important;
+}
+
+.repo-btn-secondary svg {
+  stroke: #334155 !important;
 }
 
 .repo-back-inline-btn {
