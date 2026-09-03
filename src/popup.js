@@ -889,9 +889,34 @@
 
     let resetFormLockActive = false;
 
+    function setPlatformAppDeviceEditable(editable) {
+        const isLocked = !editable;
+        ["platformname", "appname", "devicename"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) {
+                el.disabled = isLocked;
+                if (typeof el._rebuildCustomSelect === 'function') {
+                    el._rebuildCustomSelect();
+                }
+            }
+        });
+    }
+    window.setPlatformAppDeviceEditable = setPlatformAppDeviceEditable;
+
+    function lockLaunchForm() {
+        setPlatformAppDeviceEditable(false);
+        ["udid", "appiumurl", "platformversion", "automationName", "bundleID", "apppackage", "appactivity"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = true;
+        });
+        setLaunchEnabled(false);
+    }
+    window.lockLaunchForm = lockLaunchForm;
+
     function unlockLaunchForm() {
         resetFormLockActive = false;
-        ["platformname", "appname", "devicename", "udid", "appiumurl", "platformversion", "automationName", "bundleID", "apppackage", "appactivity"].forEach((id) => {
+        setPlatformAppDeviceEditable(true);
+        ["udid", "appiumurl", "platformversion", "automationName", "bundleID", "apppackage", "appactivity"].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.disabled = false;
         });
@@ -992,11 +1017,8 @@
             }
         });
 
-        // Top 3 selectable fields only
-        ["platformname", "appname", "devicename"].forEach((id) => {
-            const el = document.getElementById(id);
-            if (el) el.disabled = false;
-        });
+        // Top 3 selectable fields editable after reset
+        setPlatformAppDeviceEditable(true);
 
         // Keep platform-specific visibility, then re-lock secondary inputs
         if (typeof updatePlatformUI === 'function') updatePlatformUI();
@@ -1852,9 +1874,17 @@
             setNoDeviceConnectedState();
         }
 
+        lastKnownDeviceFingerprint = computeDeviceFingerprint(connectedDevices);
         // Start continuous real-time device monitoring
         startRealtimeDeviceMonitoring();
     });
+
+    // Also start monitoring immediately in case message-from-main arrived prior or is empty
+    setTimeout(() => {
+        if (!realtimeDeviceMonitorInterval) {
+            startRealtimeDeviceMonitoring();
+        }
+    }, 1000);
 
     let realtimeDeviceMonitorInterval = null;
     let lastKnownDeviceFingerprint = "";
@@ -1873,6 +1903,11 @@
             try {
                 const freshDevices = await refreshConnectedDevicesList();
                 const freshFingerprint = computeDeviceFingerprint(freshDevices);
+
+                // Initialize lastKnownDeviceFingerprint if empty
+                if (!lastKnownDeviceFingerprint && freshFingerprint) {
+                    lastKnownDeviceFingerprint = freshFingerprint;
+                }
 
                 // --- 1. ACTIVE SESSION REAL-TIME VALIDATION ---
                 if (driver) {
@@ -1976,13 +2011,14 @@
                                     "warning"
                                 );
                             }
-                            // NO devices connected on ANY platform!
+                        } else {
+                            // NO devices connected on ANY platform! (or on Windows where only Android is supported)
                             setNoDeviceConnectedState();
 
                             if (wasDeviceConnectedBefore) {
                                 showCustomAlert(
                                     "Device Disconnected",
-                                    `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device or start an iOS simulator.`,
+                                    `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
                                     "warning",
                                     () => {
                                         setNoDeviceConnectedState();
@@ -3085,6 +3121,9 @@
     async function launchApp(initialData) {
             window.launchApp = launchApp;
             window._resettingHome = false;
+            if (typeof lockLaunchForm === 'function') {
+                lockLaunchForm();
+            }
             if (!Array.isArray(initialData) || initialData.length < 9 || !initialData[0] || (!initialData[1] && !initialData[5])) {
                 const pOpt = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
                 initialData = [
@@ -3342,6 +3381,7 @@
             // Enable UI buttons upon successful launch
             document.getElementById('Run').disabled = true;
             document.getElementById('Run').style.backgroundColor = '#B6B6B4';
+            setPlatformAppDeviceEditable(false);
             // Load Page stays hidden/disabled — Scrape UI + tap scrape are the active paths
             document.getElementById('Scrape').disabled = true;
             document.getElementById('Scrape').style.backgroundColor = '#B6B6B4';
