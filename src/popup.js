@@ -5745,6 +5745,7 @@ function createAndAppendTable(dtControls) {
 
     updateRowNumbers();
     initResizableTable();
+    if (typeof autoAdjustTableLayout === 'function') autoAdjustTableLayout();
 
     applyPagination();
     if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
@@ -5773,10 +5774,11 @@ function createAndAppendTable(dtControls) {
                 let animationFrameId = null;
 
                 function updateWidth() {
-                    // Minimum column width limit: 25px
-                    if (currentWidth >= 25) {
+                    // Minimum column width limit: 30px
+                    if (currentWidth >= 30) {
                         th.style.width = `${currentWidth}px`;
                         th.style.minWidth = `${currentWidth}px`;
+                        th.dataset.userWidth = String(currentWidth);
                     }
                     animationFrameId = null;
                 }
@@ -5794,6 +5796,7 @@ function createAndAppendTable(dtControls) {
                     if (animationFrameId) {
                         cancelAnimationFrame(animationFrameId);
                     }
+                    if (typeof autoAdjustTableLayout === 'function') autoAdjustTableLayout();
                 }
 
                 document.addEventListener('mousemove', handleMouseMove);
@@ -5857,6 +5860,8 @@ function createAndAppendTable(dtControls) {
 
                 th.style.width = `${maxWidth}px`;
                 th.style.minWidth = `${maxWidth}px`;
+                th.dataset.userWidth = String(maxWidth);
+                if (typeof autoAdjustTableLayout === 'function') autoAdjustTableLayout();
             });
         });
     }
@@ -8942,6 +8947,7 @@ function verifyPageNameSavedBeforeScraping() {
         window.addEventListener('resize', () => {
             requestAnimationFrame(() => {
                 adjustEmptyRows();
+                if (typeof autoAdjustTableLayout === 'function') autoAdjustTableLayout();
                 const ss = document.getElementById('screenshot');
                 if (ss && ss.style.display !== 'none') {
                     adjustDevicePreviewSize(ss);
@@ -8980,32 +8986,145 @@ function verifyPageNameSavedBeforeScraping() {
 
 // --- CUSTOMIZE TABLE COLUMNS SYSTEM ---
 const TABLE_COL_CONFIG = [
-    { key: 'number', label: '# (Number)', selector: 'th.excel-header-corner', locked: true },
-    { key: 'control_name', label: 'Control Name', selector: 'th[id*="cn"]', locked: true },
-    { key: 'control_type', label: 'Control Type', selector: 'th[id*="ct"]', locked: true },
-    { key: 'control_id', label: 'Control ID', selector: 'th[id*="xpath"]', locked: true },
-    { key: 'page_name', label: 'Page Name', selector: 'th[id*="page"]', locked: true },
-    { key: 'identification_type', label: 'Identification Type', selector: 'th[id*="identificationType"]', locked: false },
-    { key: 'control_value', label: 'Control Value', selector: 'th[id*="controlValue"]', locked: false },
-    { key: 'feature_name', label: 'Feature Name', selector: 'th[id*="featureName"]', locked: false },
-    { key: 'node_name', label: 'Node Name', selector: 'th.nodeName, th[id*="nodeName"]', locked: false },
-    { key: 'delete', label: 'Delete', selector: 'th#delete_header', locked: true }
+    { key: 'number', label: '# (Number)', selector: 'th.excel-header-corner', locked: true, defaultVisible: true, minWidth: 48 },
+    { key: 'control_name', label: 'Control Name', selector: 'th[id*="cn"]', locked: true, defaultVisible: true, minWidth: 130 },
+    { key: 'control_type', label: 'Control Type', selector: 'th[id*="ct"]', locked: true, defaultVisible: true, minWidth: 125 },
+    { key: 'control_id', label: 'Control ID', selector: 'th[id*="xpath"]', locked: true, defaultVisible: true, minWidth: 200 },
+    { key: 'page_name', label: 'Page Name', selector: 'th[id*="page"]', locked: true, defaultVisible: true, minWidth: 115 },
+    { key: 'identification_type', label: 'Identification Type', selector: 'th[id*="identificationType"]', locked: false, defaultVisible: false, minWidth: 180 },
+    { key: 'control_value', label: 'Control Value', selector: 'th[id*="controlValue"]', locked: false, defaultVisible: false, minWidth: 145 },
+    { key: 'feature_name', label: 'Feature Name', selector: 'th[id*="featureName"]', locked: false, defaultVisible: true, minWidth: 135 },
+    { key: 'node_name', label: 'Node Name', selector: 'th.nodeName, th[id*="nodeName"]', locked: false, defaultVisible: false, minWidth: 125 },
+    { key: 'delete', label: 'Delete', selector: 'th#delete_header', locked: true, defaultVisible: true, minWidth: 48 }
 ];
 
 function getColumnVisibilityState() {
     try {
-        const saved = localStorage.getItem('algo_column_visibility');
-        if (saved) return JSON.parse(saved);
+        const saved = localStorage.getItem('algo_column_visibility_v2');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed && typeof parsed === 'object') {
+                return parsed;
+            }
+        }
     } catch (e) {}
+
+    // Clean defaults: what is seen in the table by default is checked, others are unchecked
     const state = {};
-    TABLE_COL_CONFIG.forEach(col => { state[col.key] = true; });
+    TABLE_COL_CONFIG.forEach(col => {
+        state[col.key] = col.defaultVisible !== false;
+    });
     return state;
 }
 
 function saveColumnVisibilityState(state) {
     try {
-        localStorage.setItem('algo_column_visibility', JSON.stringify(state));
+        localStorage.setItem('algo_column_visibility_v2', JSON.stringify(state));
     } catch (e) {}
+}
+
+function autoAdjustTableLayout() {
+    const table = document.getElementById('mainTable');
+    const container = document.getElementById('table-container');
+    if (!table || !container) return;
+
+    const headerRow = table.querySelector('thead tr');
+    if (!headerRow) return;
+
+    const state = getColumnVisibilityState();
+    const containerWidth = container.clientWidth;
+    if (containerWidth <= 0) return;
+
+    // Gather all currently visible columns
+    const visibleCols = [];
+    TABLE_COL_CONFIG.forEach(col => {
+        const isVisible = col.locked ? true : (state[col.key] !== false);
+        if (!isVisible) return;
+        const th = headerRow.querySelector(col.selector);
+        if (!th) return;
+        visibleCols.push({ col, th });
+    });
+
+    if (visibleCols.length === 0) return;
+
+    // Measure required text width accurately using a hidden span
+    const dummySpan = document.createElement('span');
+    dummySpan.style.position = 'absolute';
+    dummySpan.style.visibility = 'hidden';
+    dummySpan.style.whiteSpace = 'nowrap';
+    dummySpan.style.font = '700 11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+    document.body.appendChild(dummySpan);
+
+    let totalRequiredWidth = 0;
+    const colMeasurements = [];
+
+    visibleCols.forEach(({ col, th }) => {
+        let headerLabel = "";
+        for (let i = 0; i < th.childNodes.length; i++) {
+            const child = th.childNodes[i];
+            if (child.nodeType === Node.TEXT_NODE) {
+                headerLabel += child.textContent;
+            }
+        }
+        headerLabel = (headerLabel || th.innerText || col.label || "").replace(/\s+/g, ' ').trim();
+        dummySpan.innerText = headerLabel;
+        const textWidth = dummySpan.offsetWidth;
+
+        // Base width: measured text width + padding + resizer buffer
+        let minW = Math.max(col.minWidth || 100, Math.ceil(textWidth + 36));
+
+        // Fixed narrow columns
+        if (col.key === 'number' || col.key === 'delete') {
+            minW = 48;
+        }
+
+        // Preserve user manual drag resize if set
+        if (th.dataset.userWidth) {
+            const uw = parseInt(th.dataset.userWidth, 10);
+            if (!isNaN(uw) && uw > minW) {
+                minW = uw;
+            }
+        }
+
+        colMeasurements.push({ col, th, minW, key: col.key });
+        totalRequiredWidth += minW;
+    });
+
+    document.body.removeChild(dummySpan);
+
+    if (totalRequiredWidth <= containerWidth) {
+        // Fits container: fill 100% and distribute extra space cleanly
+        table.style.width = '100%';
+        table.style.minWidth = '100%';
+
+        const extraSpace = containerWidth - totalRequiredWidth;
+        const expandable = colMeasurements.filter(c => c.key !== 'number' && c.key !== 'delete');
+        const controlIdCol = colMeasurements.find(c => c.key === 'control_id');
+
+        colMeasurements.forEach(c => {
+            let finalW = c.minW;
+            if (c.key === 'number' || c.key === 'delete') {
+                finalW = 48;
+            } else if (controlIdCol && c === controlIdCol) {
+                // Control ID gets majority of extra space for long XPaths
+                finalW += Math.floor(extraSpace * 0.6);
+            } else if (expandable.includes(c)) {
+                const othersCount = Math.max(1, expandable.length - 1);
+                finalW += Math.floor((extraSpace * 0.4) / othersCount);
+            }
+            c.th.style.width = `${finalW}px`;
+            c.th.style.minWidth = `${c.minW}px`;
+        });
+    } else {
+        // Exceeds container: expand table width smoothly so no column is compressed or shows "..."
+        table.style.width = `${totalRequiredWidth}px`;
+        table.style.minWidth = `${totalRequiredWidth}px`;
+
+        colMeasurements.forEach(c => {
+            c.th.style.width = `${c.minW}px`;
+            c.th.style.minWidth = `${c.minW}px`;
+        });
+    }
 }
 
 function applyColumnVisibility() {
@@ -9042,6 +9161,8 @@ function applyColumnVisibility() {
             }
         });
     });
+
+    autoAdjustTableLayout();
 
     if (typeof initResizableTable === 'function') initResizableTable();
 }

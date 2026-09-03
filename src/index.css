@@ -859,7 +859,7 @@ th .resizer:hover {
 #mainTable,
 #repoTableElement {
     table-layout: fixed !important;
-    width: 100% !important;
+    min-width: 100%;
     margin-bottom: 0 !important;
     border-collapse: collapse !important;
     background-color: #ffffff;
@@ -3783,16 +3783,32 @@ html, body {
   border: 1px solid var(--as-border) !important;
   border-bottom: 1px solid #eef2f6 !important;
   border-radius: 10px 10px 0 0 !important;
-  /* Keep scroll; hide the scrollbar chrome (mouse wheel / trackpad still work) */
-  scrollbar-width: none; /* Firefox */
-  -ms-overflow-style: none; /* legacy Edge */
+  /* Clean, subtle scrollbar when content overflows horizontally */
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
 }
 
 .table-bottom-section .bottom-div::-webkit-scrollbar,
 .table-bottom-section #table-container::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  display: none !important;
+  width: 6px !important;
+  height: 6px !important;
+  display: block !important;
+}
+
+.table-bottom-section .bottom-div::-webkit-scrollbar-track,
+.table-bottom-section #table-container::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.table-bottom-section .bottom-div::-webkit-scrollbar-thumb,
+.table-bottom-section #table-container::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.table-bottom-section .bottom-div::-webkit-scrollbar-thumb:hover,
+.table-bottom-section #table-container::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 /* Fixed footer: + Row (left) and pagination / rows-per-page (right) */
