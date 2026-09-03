@@ -3236,6 +3236,160 @@ th .resizer:hover {
 }
 
 
+/* --- Form modals (Create Feature / Record Scenario) — match scraper alert style --- */
+.custom-modal.form-modal {
+    width: 400px;
+    overflow: visible;
+}
+
+.custom-modal.form-modal .modal-body.form-modal-body {
+    text-align: left;
+    padding: 18px 20px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.custom-modal.form-modal .form-modal-lead {
+    margin: 0 0 2px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.45;
+}
+
+.custom-modal.form-modal .form-field-hint {
+    margin: -6px 0 0;
+    font-size: 10.5px;
+    color: #64748b;
+    line-height: 1.4;
+}
+
+.custom-modal.form-modal .floating-group {
+    margin: 0;
+}
+
+.custom-modal.form-modal .floating-input {
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 6px !important;
+    padding: 12px 36px 12px 12px !important;
+    font-size: 12.5px;
+    color: #0f172a;
+    background: #ffffff;
+}
+
+.custom-modal.form-modal .floating-input:focus {
+    border-color: #2F8BCC !important;
+    box-shadow: 0 0 0 3px rgba(47, 139, 204, 0.15);
+}
+
+.custom-modal.form-modal .floating-input.input-error-border {
+    border-color: #dc2626 !important;
+    box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.12);
+}
+
+.custom-modal.form-modal .floating-label {
+    background-color: #ffffff;
+    color: #64748b;
+}
+
+.custom-modal.form-modal .floating-input:focus ~ .floating-label {
+    color: #2F8BCC;
+}
+
+.custom-modal.form-modal .floating-input.input-error-border ~ .floating-label,
+.custom-modal.form-modal .floating-input.input-error-border:focus ~ .floating-label {
+    color: #dc2626 !important;
+}
+
+.custom-modal.form-modal .modal-actions {
+    margin-top: 6px;
+    justify-content: flex-end;
+}
+
+.custom-modal.form-modal .btn-cancel,
+.custom-modal.form-modal .btn-confirm {
+    min-width: 96px;
+    height: 32px;
+    padding: 0 14px;
+}
+
+/* Error info icon — hidden until validation fails; tooltip on hover */
+.custom-modal.form-modal .rec-error-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    z-index: 12;
+    background: #ffffff;
+    border-radius: 50%;
+}
+
+.custom-modal.form-modal textarea.floating-input ~ .rec-error-icon {
+    top: auto;
+    bottom: 12px;
+    transform: none;
+}
+
+.custom-modal.form-modal .rec-error-icon svg {
+    display: block;
+    width: 16px;
+    height: 16px;
+}
+
+.custom-modal.form-modal .rec-error-tooltip {
+    position: absolute;
+    right: -4px;
+    top: calc(100% + 10px);
+    background: #ffffff !important;
+    color: #1f2937 !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.4;
+    width: max-content;
+    max-width: 260px;
+    white-space: normal;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.14);
+    opacity: 0;
+    visibility: hidden;
+    z-index: 10002;
+    pointer-events: none;
+}
+
+.custom-modal.form-modal .rec-error-tooltip::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    right: 8px;
+    border-width: 6px;
+    border-style: solid;
+    border-color: transparent transparent #e2e8f0 transparent;
+}
+
+.custom-modal.form-modal .rec-error-tooltip::after {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    right: 9px;
+    border-width: 5px;
+    border-style: solid;
+    border-color: transparent transparent #ffffff transparent;
+}
+
+.custom-modal.form-modal .rec-error-icon:hover .rec-error-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
 /* --- Record Scenario Modal Validation Styles --- */
 .rec-error-icon {
     position: absolute;

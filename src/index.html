@@ -308,12 +308,14 @@
                 <div class="home-field home-field-app">
                     <label for="appname">App</label>
                     <select id="appname" class="js-custom-select">
-                        <option value="">Loading Apps...</option>
+                        <option value="">No device connected</option>
                     </select>
                 </div>
                 <div class="home-field home-field-device">
                     <label for="devicename">Device</label>
-                    <select type="text" id="devicename" name="devicename" class="js-custom-select" placeholder="Your device name.."></select>
+                    <select type="text" id="devicename" name="devicename" class="js-custom-select" placeholder="Your device name..">
+                        <option value="">No device connected</option>
+                    </select>
                 </div>
             </div>
             <div class="home-session-actions">
@@ -1238,24 +1240,36 @@
     </div>
 </div>
 
-<div class="custom-modal" id="createFeatureModal" style="display: none; width: 380px; background: #ffffff; border: 2px solid #2F8BCC; border-radius: 8px; overflow: visible; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100000 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-    <div style="background: #000000; border-bottom: 2px solid #2F8BCC; padding: 10px 16px; display: flex; align-items: center; border-radius: 6px 6px 0 0;">
-        <span style="color: #ffffff; font-size: 14px; font-weight: 600;">Create Feature</span>
+<div class="custom-modal form-modal" id="createFeatureModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="createFeatureTitle">
+    <div class="modal-header header-info">
+        <span style="display: flex;" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="warning-icon">
+                <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+            </svg>
+        </span>
+        <span class="modal-title" id="createFeatureTitle">Create Feature</span>
     </div>
-    <div style="padding: 24px 20px 16px 20px; display: flex; flex-direction: column; gap: 20px; background: #ffffff; color: #333333; border-radius: 0 0 6px 6px;">
+    <div class="modal-body form-modal-body">
+        <p class="modal-sub-text form-modal-lead">Name the selected area on the device screen.</p>
         <div class="floating-group">
-            <input type="text" id="feature_name_input" class="floating-input" placeholder=" ">
+            <input type="text" id="feature_name_input" class="floating-input" placeholder=" " maxlength="60" autocomplete="off">
             <label class="floating-label">Feature Name *</label>
-            <div id="feature_name_error_icon" class="rec-error-icon">
-                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            <div id="feature_name_error_icon" class="rec-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
                 </svg>
                 <div class="rec-error-tooltip" id="feature_name_error_text"></div>
             </div>
         </div>
-        <div style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px;">
-            <button id="feature_cancel_btn" class="pill-btn" style="flex: 1; background-color: #555555; color: #fff; height: 30px !important; font-size: 12px;">Cancel</button>
-            <button id="feature_save_btn" class="pill-btn" style="flex: 1; background-color: #2F8BCC; color: #fff; height: 30px !important; font-size: 12px;">Save Feature</button>
+        <p class="form-field-hint">At least 3 characters, max 3 words. Start with a letter; letters, numbers, underscore, and single spaces only.</p>
+        <div class="modal-actions">
+            <button type="button" class="btn-cancel" id="feature_cancel_btn">Cancel</button>
+            <button type="button" class="btn-confirm" id="feature_save_btn">Save Feature</button>
         </div>
     </div>
 </div>
@@ -1301,17 +1315,26 @@
     <span><img src="icon/load-8510_256.gif" style="height: 101px;"/></span>
 </div>
 
-<div class="custom-modal" id="recordScenarioModal" style="display: none; width: 380px; background: #ffffff; border: 2px solid #2F8BCC; border-radius: 8px; overflow: visible; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100000 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-    <div style="background: #000000; border-bottom: 2px solid #2F8BCC; padding: 10px 16px; display: flex; align-items: center; border-radius: 6px 6px 0 0;">
-        <span style="color: #ffffff; font-size: 14px; font-weight: 600;">Record Scenario</span>
+<div class="custom-modal form-modal" id="recordScenarioModal" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="recordScenarioTitle">
+    <div class="modal-header header-info">
+        <span style="display: flex;" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="warning-icon">
+                <circle cx="12" cy="12" r="9"></circle>
+                <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"></circle>
+            </svg>
+        </span>
+        <span class="modal-title" id="recordScenarioTitle">Record Scenario</span>
     </div>
-    <div style="padding: 24px 20px 16px 20px; display: flex; flex-direction: column; gap: 20px; background: #ffffff; color: #333333; border-radius: 0 0 6px 6px;">
+    <div class="modal-body form-modal-body">
+        <p class="modal-sub-text form-modal-lead">Set page and scenario details before recording interactions.</p>
         <div class="floating-group">
             <input type="text" id="rec_pagename" class="floating-input" placeholder=" ">
             <label class="floating-label">Page Name *</label>
-            <div id="rec_page_error_icon" class="rec-error-icon">
-                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            <div id="rec_page_error_icon" class="rec-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
                 </svg>
                 <div class="rec-error-tooltip" id="rec_page_error_text"></div>
             </div>
@@ -1319,9 +1342,11 @@
         <div class="floating-group">
             <input type="text" id="rec_scenarioname" class="floating-input" placeholder=" ">
             <label class="floating-label">Scenario Name *</label>
-            <div id="rec_scenario_error_icon" class="rec-error-icon">
-                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            <div id="rec_scenario_error_icon" class="rec-error-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
                 </svg>
                 <div class="rec-error-tooltip" id="rec_scenario_error_text"></div>
             </div>
@@ -1329,16 +1354,18 @@
         <div class="floating-group">
             <textarea id="rec_scenariooutline" class="floating-input" rows="2.5" placeholder=" "></textarea>
             <label class="floating-label">Scenario Outline</label>
-            <div id="rec_outline_error_icon" class="rec-error-icon" style="display: none;">
-                <svg viewBox="0 0 24 24" fill="#d9534f" style="width: 18px; height: 18px;">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+            <div id="rec_outline_error_icon" class="rec-error-icon" style="display: none;" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" width="16" height="16">
+                    <circle cx="12" cy="12" r="9"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
                 </svg>
                 <div class="rec-error-tooltip" id="rec_outline_error_text"></div>
             </div>
         </div>
-        <div style="display: flex; justify-content: space-between; gap: 12px; margin-top: 4px;">
-            <button id="rec_close_btn" class="pill-btn" style="flex: 1; background-color: #555555; color: #fff; height: 30px !important; font-size: 12px;">Close</button>
-            <button id="rec_start_btn" class="pill-btn" style="flex: 1; background-color: #2F8BCC; color: #fff; height: 30px !important; font-size: 12px;">Start Recording</button>
+        <div class="modal-actions">
+            <button type="button" class="btn-cancel" id="rec_close_btn">Close</button>
+            <button type="button" class="btn-confirm" id="rec_start_btn">Start Recording</button>
         </div>
     </div>
 </div>

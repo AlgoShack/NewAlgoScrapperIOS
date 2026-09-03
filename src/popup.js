@@ -98,55 +98,380 @@
     window.activeResumedAppName = null;
     window._resumedProjectSnapshot = null;
 
+    function isFeatureAreaApplicableToPage(area, targetPageName) {
+        // Page name is optional metadata only — uniqueness is by screen, not page name.
+        // Keep helper for callers that still pass a page, but never block cross-screen features.
+        if (!area || !area.rect) return false;
+        const target = (targetPageName || '').trim().toLowerCase();
+        if (!target || target === 'all') return true;
+        const areaPage = (area.pageName || '').trim().toLowerCase();
+        if (!areaPage || areaPage === 'all') return true;
+        return areaPage === target;
+    }
+    window.isFeatureAreaApplicableToPage = isFeatureAreaApplicableToPage;
+
+    function computeScreenSignature(doc) {
+        if (!doc) return "";
+        try {
+            const nodes = (typeof extractContentNodes === 'function') ? extractContentNodes(doc) : [];
+            if (!nodes || nodes.length === 0) return "";
+
+            const uniq = (arr) => Array.from(new Set(arr.filter(Boolean)));
+            const textKeys = [];
+            const geoKeys = [];
+            nodes.forEach(n => {
+                if (!n || !n.key) return;
+                if (n.text) textKeys.push(n.key);
+                else geoKeys.push(n.key);
+            });
+
+            // Prefer labeled controls; pad with geometry keys when the screen is sparse
+            const primary = uniq(textKeys);
+            const secondary = uniq(geoKeys);
+            const keyPool = (primary.length >= 8 ? primary : primary.concat(secondary));
+            const keyPart = keyPool.slice(0, 48).sort().join("||");
+
+            // Y-band layout fingerprint — separates screens that share the same chrome labels
+            const bandPart = uniq(nodes
+                .filter(n => n && n.text)
+                .map(n => `${Math.round((n.y || 0) / 80)}:${n.key}`)
+            ).sort().slice(0, 36).join(",");
+
+            return `${keyPart}##${nodes.length}##${bandPart}`;
+        } catch (e) {
+            return "";
+        }
+    }
+    window.computeScreenSignature = computeScreenSignature;
+
+    function parseScreenSignatureParts(sig) {
+        const s = String(sig || '');
+        if (!s) return { keys: [], bands: [], count: 0 };
+        if (s.includes('##')) {
+            const parts = s.split('##');
+            return {
+                keys: (parts[0] || '').split('||').map(x => x.trim()).filter(Boolean),
+                count: parseInt(parts[1], 10) || 0,
+                bands: (parts[2] || '').split(',').map(x => x.trim()).filter(Boolean)
+            };
+        }
+        // Legacy signatures were plain key||key||key
+        const keys = s.split('||').map(x => x.trim()).filter(Boolean);
+        return { keys, bands: [], count: keys.length };
+    }
+
+    function jaccardSimilarity(aKeys, bKeys) {
+        if (!aKeys.length || !bKeys.length) return 0;
+        const bSet = new Set(bKeys);
+        const inter = aKeys.filter(k => bSet.has(k)).length;
+        const union = new Set(aKeys.concat(bKeys)).size;
+        return union > 0 ? (inter / union) : 0;
+    }
+
+    function screenSignatureSimilarity(sigA, sigB) {
+        if (!sigA || !sigB) return 0;
+        if (sigA === sigB) return 1;
+        const a = parseScreenSignatureParts(sigA);
+        const b = parseScreenSignatureParts(sigB);
+        const keySim = jaccardSimilarity(a.keys, b.keys);
+        const countA = a.count || a.keys.length;
+        const countB = b.count || b.keys.length;
+        const countRatio = Math.min(countA, countB) / Math.max(countA, countB, 1);
+        // Legacy signatures have no layout bands — lean on keys so validation still works after refresh
+        if (!a.bands.length || !b.bands.length) {
+            return (keySim * 0.85) + (countRatio * 0.15);
+        }
+        const bandSim = jaccardSimilarity(a.bands, b.bands);
+        // Layout bands weigh heavily so shared nav chrome alone cannot pass as same screen
+        return (keySim * 0.4) + (bandSim * 0.45) + (countRatio * 0.15);
+    }
+    window.screenSignatureSimilarity = screenSignatureSimilarity;
+
+    /** Same UI screen? Tolerates refresh drift; rejects clearly different pages. */
+    function isSameFeatureScreen(area, doc) {
+        if (!area) return false;
+        const currentDoc = doc || window.xmlDoc;
+        if (!currentDoc) return true;
+        const currentSig = computeScreenSignature(currentDoc);
+
+        if (area.screenSignature && currentSig) {
+            const sim = screenSignatureSimilarity(area.screenSignature, currentSig);
+            // Same screen (including mild refresh drift)
+            if (sim >= 0.68) return true;
+            // Clearly navigated to another page
+            if (sim < 0.40) return false;
+
+            // Ambiguous: tie-break with content still present in the feature rect
+            if (Array.isArray(area.screenContentKeys) && area.screenContentKeys.length > 0 && area.rect) {
+                const currentKeys = computeScreenContentKeys(currentDoc, area.rect);
+                if (currentKeys.length > 0) {
+                    const overlap = area.screenContentKeys.filter(k => currentKeys.includes(k)).length;
+                    const ratio = overlap / Math.min(area.screenContentKeys.length, currentKeys.length);
+                    return ratio >= 0.30;
+                }
+            }
+            return false;
+        }
+
+        if (Array.isArray(area.screenContentKeys) && area.screenContentKeys.length > 0 && area.rect) {
+            const currentKeys = computeScreenContentKeys(currentDoc, area.rect);
+            if (currentKeys.length > 0) {
+                const overlap = area.screenContentKeys.filter(k => currentKeys.includes(k)).length;
+                const ratio = overlap / Math.min(area.screenContentKeys.length, currentKeys.length);
+                return ratio >= 0.45;
+            }
+            return false;
+        }
+
+        // No screen identity on the saved feature: never bind onto a known hierarchy
+        if (currentSig) return false;
+        return true;
+    }
+    window.isSameFeatureScreen = isSameFeatureScreen;
+
+    /** Keep live feature screen stamps aligned after refresh so validation keeps working. */
+    function realignLiveFeatureScreensToCurrentDoc() {
+        const doc = window.xmlDoc;
+        if (!doc) return;
+        const currentSig = computeScreenSignature(doc);
+        if (!currentSig) return;
+        (registeredFeatureAreas || []).forEach(area => {
+            if (!area || !area.screenSignature) return;
+            if (!isSameFeatureScreen(area, doc)) return;
+            area.screenSignature = currentSig;
+            if (area.rect && typeof computeScreenContentKeys === 'function') {
+                const keys = computeScreenContentKeys(doc, area.rect);
+                if (keys && keys.length) area.screenContentKeys = keys;
+            }
+        });
+        window.registeredFeatureAreas = registeredFeatureAreas;
+    }
+    window.realignLiveFeatureScreensToCurrentDoc = realignLiveFeatureScreensToCurrentDoc;
+
+    function noteDeviceScreenChanged() {
+        try {
+            const sig = computeScreenSignature(window.xmlDoc);
+            const prev = window._lastDeviceScreenSignature || '';
+            window._lastDeviceScreenSignature = sig || '';
+            if (prev && sig && screenSignatureSimilarity(prev, sig) < 0.40) {
+                if (typeof clearOverlay === 'function') clearOverlay();
+            } else if (sig) {
+                realignLiveFeatureScreensToCurrentDoc();
+            }
+        } catch (_) {}
+    }
+    window.noteDeviceScreenChanged = noteDeviceScreenChanged;
+
+    function computeScreenContentKeys(doc, rect) {
+        if (!doc || !rect) return [];
+        try {
+            const nodes = (typeof extractContentNodes === 'function') ? extractContentNodes(doc) : [];
+            if (!nodes || nodes.length === 0) return [];
+            return nodes
+                .filter(n => {
+                    const cx = n.x + n.width / 2;
+                    const cy = n.y + n.height / 2;
+                    return cx >= rect.x - 4 && cx <= rect.x + rect.width + 4 &&
+                           cy >= rect.y - 4 && cy <= rect.y + rect.height + 4;
+                })
+                .map(n => n.key)
+                .filter(Boolean);
+        } catch (e) {
+            return [];
+        }
+    }
+    window.computeScreenContentKeys = computeScreenContentKeys;
+
+    function extractNodeUniqueIdentifier(node, clickX, clickY) {
+        if (!node || node.nodeType !== 1) {
+            return (typeof clickX === 'number' && typeof clickY === 'number')
+                ? `COORDINATE(${Math.round(clickX)},${Math.round(clickY)})`
+                : "";
+        }
+
+        const tagName = node.nodeName;
+
+        // Android attributes
+        const resourceId = (node.getAttribute("resource-id") || node.getAttribute("id") || "").trim();
+        const text = (node.getAttribute("text") || "").trim();
+        const contentDesc = (node.getAttribute("content-desc") || "").trim();
+
+        // iOS attributes
+        const name = (node.getAttribute("name") || "").trim();
+        const label = (node.getAttribute("label") || "").trim();
+        const value = (node.getAttribute("value") || "").trim();
+        const identifier = (node.getAttribute("identifier") || "").trim();
+
+        if (resourceId) return `${tagName}[id=${resourceId}]`;
+        if (identifier) return `${tagName}[id=${identifier}]`;
+        if (name) return `${tagName}[name=${name}]`;
+        if (label) return `${tagName}[label=${label}]`;
+        if (contentDesc) return `${tagName}[desc=${contentDesc}]`;
+        if (text) return `${tagName}[text=${text}]`;
+        if (value) return `${tagName}[value=${value}]`;
+
+        if (typeof getAllPossibleXPaths === 'function') {
+            const xpaths = getAllPossibleXPaths(node);
+            if (xpaths && xpaths.length > 0) return xpaths[0];
+        }
+
+        return (typeof clickX === 'number' && typeof clickY === 'number')
+            ? `${tagName}@(${Math.round(clickX)},${Math.round(clickY)})`
+            : `${tagName}`;
+    }
+    window.extractNodeUniqueIdentifier = extractNodeUniqueIdentifier;
+
+    function isNodeRelatedToFeature(node, area) {
+        if (!node || !area) return false;
+        try {
+            const uid = extractNodeUniqueIdentifier(node);
+            if (uid && area.uniqueIdentifier && uid === area.uniqueIdentifier) return true;
+
+            if (area.xpaths && Array.isArray(area.xpaths) && typeof getAllPossibleXPaths === 'function') {
+                const xpaths = getAllPossibleXPaths(node);
+                if (xpaths && xpaths.some(xp => area.xpaths.includes(xp))) return true;
+            }
+
+            // Check if node is child or descendant of feature element
+            let curr = node.parentNode;
+            while (curr && curr.nodeType === 1) {
+                const aId = extractNodeUniqueIdentifier(curr);
+                if (aId && area.uniqueIdentifier && aId === area.uniqueIdentifier) return true;
+                if (area.xpaths && Array.isArray(area.xpaths) && typeof getAllPossibleXPaths === 'function') {
+                    const aXPaths = getAllPossibleXPaths(curr);
+                    if (aXPaths && aXPaths.some(xp => area.xpaths.includes(xp))) return true;
+                }
+                curr = curr.parentNode;
+            }
+        } catch (e) {}
+        return false;
+    }
+    window.isNodeRelatedToFeature = isNodeRelatedToFeature;
+
+    function isFeatureIdentifierPresentOnScreen(doc, area) {
+        if (!doc || !area) return false;
+        if (!area.uniqueIdentifier || area.uniqueIdentifier.startsWith("COORDINATE")) return true;
+        try {
+            const allNodes = doc.getElementsByTagName("*");
+            for (let i = 0; i < allNodes.length; i++) {
+                const n = allNodes[i];
+                const uid = extractNodeUniqueIdentifier(n);
+                if (uid && uid === area.uniqueIdentifier) return true;
+                if (area.xpaths && Array.isArray(area.xpaths) && typeof getAllPossibleXPaths === 'function') {
+                    const xps = getAllPossibleXPaths(n);
+                    if (xps && xps.some(xp => area.xpaths.includes(xp))) return true;
+                }
+            }
+        } catch (e) {}
+        return false;
+    }
+    window.isFeatureIdentifierPresentOnScreen = isFeatureIdentifierPresentOnScreen;
+
+    function isFeatureAreaApplicableToCurrentScreen(area, currentScreenDoc, x, y, pageNameOverride) {
+        if (!area || !area.rect) return false;
+
+        const doc = currentScreenDoc || window.xmlDoc;
+        if (!doc) return true;
+
+        // Hard gate: feature only lives on the device screen it was created on
+        if (!isSameFeatureScreen(area, doc)) {
+            return false;
+        }
+
+        // Unique Identifier Screen Presence (skip coordinate-only ids)
+        if (area.uniqueIdentifier && !String(area.uniqueIdentifier).startsWith("COORDINATE")) {
+            if (!isFeatureIdentifierPresentOnScreen(doc, area)) {
+                return false;
+            }
+        }
+
+        // Cursor hover node identity check — only when we have a real element id
+        if (area.uniqueIdentifier && !String(area.uniqueIdentifier).startsWith("COORDINATE")
+            && typeof x === 'number' && typeof y === 'number' && typeof findHoveredNode === 'function') {
+            const currentNode = findHoveredNode(x, y);
+            if (currentNode) {
+                const isRelated = isNodeRelatedToFeature(currentNode, area);
+                if (!isRelated) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+    window.isFeatureAreaApplicableToCurrentScreen = isFeatureAreaApplicableToCurrentScreen;
+
     function applyTableFeatureSubFeature(cell, newName) {
         if (!cell || !newName) return;
         const trimmed = String(newName).trim();
         cell.innerText = trimmed;
         const lower = trimmed.toLowerCase();
-        const alreadyRegistered = (registeredFeatureAreas || []).some(a => a && a.name && String(a.name).trim().toLowerCase() === lower);
+        const tr = cell.closest('tr');
+        const pageCell = tr ? tr.querySelector('.page') : null;
+        const pageName = (pageCell && pageCell.innerText.trim())
+            || ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '');
+
+        const alreadyRegistered = (registeredFeatureAreas || []).some(a =>
+            a && a.name && String(a.name).trim().toLowerCase() === lower && isFeatureAreaApplicableToPage(a, pageName)
+        );
         if (!alreadyRegistered) {
-            const tr = cell.closest('tr');
             let rect = null;
             try {
                 rect = tr && tr.dataset.rect ? JSON.parse(tr.dataset.rect) : null;
             } catch (_) {
                 rect = null;
             }
-            const pageCell = tr ? tr.querySelector('.page') : null;
-            const pageName = (pageCell && pageCell.innerText.trim())
-                || ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '');
             registeredFeatureAreas.push({
                 rect: rect,
                 name: trimmed,
                 fullPage: false,
-                pageName: pageName
+                pageName: pageName,
+                screenSignature: computeScreenSignature(window.xmlDoc),
+                screenContentKeys: computeScreenContentKeys(window.xmlDoc, rect),
+                nodeText: (tr && tr.querySelector('.ControlName')) ? tr.querySelector('.ControlName').innerText.trim() : ""
             });
             window.registeredFeatureAreas = registeredFeatureAreas;
             if (typeof window.saveFeatureToRepo === 'function') {
-                window.saveFeatureToRepo(trimmed, rect, false);
+                window.saveFeatureToRepo(trimmed, rect, false, null, null, pageName, computeScreenSignature(window.xmlDoc), computeScreenContentKeys(window.xmlDoc, rect));
             }
         }
         if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     }
     window.applyTableFeatureSubFeature = applyTableFeatureSubFeature;
 
-    function applyTableFeatureRenameAll(oldName, newName) {
+    function applyTableFeatureRenameAll(oldName, newName, pageName) {
         const oldLower = String(oldName || '').trim().toLowerCase();
         const trimmed = String(newName || '').trim();
         if (!oldLower || !trimmed) return;
+        const currentSig = computeScreenSignature(window.xmlDoc);
+
         document.querySelectorAll('#myTable .featureName').forEach(cell => {
-            if ((cell.innerText || '').replace(/\u00a0/g, ' ').trim().toLowerCase() === oldLower) {
-                cell.innerText = trimmed;
+            if ((cell.innerText || '').replace(/\u00a0/g, ' ').trim().toLowerCase() !== oldLower) return;
+            const tr = cell.closest('tr');
+            const rowSig = tr && tr.dataset ? (tr.dataset.screenSignature || '') : '';
+            // Only rename rows from the same device screen (Page Name can stay unchanged)
+            if (rowSig && currentSig && screenSignatureSimilarity(rowSig, currentSig) < 0.68) return;
+            if (!rowSig && currentSig) {
+                // legacy rows without signature: only touch if feature area matches current screen
+                const rect = (() => { try { return tr && tr.dataset.rect ? JSON.parse(tr.dataset.rect) : null; } catch (_) { return null; } })();
+                const areaHit = (registeredFeatureAreas || []).some(a =>
+                    a && a.name && a.name.trim().toLowerCase() === oldLower
+                    && isSameFeatureScreen(a, window.xmlDoc)
+                    && (!rect || (a.rect && Math.abs((a.rect.x || 0) - (rect.x || 0)) < 4))
+                );
+                if (!areaHit) return;
             }
+            cell.innerText = trimmed;
         });
         (registeredFeatureAreas || []).forEach(area => {
-            if (area && area.name && String(area.name).trim().toLowerCase() === oldLower) {
-                area.name = trimmed;
-            }
+            if (!area || !area.name) return;
+            if (String(area.name).trim().toLowerCase() !== oldLower) return;
+            if (!isSameFeatureScreen(area, window.xmlDoc)) return;
+            area.name = trimmed;
         });
         window.registeredFeatureAreas = registeredFeatureAreas;
-        if (typeof window.saveFeatureToRepo === 'function') {
-            window.saveFeatureToRepo(trimmed, null, false);
+        if (typeof window.renameFeatureInRepo === 'function') {
+            window.renameFeatureInRepo(oldName, trimmed, pageName, currentSig);
         }
         if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     }
@@ -1330,6 +1655,53 @@
         return `${device.name} (${typeLabel})`;
     }
 
+    function setNoDeviceConnectedState() {
+        const deviceSelect = document.getElementById('devicename');
+        if (deviceSelect) {
+            deviceSelect.innerHTML = '<option value="">No device connected</option>';
+            deviceSelect.value = '';
+            if (typeof deviceSelect._rebuildCustomSelect === 'function') {
+                deviceSelect._rebuildCustomSelect();
+            }
+        }
+        const udidInput = document.getElementById('udid');
+        if (udidInput) udidInput.value = '';
+        deviceId = '';
+        deviceName = '';
+
+        const appSelect = document.getElementById('appname');
+        if (appSelect) {
+            appSelect.innerHTML = '<option value="">No device connected</option>';
+            appSelect.value = '';
+            if (typeof appSelect._rebuildCustomSelect === 'function') {
+                appSelect._rebuildCustomSelect();
+            }
+        }
+
+        const runBtn = document.getElementById('Run');
+        if (runBtn) {
+            runBtn.disabled = true;
+            runBtn.style.backgroundColor = '#B6B6B4';
+        }
+
+        ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn'].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (btn) {
+                btn.disabled = true;
+                btn.style.backgroundColor = '#B6B6B4';
+            }
+        });
+
+        ["platformname", "appname", "devicename"].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = false;
+        });
+
+        driver = null;
+        refreshShouldLaunchApp = true;
+    }
+    window.setNoDeviceConnectedState = setNoDeviceConnectedState;
+
     function populateDeviceDropdown(devices) {
         const deviceSelect = document.getElementById('devicename');
         if (!deviceSelect) return null;
@@ -1343,18 +1715,7 @@
         deviceSelect.innerHTML = '';
 
         if (ordered.length === 0) {
-            const option = document.createElement('option');
-            option.value = '';
-            option.text = 'Select Device';
-            deviceSelect.appendChild(option);
-            deviceSelect.value = '';
-            deviceId = '';
-            deviceName = '';
-            const udidInput = document.getElementById('udid');
-            if (udidInput) udidInput.value = '';
-            if (typeof deviceSelect._rebuildCustomSelect === 'function') {
-                deviceSelect._rebuildCustomSelect();
-            }
+            setNoDeviceConnectedState();
             return null;
         }
 
@@ -1487,6 +1848,8 @@
             }
 
             ipcRenderer.send("get-installed-apps", selectedDevice);
+        } else {
+            setNoDeviceConnectedState();
         }
 
         // Start continuous real-time device monitoring
@@ -1613,39 +1976,17 @@
                                     "warning"
                                 );
                             }
-                        } else {
                             // NO devices connected on ANY platform!
-                            const deviceSelect = document.getElementById('devicename');
-                            if (deviceSelect) {
-                                deviceSelect.innerHTML = '<option value="">Select Device</option>';
-                                if (typeof deviceSelect._rebuildCustomSelect === 'function') {
-                                    deviceSelect._rebuildCustomSelect();
-                                }
-                            }
-                            const udidInput = document.getElementById('udid');
-                            if (udidInput) udidInput.value = '';
-                            deviceId = '';
-                            deviceName = '';
-
-                            const appSelect = document.getElementById('appname');
-                            if (appSelect) {
-                                appSelect.innerHTML = '<option value="">Select App</option>';
-                                if (typeof appSelect._rebuildCustomSelect === 'function') {
-                                    appSelect._rebuildCustomSelect();
-                                }
-                            }
-
-                            const runBtn = document.getElementById('Run');
-                            if (runBtn) {
-                                runBtn.disabled = true;
-                                runBtn.style.backgroundColor = '#B6B6B4';
-                            }
+                            setNoDeviceConnectedState();
 
                             if (wasDeviceConnectedBefore) {
                                 showCustomAlert(
                                     "Device Disconnected",
                                     `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device or start an iOS simulator.`,
-                                    "warning"
+                                    "warning",
+                                    () => {
+                                        setNoDeviceConnectedState();
+                                    }
                                 );
                             }
                         }
@@ -1871,23 +2212,45 @@
             if (!f || !f.name) return;
             const name = String(f.name).trim();
             if (!name) return;
-            const exists = registeredFeatureAreas.some(a => a && a.name && a.name.trim().toLowerCase() === name.toLowerCase());
-            if (exists) return;
+            const resolvedPage = (f.pageName && f.pageName !== 'Default' && f.pageName !== 'DefaultPage') ? f.pageName : (pageName || '');
+            // Keep every stored feature — only skip exact same id (or same name+uid when no id)
+            const existing = registeredFeatureAreas.find(a => {
+                if (!a || !a.name) return false;
+                if (f.id && a.id) return a.id === f.id;
+                return a.name.trim().toLowerCase() === name.toLowerCase()
+                    && String(a.uniqueIdentifier || '') === String(f.uniqueIdentifier || '')
+                    && repoNameKey(a.pageName || '') === repoNameKey(resolvedPage || '');
+            });
+            if (existing) {
+                if ((!existing.pageName || existing.pageName === 'Default' || existing.pageName === 'DefaultPage') && resolvedPage) {
+                    existing.pageName = resolvedPage;
+                }
+                if (!existing.id && f.id) existing.id = f.id;
+                return;
+            }
             registeredFeatureAreas.push({
+                id: f.id || ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
                 name: name,
                 rect: f.rect || null,
                 fullPage: !!f.fullPage,
-                pageName: f.pageName || pageName || ''
+                pageName: resolvedPage,
+                uniqueIdentifier: f.uniqueIdentifier || "",
+                xpaths: Array.isArray(f.xpaths) ? f.xpaths : [],
+                screenSignature: f.screenSignature || "",
+                screenContentKeys: Array.isArray(f.screenContentKeys) ? f.screenContentKeys : [],
+                nodeText: f.nodeText || "",
+                nodeFingerprint: f.nodeFingerprint || ""
             });
         }
 
-        (project.features || []).forEach(f => restoreFeatureArea(f, f && f.pageName));
+        // Restore from scenarios and pages first to ensure accurate page ownership
         (project.scenarios || []).forEach(s => {
             (s.features || []).forEach(f => restoreFeatureArea(f, s.pageName || s.name));
         });
         (project.pages || []).forEach(pg => {
             (pg.features || []).forEach(f => restoreFeatureArea(f, pg.pageName));
         });
+        (project.features || []).forEach(f => restoreFeatureArea(f, f && f.pageName));
 
         // Restore scenarios (names, outlines, and any captured elements)
         if (Array.isArray(project.scenarios)) {
@@ -3239,6 +3602,7 @@
             const pageSource = await capturePageSource();
             const parser = new DOMParser();
             window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
+            if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
 
         } catch (error) {
             console.error("Screenshot capture failed:", error);
@@ -3587,18 +3951,14 @@ document.getElementById("Scrape").addEventListener('click', async () => {
            }
 
         document.getElementById("download").addEventListener('click', async () => {
-                  if (!tableCreated || !hasValidTableData('myTable')) {
-                      showCustomAlert("Export Failed", "No scraped data found to download.", "error");
-                      return;
-                  }
+            if (!tableCreated || !hasValidTableData('myTable')) {
+                showCustomAlert("Export Failed", "No scraped data found to download.", "error");
+                return;
+            }
 
-                  if (typeof hiddenRows !== 'undefined' && hiddenRows && hiddenRows.length > 0) {
-                      pendingExportAction = "download";
-                      showHiddenColumnsWarning();
-                  } else {
-                      downloadTableAsJSON('myTable');
-                  }
-                });
+            // Always download full scraped dataset completely, regardless of column visibility
+            downloadTableAsJSON('myTable');
+        });
 
     function extractAllTableData(tableId) {
         const table = document.getElementById(tableId || 'myTable');
@@ -3608,7 +3968,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
         const rows = table.querySelectorAll('tr');
         const extractedData = [];
 
-        // Map column index to field key
+        // Map column index to field key for any custom headers
         const colIndexToField = [];
         allHeaderElements.forEach((th, idx) => {
             const clone = th.cloneNode(true);
@@ -3623,6 +3983,8 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             else if (thText.includes('CONTROL VALUE')) colIndexToField[idx] = "CONTROL VALUE";
             else if (thText.includes('FEATURE NAME')) colIndexToField[idx] = "FEATURE NAME";
             else if (thText.includes('NODE NAME')) colIndexToField[idx] = "NODE NAME";
+            else if (th.classList.contains('fingerprint') || thText.includes('FINGERPRINT')) colIndexToField[idx] = "FINGERPRINT";
+            else if (th.id === 'appUrl' || thText.includes('APP URL')) colIndexToField[idx] = "APP URL";
             else if (th.classList.contains('custom-editable-header')) {
                 const colName = th.querySelector('span')?.textContent?.trim() || thText;
                 colIndexToField[idx] = colName;
@@ -3631,11 +3993,36 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             }
         });
 
+        const activeApp = (typeof getCurrentAppIdentity === 'function') ? getCurrentAppIdentity() : '';
+        const resolvedDefaultPage = (typeof window.resolveHomePageNameForScrape === 'function')
+            ? window.resolveHomePageNameForScrape()
+            : (document.getElementById('pagename_searchbox')?.value || '').trim();
+
         rows.forEach((row) => {
             if (row.classList.contains('empty-excel-row') || row.classList.contains('no-results-row')) return;
 
             const allCells = Array.from(row.querySelectorAll('td'));
             if (allCells.length === 0) return;
+
+            function getCellValue(cell) {
+                if (!cell) return "";
+                const selectEl = cell.querySelector('select');
+                if (selectEl) {
+                    if (selectEl.value !== undefined && selectEl.value !== null && selectEl.value !== "") {
+                        return String(selectEl.value).trim();
+                    }
+                    if (selectEl.selectedIndex >= 0 && selectEl.options[selectEl.selectedIndex]) {
+                        return String(selectEl.options[selectEl.selectedIndex].text).trim();
+                    }
+                    return "";
+                }
+                const inputEl = cell.querySelector('input[type="text"], textarea');
+                if (inputEl) {
+                    return (inputEl.value || "").trim();
+                }
+                // textContent correctly retrieves text even when display: none !important is active on hidden columns
+                return (cell.textContent || "").trim();
+            }
 
             const rowObj = {
                 "CONTROL NAME": "",
@@ -3650,49 +4037,79 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                 "APP URL": ""
             };
 
+            // 1. Direct semantic class extraction (guaranteed 100% complete data even if columns are hidden)
+            const cnCell = row.querySelector('td.cn, td[id*="cn_"]');
+            const ctCell = row.querySelector('td.ct, td[id*="ct_"]');
+            const xpathCell = row.querySelector('td.xpath, td[id*="xpath_"]');
+            const pageCell = row.querySelector('td.page, td[id*="page_"]');
+            const identCell = row.querySelector('td.identificationType, td[id*="identificationType_"]');
+            const valCell = row.querySelector('td.controlValue, td[id*="controlValue_"]');
+            const featCell = row.querySelector('td.featureName, td[id*="featureName_"]');
+            const nodeCell = row.querySelector('td.nodeName, td[id*="nodeName_"]');
+            const fingerprintCell = row.querySelector('td.fingerprint, .fingerprint');
+            const appUrlCell = row.querySelector('td.appUrl, .appUrl');
+
+            if (cnCell) rowObj["CONTROL NAME"] = getCellValue(cnCell);
+            if (ctCell) rowObj["CONTROL TYPE"] = getCellValue(ctCell);
+            if (xpathCell) rowObj["XPATH"] = getCellValue(xpathCell);
+            if (pageCell) rowObj["PAGE NAME"] = getCellValue(pageCell);
+            if (identCell) rowObj["IDENTIFICATION TYPE"] = getCellValue(identCell);
+            if (valCell) rowObj["CONTROL VALUE"] = getCellValue(valCell);
+            if (featCell) rowObj["FEATURE NAME"] = getCellValue(featCell);
+            if (nodeCell) rowObj["NODE NAME"] = getCellValue(nodeCell);
+            if (fingerprintCell) rowObj["FINGERPRINT"] = getCellValue(fingerprintCell);
+            if (appUrlCell) rowObj["APP URL"] = getCellValue(appUrlCell);
+
+            // 2. Map custom or position-based cells if present
             allCells.forEach((cell, cellIndex) => {
                 const fieldName = colIndexToField[cellIndex];
                 if (!fieldName) return;
-
-                let val = "";
-                const selectEl = cell.querySelector('select');
-                if (selectEl) {
-                    val = (selectEl.value || "").trim();
-                } else {
-                    const inputEl = cell.querySelector('input[type="text"], textarea');
-                    if (inputEl) {
-                        val = (inputEl.value || "").trim();
-                    } else {
-                        val = (cell.textContent || "").trim();
-                    }
+                const cellVal = getCellValue(cell);
+                if (!rowObj[fieldName] || (fieldName !== "CONTROL NAME" && fieldName !== "CONTROL TYPE" && fieldName !== "XPATH" && fieldName !== "PAGE NAME" && fieldName !== "IDENTIFICATION TYPE" && fieldName !== "CONTROL VALUE" && fieldName !== "FEATURE NAME" && fieldName !== "NODE NAME")) {
+                    rowObj[fieldName] = cellVal;
                 }
-                rowObj[fieldName] = val;
             });
 
-            const fingerprintCell = row.querySelector('.fingerprint');
-            const appUrlCell = row.querySelector('.appUrl');
-            if (fingerprintCell && !rowObj["FINGERPRINT"]) {
-                rowObj["FINGERPRINT"] = (fingerprintCell.textContent || "").trim();
-            }
-            if (appUrlCell && !rowObj["APP URL"]) {
-                rowObj["APP URL"] = (appUrlCell.textContent || "").trim();
+            // 3. Robust field fallbacks
+            if (!rowObj["PAGE NAME"] || rowObj["PAGE NAME"].trim().toLowerCase() === 'all') {
+                rowObj["PAGE NAME"] = (resolvedDefaultPage && resolvedDefaultPage.toLowerCase() !== 'all') ? resolvedDefaultPage : 'DefaultPage';
             }
 
+            if (!rowObj["FEATURE NAME"]) {
+                rowObj["FEATURE NAME"] = rowObj["PAGE NAME"];
+            }
+
+            if (!rowObj["NODE NAME"]) {
+                rowObj["NODE NAME"] = rowObj["PAGE NAME"];
+            }
+
+            // Identification Type: ensure it's always populated even if column was hidden
+            if (!rowObj["IDENTIFICATION TYPE"]) {
+                const loc = rowObj["XPATH"] || "";
+                if (typeof inferIdentificationType === 'function') {
+                    rowObj["IDENTIFICATION TYPE"] = inferIdentificationType(loc);
+                } else {
+                    rowObj["IDENTIFICATION TYPE"] = (loc.startsWith("//") || loc.startsWith("(")) ? "XPath" : (loc ? "AccessibilityId" : "Name");
+                }
+            }
+
+            if (!rowObj["APP URL"]) {
+                rowObj["APP URL"] = activeApp;
+            }
+
+            if (!rowObj["FINGERPRINT"] && row.dataset.fingerprint) {
+                rowObj["FINGERPRINT"] = row.dataset.fingerprint;
+            }
+
+            try {
+                rowObj.rect = row.dataset.rect ? JSON.parse(row.dataset.rect) : null;
+            } catch (_) {
+                rowObj.rect = null;
+            }
+
+            // Validate that row has actual data (Control Name, XPath, Control Type, or Page Name)
             const hasData = rowObj["CONTROL NAME"] || rowObj["XPATH"] || rowObj["CONTROL TYPE"] || rowObj["PAGE NAME"];
             if (hasData) {
-                if (!rowObj["PAGE NAME"] || rowObj["PAGE NAME"].trim().toLowerCase() === 'all') {
-                    const resolvedPage = (typeof window.resolveHomePageNameForScrape === 'function')
-                        ? window.resolveHomePageNameForScrape()
-                        : '';
-                    if (resolvedPage && resolvedPage.toLowerCase() !== 'all') {
-                        rowObj["PAGE NAME"] = resolvedPage;
-                    }
-                }
-                try {
-                    rowObj.rect = row.dataset.rect ? JSON.parse(row.dataset.rect) : null;
-                } catch (_) {
-                    rowObj.rect = null;
-                }
                 extractedData.push(rowObj);
             }
         });
@@ -3718,9 +4135,9 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             const scenariosList = [];
             const stepsByPage = {};
 
-            // Group extracted rows (steps) by Page Name
+            // Group extracted rows (steps) by Page Name (case-insensitive)
             dashboardControls.forEach(step => {
-                const page = step["PAGE NAME"];
+                const page = (step["PAGE NAME"] || "").trim().toLowerCase();
                 if (!stepsByPage[page]) stepsByPage[page] = [];
                 stepsByPage[page].push(step);
             });
@@ -3729,12 +4146,23 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             for (const pageName in window.pageScenarioData) {
                 const scenarioInfo = window.pageScenarioData[pageName];
                 if (scenarioInfo && scenarioInfo.scenarioName) {
+                    const pageKey = pageName.trim().toLowerCase();
+                    const matchedSteps = stepsByPage[pageKey] || [];
                     scenariosList.push({
                         "SCENARIO_NAME": scenarioInfo.scenarioName,
                         "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
-                        "STEPS": stepsByPage[pageName] || []
+                        "STEPS": matchedSteps
                     });
                 }
+            }
+
+            // Fallback: If no scenario matched or scenariosList is empty, include all steps
+            if (scenariosList.length === 0 && dashboardControls.length > 0) {
+                scenariosList.push({
+                    "SCENARIO_NAME": "Scenario",
+                    "SCENARIO_OUTLINE": "",
+                    "STEPS": dashboardControls
+                });
             }
 
             jsonContent = {
@@ -3745,7 +4173,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                 }
             };
         } else {
-            // Fallback to normal behavior
+            // Normal scraping: Scrape UI, element-by-element click scraping, etc.
             jsonContent = {
                 "isRecordscenario": false,
                 "dashboardControls": dashboardControls
@@ -3939,6 +4367,10 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                         }
                     }
                 }
+                // Unique across all pages — allow keeping/renaming to the same current value only
+                if (typeof isFeatureNameAlreadyUsed === 'function' && isFeatureNameAlreadyUsed(name, oldName)) {
+                    return "Feature Name already exists. Please choose a different name.";
+                }
                 return "";
             };
 
@@ -3946,9 +4378,15 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             if (newFeatureNameValue === "" || newFeatureNameValue.toLowerCase() === rowPageName.toLowerCase()) {
                 revertCell(rowPageName);
                 if (oldName && oldName.toLowerCase() !== rowPageName.toLowerCase()) {
-                    const otherCellsUsingIt = Array.from(document.querySelectorAll('#myTable .featureName')).some(c => c !== e.target && c.innerText.trim().toLowerCase() === oldName.toLowerCase());
+                    const otherCellsUsingIt = Array.from(document.querySelectorAll('#myTable .featureName')).some(c => {
+                        if (c === e.target) return false;
+                        if (c.innerText.trim().toLowerCase() !== oldName.toLowerCase()) return false;
+                        const otherTr = c.closest('tr');
+                        const otherPage = otherTr && otherTr.querySelector('.page') ? otherTr.querySelector('.page').innerText.trim() : '';
+                        return otherPage.toLowerCase() === rowPageName.toLowerCase();
+                    });
                     if (!otherCellsUsingIt && typeof window.removeFeatureCompletely === 'function') {
-                        window.removeFeatureCompletely(oldName);
+                        window.removeFeatureCompletely(oldName, null, rowPageName);
                     }
                 }
                 if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
@@ -3993,12 +4431,13 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             pendingFeatureRename = {
                 oldName: oldName,
                 newName: newFeatureNameValue,
-                cellElement: e.target
+                cellElement: e.target,
+                pageName: rowPageName
             };
             showConfirmDialog({
                 title: "Update Feature Name",
                 mainText: `How would you like to apply "<b>${newFeatureNameValue}</b>"?`,
-                subText: "Rename All updates every row using this feature. Sub-feature applies it to this element only. Cancel keeps the previous name.",
+                subText: "Rename All updates this feature on the current device screen only. Sub-feature applies it to this element only. Cancel keeps the previous name.",
                 action: "renameFeature",
                 theme: "confirm",
                 okayBtnText: "Rename All",
@@ -4183,12 +4622,14 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                     if (currentRequestId === hoverRequestId) {
                         drawShowElementMarker(rect);
 
-                        // Check if this coordinate belongs to a feature area and show it
+                        // Check if this coordinate belongs to a feature area on the current page and show it
                         const centerX = rect.x + rect.width / 2;
                         const centerY = rect.y + rect.height / 2;
+                        const activeHoverPage = ((typeof getActiveHomePageName === 'function' ? getActiveHomePageName() : '') || '').trim();
                         let matchedArea = null;
                         let minArea = Number.MAX_VALUE;
                         for (const area of registeredFeatureAreas) {
+                            if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, centerX, centerY)) continue;
                             const { x, y, width, height } = area.rect;
                             if (centerX >= x && centerX <= (x + width) && centerY >= y && centerY <= (y + height)) {
                                 const a = width * height;
@@ -4254,12 +4695,14 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                     if (currentRequestId === hoverRequestId) {
                         drawShowElementMarker(rect);
 
-                        // Check if this coordinate belongs to a feature area and show it
+                        // Check if this coordinate belongs to a feature area on the current page and show it
                         const centerX = rect.x + rect.width / 2;
                         const centerY = rect.y + rect.height / 2;
+                        const activeHoverPage = ((typeof getActiveHomePageName === 'function' ? getActiveHomePageName() : '') || '').trim();
                         let matchedArea = null;
                         let minArea = Number.MAX_VALUE;
                         for (const area of registeredFeatureAreas) {
+                            if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, centerX, centerY)) continue;
                             const { x, y, width, height } = area.rect;
                             if (centerX >= x && centerX <= (x + width) && centerY >= y && centerY <= (y + height)) {
                                 const a = width * height;
@@ -4504,10 +4947,14 @@ function markSessionInterrupted(err) {
         }
 
         // If no alternate device available
+        setNoDeviceConnectedState();
         showCustomAlert(
             "Device Disconnected",
             `The connected <b>${isAndroid ? 'Android' : 'iOS'}</b> device was unplugged or disconnected, and no other device is available.<br><br>Please connect a device or start an emulator/simulator to continue.`,
-            "warning"
+            "warning",
+            () => {
+                setNoDeviceConnectedState();
+            }
         );
     }
 }
@@ -4926,6 +5373,7 @@ async function performTouch(x, y) {
         const pageSource = await capturePageSource();
         const parser = new DOMParser();
         window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
+        if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
 
         clearOverlay();
 
@@ -5213,6 +5661,7 @@ async function performSwipe(startX, startY, endX, endY) {
         const pageSource = await capturePageSource();
         const parser = new DOMParser();
         window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
+        if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
         clearOverlay();
 
         // Check if content genuinely scrolled
@@ -5228,6 +5677,11 @@ async function performSwipe(startX, startY, endX, endY) {
         // Record the Scroll Action in the Table ONLY if content actually scrolled
         let rootXPath = (plateformOption === 'IOS' || plateformOption === 'iOS') ? "//XCUIElementTypeApplication" : "//hierarchy";
 
+        const activePageForScroll = (typeof window.resolveHomePageNameForScrape === 'function')
+            ? window.resolveHomePageNameForScrape()
+            : (document.getElementById('pagename_searchbox')?.value || '').trim() || 'DefaultPage';
+        const activeFeatureForScroll = (document.getElementById('featurename_searchbox')?.value || '').trim() || activePageForScroll;
+
         createAndAppendTable([
             {
                 ControlName: `act_Scroll_${Math.round(startX)}_${Math.round(startY)}`,
@@ -5236,7 +5690,10 @@ async function performSwipe(startX, startY, endX, endY) {
                     `SWIPE(${Math.round(startX)},${Math.round(startY)},${Math.round(endX)},${Math.round(endY)})`,
                     rootXPath
                 ],
+                ControlValue: "",
                 IdentificationType: "Scroll",
+                FeatureName: activeFeatureForScroll,
+                NodeName: activePageForScroll,
                 Fingerprint: "<Action Type=\"Scroll\" />"
             }
         ]);
@@ -5292,9 +5749,10 @@ async function performSwipe(startX, startY, endX, endY) {
                     y
                 );
 
-            // Find if current point is within a registered feature area (prefer smallest)
+            // Find if current point is within a registered feature area for the current page (prefer smallest)
             let currentFeatureArea = null;
             let smallestAreaFound = Number.MAX_VALUE;
+            const currentPreviewPage = ((typeof getActiveHomePageName === 'function' ? getActiveHomePageName() : '') || '').trim();
             const dimsForArea = (typeof getDeviceDimensions === "function")
                 ? getDeviceDimensions()
                 : { width: 0, height: 0 };
@@ -5305,6 +5763,12 @@ async function performSwipe(startX, startY, endX, endY) {
                     : 0);
             for (const area of registeredFeatureAreas) {
                 if (!area || !area.rect) continue;
+                // Only highlight features that belong to the CURRENT device screen
+                if (typeof isSameFeatureScreen === 'function') {
+                    if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
+                } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, x, y)) {
+                    continue;
+                }
                 const { x: ax, y: ay, width: aw, height: ah } = area.rect;
                 if (x >= ax && x <= (ax + aw) && y >= ay && y <= (ay + ah)) {
                     const rectArea = aw * ah;
@@ -5642,6 +6106,16 @@ function createAndAppendTable(dtControls) {
 
         let tr = tbody.insertRow(0);
         tr.dataset.rect = JSON.stringify(dtControls[i].rect || null);
+        try {
+            tr.dataset.screenSignature = (typeof computeScreenSignature === 'function')
+                ? (computeScreenSignature(window.xmlDoc) || '')
+                : '';
+        } catch (_) {
+            tr.dataset.screenSignature = '';
+        }
+        if (dtControls[i].featureId) {
+            tr.dataset.featureId = String(dtControls[i].featureId);
+        }
 
         let emptyRows = tbody.querySelectorAll('tr.empty-excel-row');
         if (emptyRows.length > 0) {
@@ -6600,6 +7074,7 @@ function createAndAppendTable(dtControls) {
             const freshSource = await capturePageSource();
             const parser = new DOMParser();
             window.xmlDoc = parser.parseFromString(freshSource, "text/xml");
+            if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
         } catch (refreshErr) {
             console.warn("Scrape UI page-source refresh failed, using cached xmlDoc:", refreshErr);
         }
@@ -6647,19 +7122,27 @@ function createAndAppendTable(dtControls) {
             // Extract input value if it's a text entry field
             let controlValue = getInputControlValue(node);
 
-            // CHECK: Is the node center within a registered feature area?
+            // CHECK: Is the node center within a feature created on THIS device screen only?
             let nodeEffectiveFeatureName = "";
+            let nodeFeatureId = "";
             let nodeSmallestAreaFound = Number.MAX_VALUE;
             if (nodeRect) {
                 const nodeCenterX = nodeRect.x + nodeRect.width / 2;
                 const nodeCenterY = nodeRect.y + nodeRect.height / 2;
                 for (const area of registeredFeatureAreas) {
+                    if (!area || !area.rect || !area.name) continue;
+                    if (typeof isSameFeatureScreen === 'function') {
+                        if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
+                    } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, nodeCenterX, nodeCenterY)) {
+                        continue;
+                    }
                     const { x, y, width, height } = area.rect;
                     if (nodeCenterX >= x && nodeCenterX <= (x + width) && nodeCenterY >= y && nodeCenterY <= (y + height)) {
                         const rectArea = width * height;
                         if (rectArea < nodeSmallestAreaFound) {
                             nodeSmallestAreaFound = rectArea;
                             nodeEffectiveFeatureName = area.name;
+                            nodeFeatureId = area.id || "";
                         }
                     }
                 }
@@ -6672,6 +7155,7 @@ function createAndAppendTable(dtControls) {
                 ControlValue: controlValue,
                 IdentificationType: inferIdentificationType(allXPaths[0]),
                 FeatureName: nodeEffectiveFeatureName || pageName,
+                featureId: nodeFeatureId,
                 Fingerprint: generateNodeFingerprint(node),
                 rect: nodeRect
             });
@@ -6787,24 +7271,20 @@ function createAndAppendTable(dtControls) {
     });
 
     document.getElementById("algoQA").addEventListener("click", async () => {
-                const userData = JSON.parse(localStorage.getItem("algoQAUser"));
-                if (!userData) {
-                    showCustomAlert("Authentication Error", "Token data not found. Please paste your token.", "error");
-                    return;
-                }
+        const userData = JSON.parse(localStorage.getItem("algoQAUser"));
+        if (!userData) {
+            showCustomAlert("Authentication Error", "Token data not found. Please paste your token.", "error");
+            return;
+        }
 
-                if (!tableCreated || !hasValidTableData('myTable')) {
-                    showCustomAlert("Export Failed", "No scraped data found to send.", "error");
-                    return;
-                }
+        if (!tableCreated || !hasValidTableData('myTable')) {
+            showCustomAlert("Export Failed", "No scraped data found to send.", "error");
+            return;
+        }
 
-                if (typeof hiddenRows !== 'undefined' && hiddenRows && hiddenRows.length > 0) {
-                    pendingExportAction = "algoQA";
-                    showHiddenColumnsWarning();
-                } else {
-                    await sendTableDataToAPI("myTable");
-                }
-            });
+        // Always send full scraped dataset completely, regardless of column visibility
+        await sendTableDataToAPI("myTable");
+    });
 
     async function sendTableDataToAPI(tableId) {
         const userData = JSON.parse(localStorage.getItem("algoQAUser"));
@@ -6828,9 +7308,9 @@ function createAndAppendTable(dtControls) {
             var scenariosList = [];
             var stepsByPage = {};
 
-            // Group rows (steps) by their PAGE NAME
+            // Group rows (steps) by their PAGE NAME (case-insensitive)
             tableData.forEach(step => {
-                var page = step["PAGE NAME"];
+                var page = (step["PAGE NAME"] || "").trim().toLowerCase();
                 if (!stepsByPage[page]) stepsByPage[page] = [];
                 stepsByPage[page].push(step);
             });
@@ -6839,23 +7319,33 @@ function createAndAppendTable(dtControls) {
             for (var pageName in window.pageScenarioData) {
                 var scenarioInfo = window.pageScenarioData[pageName];
                 if (scenarioInfo && scenarioInfo.scenarioName) {
+                    var pageKey = pageName.trim().toLowerCase();
+                    var matchedSteps = stepsByPage[pageKey] || [];
                     scenariosList.push({
                         "SCENARIO_NAME": scenarioInfo.scenarioName,
                         "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
-                        "STEPS": stepsByPage[pageName] || []
+                        "STEPS": matchedSteps
                     });
                 }
             }
 
+            // Fallback: If no scenario matched or scenariosList is empty, include all steps
+            if (scenariosList.length === 0 && tableData.length > 0) {
+                scenariosList.push({
+                    "SCENARIO_NAME": "Scenario",
+                    "SCENARIO_OUTLINE": "",
+                    "STEPS": tableData
+                });
+            }
+
             finalDataPayload = {
-//                "isRecordscenario": true,
                 "dashboardControls": {
                     "APP URL": "",
                     "SCENARIOS": scenariosList
                 }
             };
         } else {
-            // Fallback to normal behavior
+            // Normal scraping: Scrape UI, element-by-element click scraping, etc.
             finalDataPayload = tableData;
         }
 
@@ -7013,6 +7503,9 @@ function createAndAppendTable(dtControls) {
                 const pageSource = await capturePageSource();
                 const parser = new DOMParser();
                 window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
+                if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
+                clearOverlay();
+                currentFeatureArea = null;
 
                 document.getElementById('scrapeUI').disabled = false;
                 document.getElementById('scrapeUI').style.backgroundColor = '#2F8BCC';
@@ -7471,9 +7964,16 @@ function getFeatureNameFormatError(val) {
     const trimmed = String(val).trim();
     if (trimmed.length < 3) return "Feature Name must be at least 3 characters.";
     if (trimmed.toLowerCase() === 'all') return "Feature Name cannot be All.";
+    if (trimmed.startsWith(" ") || trimmed.endsWith(" ") || /\s{2,}/.test(String(val))) {
+        return "Feature Name cannot have leading, trailing, or double spaces.";
+    }
     const formatRegex = /^[A-Za-z][A-Za-z0-9_]*(\s[A-Za-z0-9_]+)*$/;
     if (!formatRegex.test(trimmed)) {
         return "Feature Name must start with a letter and can contain only letters, numbers, underscore, and a single space between words.";
+    }
+    const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+    if (wordCount > 3) {
+        return "Feature Name can have at most 3 words.";
     }
     return "";
 }
@@ -7496,6 +7996,8 @@ function isGlobalPageNameValid(name) {
     }
     return true;
 }
+
+
 
 const REPO_STORAGE_KEY = 'algoscraper_repository_projects_store_v2';
 const LEGACY_STORAGE_KEY = 'algoscraper_repository_store_v1';
@@ -7901,6 +8403,17 @@ function isDistinctFeatureName(name, pageName) {
     return true;
 }
 
+function featureIdentityKey(name, pageName, uniqueIdentifier, id, screenSignature) {
+    // Count/dedupe by created feature identity — never by scraped element row id
+    const n = repoNameKey(name);
+    const sig = repoNameKey(String(screenSignature || '').slice(0, 120));
+    const uid = repoNameKey(uniqueIdentifier || '');
+    if (sig) return `${n}::sig:${sig}`;
+    if (uid) return `${n}::uid:${uid}`;
+    return `${n}::${repoNameKey(pageName || '')}`;
+}
+window.featureIdentityKey = featureIdentityKey;
+
 function mergeFeatureItems() {
     const map = new Map();
     Array.from(arguments).forEach(list => {
@@ -7908,7 +8421,7 @@ function mergeFeatureItems() {
             const name = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
             const pageHint = (f && typeof f === 'object') ? (f.pageName || '') : '';
             if (!isDistinctFeatureName(name, pageHint)) return;
-            const k = repoNameKey(name);
+            const k = featureIdentityKey(name, pageHint, f && f.uniqueIdentifier, null, f && f.screenSignature);
             if (!map.has(k)) {
                 map.set(k, {
                     name: String(name).trim(),
@@ -7916,32 +8429,42 @@ function mergeFeatureItems() {
                     fullPage: !!(f && f.fullPage),
                     pageName: pageHint,
                     id: f && f.id,
-                    timestamp: f && f.timestamp
+                    timestamp: f && f.timestamp,
+                    uniqueIdentifier: f && f.uniqueIdentifier,
+                    xpaths: f && f.xpaths,
+                    screenSignature: f && f.screenSignature,
+                    screenContentKeys: f && f.screenContentKeys,
+                    nodeText: f && f.nodeText,
+                    nodeFingerprint: f && f.nodeFingerprint
                 });
             } else {
                 const cur = map.get(k);
                 if (!cur.rect && f && f.rect) cur.rect = f.rect;
                 if (f && f.fullPage) cur.fullPage = true;
                 if (!cur.pageName && pageHint) cur.pageName = pageHint;
+                if (!cur.uniqueIdentifier && f && f.uniqueIdentifier) cur.uniqueIdentifier = f.uniqueIdentifier;
+                if ((!cur.xpaths || !cur.xpaths.length) && f && f.xpaths) cur.xpaths = f.xpaths;
+                if (!cur.id && f && f.id) cur.id = f.id;
+                if (!cur.screenSignature && f && f.screenSignature) cur.screenSignature = f.screenSignature;
+                if (f && f.timestamp && (!cur.timestamp || f.timestamp >= cur.timestamp)) cur.timestamp = f.timestamp;
             }
         });
     });
     return Array.from(map.values());
 }
 
-function featureItemsFromElements(elements, pageName) {
-    const items = [];
-    const seen = new Set();
-    (elements || []).forEach(el => {
-        const n = (el && (el['FEATURE NAME'] || el.FeatureName) || '').trim();
-        const elPage = pageName || (el && el['PAGE NAME']) || '';
-        if (!isDistinctFeatureName(n, elPage)) return;
-        const k = repoNameKey(n);
-        if (seen.has(k)) return;
-        seen.add(k);
-        items.push({ name: n, pageName: elPage });
-    });
-    return items;
+function isUserCreatedFeature(f) {
+    if (!f) return false;
+    if (typeof f === 'string') return isDistinctFeatureName(f, '');
+    if (typeof f !== 'object' || !f.name) return false;
+    // Created features carry identity/geometry/timestamp — bare {name,pageName} scrape ghosts do not
+    return !!(f.id || f.rect || f.fullPage || f.screenSignature || f.uniqueIdentifier
+        || f.timestamp || f.xpaths || f.nodeText || f.nodeFingerprint);
+}
+
+function featureItemsFromElements() {
+    // Scraped element FEATURE NAME columns are table metadata, not user-created features
+    return [];
 }
 
 function collectLiveFeatureItemsForPage(pageName) {
@@ -7952,13 +8475,21 @@ function collectLiveFeatureItemsForPage(pageName) {
     return areas.filter(a => {
         if (!a || !a.name) return false;
         if (!isDistinctFeatureName(a.name, pageName)) return false;
-        if (!a.pageName || !pageKey) return true;
-        return repoNameKey(a.pageName) === pageKey;
+        if (!pageKey) return false;
+        return a.pageName && repoNameKey(a.pageName) === pageKey;
     }).map(a => ({
         name: String(a.name).trim(),
         rect: a.rect || null,
         fullPage: !!a.fullPage,
-        pageName: a.pageName || pageName || ''
+        pageName: a.pageName || pageName || '',
+        id: a.id,
+        uniqueIdentifier: a.uniqueIdentifier,
+        xpaths: a.xpaths,
+        screenSignature: a.screenSignature,
+        screenContentKeys: a.screenContentKeys,
+        nodeText: a.nodeText,
+        nodeFingerprint: a.nodeFingerprint,
+        timestamp: a.timestamp
     }));
 }
 
@@ -7966,7 +8497,23 @@ function nestFeatureOnOwner(owner, featureItem) {
     if (!owner || !featureItem || !featureItem.name) return false;
     const pageName = owner.pageName || owner.name || featureItem.pageName || '';
     if (!isDistinctFeatureName(featureItem.name, pageName)) return false;
-    owner.features = mergeFeatureItems(owner.features, [featureItem]);
+    if (!Array.isArray(owner.features)) owner.features = [];
+    // Upsert by id, else by name+screen (never stack duplicates on every sync)
+    let idx = -1;
+    if (featureItem.id) {
+        idx = owner.features.findIndex(f => f && f.id === featureItem.id);
+    }
+    if (idx < 0) {
+        const key = featureIdentityKey(featureItem.name, featureItem.pageName || pageName, featureItem.uniqueIdentifier, null, featureItem.screenSignature);
+        idx = owner.features.findIndex(f =>
+            f && featureIdentityKey(f.name, f.pageName || pageName, f.uniqueIdentifier, null, f.screenSignature) === key
+        );
+    }
+    if (idx >= 0) {
+        owner.features[idx] = { ...owner.features[idx], ...featureItem };
+    } else {
+        owner.features.unshift(featureItem);
+    }
     return true;
 }
 
@@ -7985,19 +8532,21 @@ function findFeatureOwnerInProject(project, pageName) {
 function collectProjectFeatureNames(project) {
     const names = new Set();
     if (!project) return names;
-    const add = (n, pageName) => {
-        if (isDistinctFeatureName(n, pageName)) names.add(repoNameKey(n));
+    // Only count features the user explicitly created on Home — not scraped element rows
+    const add = (f, pageName) => {
+        if (!isUserCreatedFeature(f) && !(typeof f === 'string' && isDistinctFeatureName(f, pageName))) return;
+        const n = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
+        const p = (f && typeof f === 'object' && f.pageName) || pageName || '';
+        if (!isDistinctFeatureName(n, p)) return;
+        names.add(featureIdentityKey(n, p, f && f.uniqueIdentifier, null, f && f.screenSignature));
     };
     const fromOwner = (owner, pageName) => {
         if (!owner) return;
-        (owner.features || []).forEach(f => add((f && f.name) || f, pageName));
-        (owner.elements || []).forEach(el => {
-            add(el && (el['FEATURE NAME'] || el.FeatureName), pageName || (el && el['PAGE NAME']));
-        });
+        (owner.features || []).forEach(f => add(f, pageName));
     };
     (project.scenarios || []).forEach(s => fromOwner(s, s.pageName || s.name));
     (project.pages || []).forEach(pg => fromOwner(pg, pg.pageName));
-    (project.features || []).forEach(f => add(f && f.name, f && f.pageName));
+    (project.features || []).forEach(f => add(f, f && f.pageName));
     return names;
 }
 
@@ -8007,24 +8556,58 @@ function countProjectFeatures(project) {
 
 function listProjectFeatureDisplayNames(project) {
     const map = new Map();
-    const add = (n, pageName) => {
-        if (!isDistinctFeatureName(n, pageName)) return;
-        const k = repoNameKey(n);
+    const add = (f, pageName) => {
+        if (!isUserCreatedFeature(f) && !(typeof f === 'string' && isDistinctFeatureName(f, pageName))) return;
+        const n = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
+        const p = (f && typeof f === 'object' && f.pageName) || pageName || '';
+        if (!isDistinctFeatureName(n, p)) return;
+        const k = featureIdentityKey(n, p, f && f.uniqueIdentifier, null, f && f.screenSignature);
         if (!map.has(k)) map.set(k, String(n).trim());
     };
     const fromOwner = (owner, pageName) => {
         if (!owner) return;
-        (owner.features || []).forEach(f => add((f && f.name) || f, pageName));
-        (owner.elements || []).forEach(el => {
-            add(el && (el['FEATURE NAME'] || el.FeatureName), pageName || (el && el['PAGE NAME']));
-        });
+        (owner.features || []).forEach(f => add(f, pageName));
     };
     if (!project) return [];
     (project.scenarios || []).forEach(s => fromOwner(s, s.pageName || s.name));
     (project.pages || []).forEach(pg => fromOwner(pg, pg.pageName));
-    (project.features || []).forEach(f => add(f && f.name, f && f.pageName));
+    (project.features || []).forEach(f => add(f, f && f.pageName));
     return Array.from(map.values());
 }
+
+function dedupeProjectFeatureLists(project) {
+    if (!project || typeof project !== 'object') return false;
+    let modified = false;
+    const cleanList = (list) => {
+        const kept = (list || []).filter(f => isUserCreatedFeature(f) || (typeof f === 'string' && isDistinctFeatureName(f, '')));
+        return mergeFeatureItems(kept);
+    };
+    if (Array.isArray(project.features)) {
+        const next = cleanList(project.features);
+        if (next.length !== project.features.length || JSON.stringify(next) !== JSON.stringify(project.features)) {
+            project.features = next;
+            modified = true;
+        }
+    }
+    (project.pages || []).forEach(pg => {
+        if (!Array.isArray(pg.features)) return;
+        const next = cleanList(pg.features);
+        if (next.length !== pg.features.length) {
+            pg.features = next;
+            modified = true;
+        }
+    });
+    (project.scenarios || []).forEach(sc => {
+        if (!Array.isArray(sc.features)) return;
+        const next = cleanList(sc.features);
+        if (next.length !== sc.features.length) {
+            sc.features = next;
+            modified = true;
+        }
+    });
+    return modified;
+}
+window.dedupeProjectFeatureLists = dedupeProjectFeatureLists;
 
 function migrateStandaloneFeaturesIntoOwners(project) {
     if (!project || typeof project !== 'object') return false;
@@ -8035,9 +8618,6 @@ function migrateStandaloneFeaturesIntoOwners(project) {
     project.features.forEach(f => {
         if (!f || !f.name) return;
         let owner = findFeatureOwnerInProject(project, f.pageName);
-        if (!owner && (project.scenarios || []).length === 1) owner = project.scenarios[0];
-        if (!owner && (project.pages || []).length) owner = project.pages[0];
-        if (!owner && (project.scenarios || []).length) owner = project.scenarios[0];
         if (owner && nestFeatureOnOwner(owner, f)) modified = true;
     });
 
@@ -8085,12 +8665,17 @@ function migrateStandaloneFeaturesIntoOwners(project) {
 function isRepoNameOwnedByFeature(project, name) {
     const key = repoNameKey(name);
     if (!key || !project) return false;
-    return collectProjectFeatureNames(project).has(key);
+    for (const id of collectProjectFeatureNames(project)) {
+        // identity keys are "featureName::pageName"
+        if (String(id).split('::')[0] === key) return true;
+    }
+    return false;
 }
 
 window.countProjectFeatures = countProjectFeatures;
 window.listProjectFeatureDisplayNames = listProjectFeatureDisplayNames;
 window.mergeFeatureItems = mergeFeatureItems;
+window.isUserCreatedFeature = isUserCreatedFeature;
 window.featureItemsFromElements = featureItemsFromElements;
 window.collectLiveFeatureItemsForPage = collectLiveFeatureItemsForPage;
 window.nestFeatureOnOwner = nestFeatureOnOwner;
@@ -8123,7 +8708,8 @@ function pruneProjectAssetOwnership(project) {
         const sKey = repoNameKey(s.pageName || s.name);
         const matchingPage = project.pages.find(pg => repoNameKey(pg.pageName) === sKey);
         if (!matchingPage) return;
-        const mergedFeats = mergeFeatureItems(s.features, matchingPage.features, featureItemsFromElements(matchingPage.elements, matchingPage.pageName));
+        // Never promote scraped element FEATURE NAME into feature counts
+        const mergedFeats = mergeFeatureItems(s.features, matchingPage.features);
         if (JSON.stringify(mergedFeats) !== JSON.stringify(s.features || [])) {
             s.features = mergedFeats;
             modified = true;
@@ -8135,7 +8721,7 @@ function pruneProjectAssetOwnership(project) {
     });
 
     project.scenarios.forEach(s => {
-        const nested = mergeFeatureItems(s.features, featureItemsFromElements(s.elements, s.pageName || s.name));
+        const nested = mergeFeatureItems(s.features);
         if (JSON.stringify(nested) !== JSON.stringify(s.features || [])) {
             s.features = nested;
             modified = true;
@@ -8143,7 +8729,7 @@ function pruneProjectAssetOwnership(project) {
     });
 
     project.pages.forEach(pg => {
-        const nested = mergeFeatureItems(pg.features, featureItemsFromElements(pg.elements, pg.pageName));
+        const nested = mergeFeatureItems(pg.features);
         if (JSON.stringify(nested) !== JSON.stringify(pg.features || [])) {
             pg.features = nested;
             modified = true;
@@ -8151,16 +8737,19 @@ function pruneProjectAssetOwnership(project) {
     });
 
     if (migrateStandaloneFeaturesIntoOwners(project)) modified = true;
+    if (typeof dedupeProjectFeatureLists === 'function' && dedupeProjectFeatureLists(project)) modified = true;
 
     const featureKeys = collectProjectFeatureNames(project);
+    const featureNameKeys = new Set(Array.from(featureKeys).map(id => String(id).split('::')[0]));
 
     const keptPages = project.pages.filter(pg => {
         const pKey = repoNameKey(pg.pageName);
         if (!pKey) return false;
         const hasElements = Array.isArray(pg.elements) && pg.elements.length > 0;
-        if (scenarioKeys.has(pKey) && !hasElements && !isKeptInitialPage(project, pg)) return false;
-        if (featureKeys.has(pKey) && !hasElements && !isKeptInitialPage(project, pg)) return false;
-        if (hasElements) return true;
+        const hasFeatures = Array.isArray(pg.features) && pg.features.length > 0;
+        if (scenarioKeys.has(pKey) && !hasElements && !hasFeatures && !isKeptInitialPage(project, pg)) return false;
+        if (featureNameKeys.has(pKey) && !hasElements && !hasFeatures && !isKeptInitialPage(project, pg)) return false;
+        if (hasElements || hasFeatures) return true;
         return isKeptInitialPage(project, pg);
     });
     if (keptPages.length !== project.pages.length) {
@@ -8439,6 +9028,43 @@ function isFeatureNameInRepo(name) {
     return assets.featureNames.has(lower) || assets.pages.has(lower) || assets.scenarioNames.has(lower);
 }
 
+/** True if feature name is already used anywhere in the live session or active repo project. */
+function isFeatureNameAlreadyUsed(name, excludeName) {
+    const lower = String(name || '').trim().toLowerCase();
+    if (!lower) return false;
+    const exclude = String(excludeName || '').trim().toLowerCase();
+    if (exclude && lower === exclude) return false;
+
+    const areas = (typeof window.registeredFeatureAreas !== 'undefined' && Array.isArray(window.registeredFeatureAreas))
+        ? window.registeredFeatureAreas
+        : ((typeof registeredFeatureAreas !== 'undefined' && Array.isArray(registeredFeatureAreas)) ? registeredFeatureAreas : []);
+    if (areas.some(a => a && a.name && String(a.name).trim().toLowerCase() === lower)) {
+        return true;
+    }
+
+    // Also check table cells (covers features restored into rows)
+    const cells = document.querySelectorAll('#myTable .featureName');
+    for (const cell of cells) {
+        const cellName = (cell.innerText || '').replace(/\u00a0/g, ' ').trim().toLowerCase();
+        if (!cellName || cellName !== lower) continue;
+        const tr = cell.closest('tr');
+        const pageCell = tr ? tr.querySelector('.page') : null;
+        const rowPage = pageCell ? pageCell.innerText.trim().toLowerCase() : '';
+        // Ignore default page-name placeholders — those are not created features
+        if (rowPage && cellName === rowPage) continue;
+        return true;
+    }
+
+    try {
+        const assets = typeof getRepoAssetsForActiveApp === 'function' ? getRepoAssetsForActiveApp() : null;
+        if (assets && assets.featureNames && assets.featureNames.has(lower)) return true;
+    } catch (_) {}
+
+    return false;
+}
+
+window.isFeatureNameAlreadyUsed = isFeatureNameAlreadyUsed;
+
 window.getRepoAssetsForActiveApp = getRepoAssetsForActiveApp;
 window.getRepoPageNamesForActiveApp = getRepoPageNamesForActiveApp;
 window.isPageNameInRepo = isPageNameInRepo;
@@ -8539,11 +9165,17 @@ function verifyPageNameSavedBeforeScraping() {
         const pageNameInput = document.getElementById("pagename_searchbox");
         const pageName = pageNameInput ? pageNameInput.value.trim() : "";
 
-            // CHECK: Is the click within a registered feature area?
+            // CHECK: Only features created on the CURRENT device screen
             let effectiveFeatureName = "";
             let smallestAreaFound = Number.MAX_VALUE;
 
             for (const area of registeredFeatureAreas) {
+                if (!area || !area.rect || !area.name) continue;
+                if (typeof isSameFeatureScreen === 'function') {
+                    if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
+                } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, clickX, clickY)) {
+                    continue;
+                }
                 const { x, y, width, height } = area.rect;
                 if (clickX >= x && clickX <= (x + width) && clickY >= y && clickY <= (y + height)) {
                     const rectArea = width * height;
@@ -8629,8 +9261,10 @@ function verifyPageNameSavedBeforeScraping() {
                         ControlName: `coord_${Math.round(clickX)}_${Math.round(clickY)}`,
                         ControlType: "Coordinate",
                         ControlId: [`COORDINATE(${Math.round(clickX)},${Math.round(clickY)})`],
+                        ControlValue: "",
                         IdentificationType: "Coordinate",
                         FeatureName: effectiveFeatureName || pageName,
+                        NodeName: pageName,
                         rect: { x: Math.round(clickX), y: Math.round(clickY), width: 1, height: 1 }
                     }
                 ]);
@@ -8653,9 +9287,10 @@ function verifyPageNameSavedBeforeScraping() {
                                 ControlName: controlName,
                                 ControlType: controlType,
                                 ControlId: allXPaths,
-                                ControlValue: controlValue, // Added this to pass the value
+                                ControlValue: controlValue,
                                 IdentificationType: inferIdentificationType(allXPaths[0]),
                                 FeatureName: effectiveFeatureName || pageName,
+                                NodeName: pageName,
                                 Fingerprint: generateNodeFingerprint(matchedNode),
                                 rect: nodeRect
                             }
@@ -8663,10 +9298,29 @@ function verifyPageNameSavedBeforeScraping() {
                     }
 
     async function handleFeatureClick(clickX, clickY) {
+        // Refresh hierarchy so screen identity matches the current device page
+        try {
+            if (typeof capturePageSource === 'function') {
+                const freshSource = await capturePageSource();
+                if (freshSource) {
+                    const parser = new DOMParser();
+                    window.xmlDoc = parser.parseFromString(freshSource, "text/xml");
+                    if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
+                    else if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') realignLiveFeatureScreensToCurrentDoc();
+                }
+            }
+        } catch (refreshErr) {
+            console.warn("Create Feature page-source refresh failed:", refreshErr);
+        }
+
         if (!window.xmlDoc) return;
 
         if (!verifyPageNameSavedBeforeScraping()) {
             return;
+        }
+
+        if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') {
+            realignLiveFeatureScreensToCurrentDoc();
         }
 
         const matchedNode = findHoveredNode(clickX, clickY);
@@ -8679,24 +9333,55 @@ function verifyPageNameSavedBeforeScraping() {
                 : { x: Math.round(clickX), y: Math.round(clickY), width: 1, height: 1 };
         }
 
-        // CHECK: Does this exact area already exist in registeredFeatureAreas?
-        if (targetRect) {
-            const existing = registeredFeatureAreas.find(area =>
-                area && area.rect &&
-                Math.abs(area.rect.x - targetRect.x) < 4 &&
-                Math.abs(area.rect.y - targetRect.y) < 4 &&
-                Math.abs(area.rect.width - targetRect.width) < 4 &&
-                Math.abs(area.rect.height - targetRect.height) < 4
-            );
+        const nodeUniqueId = extractNodeUniqueIdentifier(matchedNode, clickX, clickY);
+        const nodeAllXPaths = (matchedNode && typeof getAllPossibleXPaths === 'function') ? getAllPossibleXPaths(matchedNode) : [];
 
-            if (existing) {
-                showCustomAlert("Feature Already Registered", `This section is already mapped to feature: <b>${existing.name}</b>`, "info");
-                return;
+        // If this area/element is already a feature on the CURRENT device screen, block with a clear error.
+        // Same area on a different screen is still allowed (new unique feature).
+        let existingOnScreen = null;
+        let smallestExisting = Number.MAX_VALUE;
+        for (const area of (registeredFeatureAreas || [])) {
+            if (!area || !area.rect || !area.name) continue;
+            if (typeof isSameFeatureScreen === 'function' && !isSameFeatureScreen(area, window.xmlDoc)) continue;
+
+            let matched = false;
+            if (area.uniqueIdentifier && nodeUniqueId && area.uniqueIdentifier === nodeUniqueId) {
+                matched = true;
+            } else if (area.xpaths && Array.isArray(area.xpaths) && nodeAllXPaths.some(xp => area.xpaths.includes(xp))) {
+                matched = true;
+            } else if (matchedNode && typeof isNodeRelatedToFeature === 'function' && isNodeRelatedToFeature(matchedNode, area)) {
+                matched = true;
+            } else {
+                const { x, y, width, height } = area.rect;
+                if (clickX >= x && clickX <= (x + width) && clickY >= y && clickY <= (y + height)) {
+                    matched = true;
+                }
             }
+            if (!matched) continue;
+
+            const rectArea = (Number(area.rect.width) || 0) * (Number(area.rect.height) || 0);
+            if (rectArea < smallestExisting) {
+                smallestExisting = rectArea;
+                existingOnScreen = area;
+            }
+        }
+
+        if (existingOnScreen) {
+            if (typeof drawFeatureAreaHighlight === 'function') {
+                drawFeatureAreaHighlight(existingOnScreen, { active: true });
+            }
+            const existingName = String(existingOnScreen.name || '').trim() || 'this feature';
+            showCustomAlert(
+                "Feature Already Created",
+                `“<b>${existingName}</b>” is already created for this area. Please select a different area.`,
+                "warning"
+            );
+            return;
         }
 
         const dims = (typeof getDeviceDimensions === "function") ? getDeviceDimensions() : { width: 0, height: 0 };
         const isFullPage = !matchedNode || (dims.width > 0 && dims.height > 0 && targetRect.width >= dims.width * 0.92 && targetRect.height >= dims.height * 0.92);
+        const featureNodeText = (matchedNode ? (matchedNode.getAttribute("text") || matchedNode.getAttribute("label") || matchedNode.getAttribute("name") || matchedNode.getAttribute("content-desc") || "") : "").trim();
 
         if (!matchedNode || isFullPage) {
             pendingFeatureData = {
@@ -8707,17 +9392,29 @@ function verifyPageNameSavedBeforeScraping() {
                     : [`COORDINATE(${Math.round(clickX)},${Math.round(clickY)})`],
                 IdentificationType: isFullPage ? "XPath" : "Coordinate",
                 rect: targetRect,
-                fullPage: !!isFullPage
+                fullPage: !!isFullPage,
+                uniqueIdentifier: nodeUniqueId || (isFullPage ? "FULL_PAGE" : `COORDINATE(${Math.round(clickX)},${Math.round(clickY)})`),
+                xpaths: isFullPage ? [`//XCUIElementTypeApplication`, `//hierarchy`] : [],
+                nodeText: featureNodeText,
+                nodeClass: matchedNode ? matchedNode.nodeName : "",
+                screenSignature: computeScreenSignature(window.xmlDoc),
+                screenContentKeys: computeScreenContentKeys(window.xmlDoc, targetRect)
             };
         } else {
             pendingFeatureData = {
                 ControlName: generateProfessionalControlName(matchedNode),
                 ControlType: mapControlType(matchedNode.nodeName),
-                ControlId: getAllPossibleXPaths(matchedNode),
+                ControlId: nodeAllXPaths.length > 0 ? nodeAllXPaths : getAllPossibleXPaths(matchedNode),
                 ControlValue: getInputControlValue(matchedNode),
                 Fingerprint: generateNodeFingerprint(matchedNode),
                 rect: targetRect,
-                fullPage: false
+                fullPage: false,
+                uniqueIdentifier: nodeUniqueId,
+                xpaths: nodeAllXPaths,
+                nodeText: featureNodeText,
+                nodeClass: matchedNode ? matchedNode.nodeName : "",
+                screenSignature: computeScreenSignature(window.xmlDoc),
+                screenContentKeys: computeScreenContentKeys(window.xmlDoc, targetRect)
             };
         }
 
@@ -8738,6 +9435,20 @@ function verifyPageNameSavedBeforeScraping() {
         }
     }
 
+    function rowBelongsToFeatureScreen(row, area) {
+        if (!row || !area) return false;
+        const areaSig = area.screenSignature || '';
+        const rowSig = (row.dataset && row.dataset.screenSignature) || '';
+        if (areaSig && rowSig) {
+            return (typeof screenSignatureSimilarity === 'function')
+                ? screenSignatureSimilarity(areaSig, rowSig) >= 0.68
+                : areaSig === rowSig;
+        }
+        // Do not rewrite older rows (or cross-screen rows) when signatures are missing/mismatched
+        if (areaSig || rowSig) return false;
+        return true;
+    }
+
     function syncExistingRowsWithNewFeature(area) {
         const tableBody = document.getElementById('myTable');
         if (!tableBody || !area || !area.rect) return;
@@ -8749,8 +9460,21 @@ function verifyPageNameSavedBeforeScraping() {
             const featureNameCell = row.querySelector('.featureName');
             if (!featureNameCell) return;
 
+            // Only touch rows scraped on the SAME device screen as this feature
+            if (!rowBelongsToFeatureScreen(row, area)) return;
+
+            // Page scoping (metadata) — Page Name can stay the same across screens
+            if (area.pageName && area.pageName.toLowerCase() !== 'all') {
+                const pageCell = row.querySelector('.page');
+                const rowPage = pageCell ? pageCell.innerText.trim().toLowerCase() : '';
+                if (rowPage && rowPage !== area.pageName.toLowerCase()) {
+                    return;
+                }
+            }
+
             if (area.fullPage) {
                 featureNameCell.innerText = area.name;
+                if (area.id) row.dataset.featureId = String(area.id);
                 return;
             }
 
@@ -8761,13 +9485,12 @@ function verifyPageNameSavedBeforeScraping() {
                 const rect = JSON.parse(rectStr);
                 if (!rect) return;
 
-                // Calculate center point of the element
                 const centerX = rect.x + rect.width / 2;
                 const centerY = rect.y + rect.height / 2;
 
-                // Check if center point is within the new feature area
                 if (centerX >= ax && centerX <= (ax + aw) && centerY >= ay && centerY <= (ay + ah)) {
                     featureNameCell.innerText = area.name;
+                    if (area.id) row.dataset.featureId = String(area.id);
                 }
             } catch (e) {
                 console.error("Sync: Failed to parse row rect", e);
@@ -9686,16 +10409,22 @@ function updateRowEyeButtonState() {
                }
                pendingFeatureRename = null;
 
+               const alertCb = window._customAlertOnOkay;
+               window._customAlertOnOkay = null;
+               if (typeof alertCb === 'function') {
+                   try { alertCb(); } catch (cbErr) { console.error("Error in alertOnOkay callback:", cbErr); }
+               }
+
                return;
            } else if (pendingExportAction === "renameFeature" || pendingExportAction === "createNewFeature") {
                const currentAction = pendingExportAction;
                pendingExportAction = null;
 
                if (pendingFeatureRename) {
-                   const { oldName, newName, cellElement } = pendingFeatureRename;
+                   const { oldName, newName, cellElement, pageName } = pendingFeatureRename;
 
                    if (currentAction === "renameFeature") {
-                        applyTableFeatureRenameAll(oldName, newName);
+                        applyTableFeatureRenameAll(oldName, newName, pageName);
                    } else if (currentAction === "createNewFeature") {
                         applyTableFeatureSubFeature(cellElement, newName);
                    }
@@ -10773,8 +11502,11 @@ function initPageNameLogic() {
     }
 
     window.setGlobalPageName = function(name) {
+        if (typeof clearOverlay === 'function') {
+            clearOverlay();
+        }
         if (!window.registeredPageNames) window.registeredPageNames = new Set();
-        if (name && name !== "All" && isValidPageName(name)) {
+        if (name && name !== "All" && (typeof isGlobalPageNameValid === 'function' ? isGlobalPageNameValid(name) : true)) {
             window.registeredPageNames.add(name);
         }
         pageNameInput.value = name;
@@ -11817,7 +12549,7 @@ function setModalTheme(type) {
 }
 
 /// HELPER: Alert-only modal (Okay, no Cancel) with correct icon/color indication
-function showCustomAlert(title, message, type) {
+function showCustomAlert(title, message, type, onOkay) {
     const theme = normalizeModalType(type, title);
     setModalTheme(theme);
 
@@ -11830,6 +12562,7 @@ function showCustomAlert(title, message, type) {
     document.getElementById('okay_btn').innerText = 'Okay';
 
     pendingExportAction = "alertOnly";
+    window._customAlertOnOkay = (typeof onOkay === 'function') ? onOkay : null;
 
     document.getElementById('confirmationPopup').style.display = 'block';
     document.getElementById('overlay').style.display = 'block';
@@ -12006,14 +12739,22 @@ document.addEventListener("DOMContentLoaded", () => {
         inputEl.classList.add("input-error-border");
         const icon = document.getElementById(iconId);
         const text = document.getElementById(textId);
-        if (icon) icon.style.display = "flex";
+        if (icon) {
+            icon.style.display = "flex";
+            icon.setAttribute("aria-hidden", "false");
+            icon.title = message || "";
+        }
         if (text) text.innerText = message;
     }
 
     function clearError(inputEl, iconId) {
         inputEl.classList.remove("input-error-border");
         const icon = document.getElementById(iconId);
-        if (icon) icon.style.display = "none";
+        if (icon) {
+            icon.style.display = "none";
+            icon.setAttribute("aria-hidden", "true");
+            icon.removeAttribute("title");
+        }
     }
 
     if (recordScenarioBtn && addScenarioBtn) {
@@ -12319,7 +13060,24 @@ document.addEventListener("DOMContentLoaded", () => {
                     if (scrapeBtn) { scrapeBtn.disabled = true; scrapeBtn.style.backgroundColor = '#B6B6B4'; }
                     if (scrapeUIBtn) { scrapeUIBtn.disabled = true; scrapeUIBtn.style.backgroundColor = '#B6B6B4'; }
 
-                    showCustomAlert("Feature Mode Active", "Hover over any section or control on the device preview, and click to create a feature for that section.", "success");
+                    // Refresh hierarchy so features bind to the current device screen
+                    (async () => {
+                        try {
+                            if (typeof capturePageSource === 'function') {
+                                const freshSource = await capturePageSource();
+                                if (freshSource) {
+                                    const parser = new DOMParser();
+                                    window.xmlDoc = parser.parseFromString(freshSource, "text/xml");
+                                    if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
+                                    else if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') realignLiveFeatureScreensToCurrentDoc();
+                                }
+                            }
+                        } catch (e) {
+                            console.warn("Create Feature mode refresh failed:", e);
+                        }
+                    })();
+
+                    showCustomAlert("Feature Mode Active", "Click any section or control on the screen to create a feature.", "success");
                 } else {
                     createFeatureBtn.style.backgroundColor = "#2F8BCC";
                     if (btnSpan) btnSpan.innerText = "Create Feature";
@@ -12335,26 +13093,52 @@ document.addEventListener("DOMContentLoaded", () => {
         const featureModal = document.getElementById("createFeatureModal");
 
         function validateFeatureName(val) {
+            // Format rules always apply on every page (min length, max 3 words, etc.)
             const formatErr = (typeof getFeatureNameFormatError === 'function')
                 ? getFeatureNameFormatError(val)
                 : "";
             if (formatErr) return formatErr;
 
             const trimmed = val.trim();
-
             const lower = trimmed.toLowerCase();
-            const nameUsedAsFeature = (registeredFeatureAreas || []).some(
-                (area) => area && area.name && area.name.trim().toLowerCase() === lower
-            );
-            if (nameUsedAsFeature) {
-                return "Feature Name already exists.";
-            }
 
+            // Conflict with Page Name (all pages)
             const nameUsedAsPage = Array.from(window.registeredPageNames || []).some(
                 (p) => String(p).trim().toLowerCase() === lower
             );
             if (nameUsedAsPage) {
                 return "Feature Name already used as a Page Name.";
+            }
+
+            // Conflict with Scenario Name (all pages)
+            if (window.pageScenarioData) {
+                for (const key of Object.keys(window.pageScenarioData)) {
+                    const scen = window.pageScenarioData[key];
+                    if (scen && scen.scenarioName && String(scen.scenarioName).trim().toLowerCase() === lower) {
+                        return "Feature Name already used as a Scenario Name.";
+                    }
+                }
+            }
+
+            // Keep screen stamps fresh so already-created area checks stay accurate
+            if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') {
+                realignLiveFeatureScreensToCurrentDoc();
+            }
+
+            // Feature names must be unique across ALL pages / screens in this session
+            if (typeof isFeatureNameAlreadyUsed === 'function' && isFeatureNameAlreadyUsed(trimmed)) {
+                return "Feature Name already exists. Please choose a different name.";
+            }
+
+            if (typeof isFeatureNameInRepo === 'function' && isFeatureNameInRepo(trimmed)) {
+                const assets = typeof getRepoAssetsForActiveApp === 'function' ? getRepoAssetsForActiveApp() : null;
+                if (assets) {
+                    if (assets.featureNames && assets.featureNames.has(lower)) {
+                        return "Feature Name already exists. Please choose a different name.";
+                    }
+                    if (assets.pages && assets.pages.has(lower)) return "Feature Name already used as a Page Name in repository.";
+                    if (assets.scenarioNames && assets.scenarioNames.has(lower)) return "Feature Name already used as a Scenario Name in repository.";
+                }
             }
 
             return "";
@@ -12365,7 +13149,11 @@ document.addEventListener("DOMContentLoaded", () => {
             featureNameInput.classList.add("input-error-border");
             const icon = document.getElementById("feature_name_error_icon");
             const text = document.getElementById("feature_name_error_text");
-            if (icon) icon.style.display = "flex";
+            if (icon) {
+                icon.style.display = "flex";
+                icon.setAttribute("aria-hidden", "false");
+                icon.title = message || "";
+            }
             if (text) text.innerText = message;
         }
 
@@ -12373,7 +13161,11 @@ document.addEventListener("DOMContentLoaded", () => {
             if (!featureNameInput) return;
             featureNameInput.classList.remove("input-error-border");
             const icon = document.getElementById("feature_name_error_icon");
-            if (icon) icon.style.display = "none";
+            if (icon) {
+                icon.style.display = "none";
+                icon.setAttribute("aria-hidden", "true");
+                icon.removeAttribute("title");
+            }
         }
 
         if (featureNameInput) {
@@ -12394,16 +13186,28 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
 
                 if (pendingFeatureData && pendingFeatureData.rect) {
+                    const activePageForNewFeature = (typeof getActiveHomePageName === 'function' && getActiveHomePageName() && getActiveHomePageName().toLowerCase() !== 'all')
+                        ? getActiveHomePageName()
+                        : ((typeof resolveHomePageNameForScrape === 'function') ? resolveHomePageNameForScrape() : (document.getElementById('pagename_searchbox')?.value || '').trim()) || 'DefaultPage';
+
                     const newArea = {
+                        id: 'feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
                         rect: pendingFeatureData.rect,
                         name: featureName,
                         fullPage: !!pendingFeatureData.fullPage,
-                        pageName: (typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''
+                        pageName: activePageForNewFeature,
+                        uniqueIdentifier: pendingFeatureData.uniqueIdentifier || "",
+                        xpaths: pendingFeatureData.xpaths || [],
+                        nodeFingerprint: pendingFeatureData.Fingerprint || "",
+                        nodeText: pendingFeatureData.nodeText || "",
+                        nodeClass: pendingFeatureData.nodeClass || "",
+                        screenSignature: pendingFeatureData.screenSignature || computeScreenSignature(window.xmlDoc),
+                        screenContentKeys: pendingFeatureData.screenContentKeys || computeScreenContentKeys(window.xmlDoc, pendingFeatureData.rect)
                     };
                     registeredFeatureAreas.push(newArea);
                     syncExistingRowsWithNewFeature(newArea);
                     if (typeof saveFeatureToRepo === 'function') {
-                        saveFeatureToRepo(featureName, newArea.rect, newArea.fullPage);
+                        saveFeatureToRepo(featureName, newArea.rect, newArea.fullPage, null, null, activePageForNewFeature, newArea.screenSignature, newArea.screenContentKeys, newArea.nodeText, newArea.nodeFingerprint, newArea.uniqueIdentifier, newArea.xpaths, newArea.id);
                     }
                     if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                     // Name shows only when hovering that feature — do not leave a sticky label
@@ -13479,7 +14283,6 @@ if (platformVersionField) {
             timestamp: Date.now(),
             features: mergeFeatureItems(
                 (existingIdx >= 0 && project.scenarios[existingIdx].features) || [],
-                featureItemsFromElements(scenElements || (existingIdx >= 0 ? project.scenarios[existingIdx].elements : []), pName),
                 collectLiveFeatureItemsForPage(pName)
             )
         };
@@ -13502,7 +14305,7 @@ if (platformVersionField) {
         }
     };
 
-    window.saveFeatureToRepo = function(featureName, rect, fullPage, platform, appName) {
+    window.saveFeatureToRepo = function(featureName, rect, fullPage, platform, appName, featurePageName, screenSignature, screenContentKeys, nodeText, nodeFingerprint, uniqueIdentifier, xpaths, featureId) {
         if (!featureName) return;
         const currentPlatform = platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
         const currentApp = window.activeResumedAppName || appName || resolveActiveAppName();
@@ -13511,16 +14314,41 @@ if (platformVersionField) {
         const store = beginRepoWrite();
         try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
-        const currentPage = (typeof window.resolveHomePageNameForScrape === 'function')
+        const currentPage = featurePageName || ((typeof window.resolveHomePageNameForScrape === 'function')
             ? window.resolveHomePageNameForScrape()
-            : ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '');
+            : ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''));
+
+        if (!Array.isArray(project.features)) project.features = [];
+
+        // Upsert: same created feature must not multiply on every Home→Repo sync
+        let existingFeatIdx = -1;
+        if (featureId) {
+            existingFeatIdx = project.features.findIndex(f => f && f.id === featureId);
+        }
+        if (existingFeatIdx < 0) {
+            const targetKey = featureIdentityKey(featureName, currentPage, uniqueIdentifier, null, screenSignature);
+            existingFeatIdx = project.features.findIndex(f =>
+                f && f.name && featureIdentityKey(f.name, f.pageName || currentPage, f.uniqueIdentifier, null, f.screenSignature) === targetKey
+            );
+        }
+
+        const resolvedId = featureId
+            || (existingFeatIdx >= 0 && project.features[existingFeatIdx].id)
+            || ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6));
 
         const featureItem = {
+            id: resolvedId,
             name: featureName.trim(),
-            rect: rect || null,
+            rect: rect || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].rect : null),
             fullPage: !!fullPage,
             pageName: currentPage,
-            timestamp: Date.now()
+            uniqueIdentifier: uniqueIdentifier || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].uniqueIdentifier : ""),
+            xpaths: (Array.isArray(xpaths) && xpaths.length) ? xpaths : (existingFeatIdx >= 0 ? project.features[existingFeatIdx].xpaths : []),
+            screenSignature: screenSignature || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].screenSignature : ""),
+            screenContentKeys: (Array.isArray(screenContentKeys) && screenContentKeys.length) ? screenContentKeys : (existingFeatIdx >= 0 ? project.features[existingFeatIdx].screenContentKeys : []),
+            nodeText: nodeText || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].nodeText : ""),
+            nodeFingerprint: nodeFingerprint || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].nodeFingerprint : ""),
+            timestamp: existingFeatIdx >= 0 ? (project.features[existingFeatIdx].timestamp || Date.now()) : Date.now()
         };
 
         let owner = (typeof findFeatureOwnerInProject === 'function') ? findFeatureOwnerInProject(project, currentPage) : null;
@@ -13528,23 +14356,27 @@ if (platformVersionField) {
             seedInitialProjectPage(project, currentApp, currentPlatform);
         }
         if (!owner && (project.pages || []).length) {
-            owner = project.pages.find(pg => repoNameKey(pg.pageName) === repoNameKey(currentPage)) || project.pages[0];
+            owner = project.pages.find(pg => repoNameKey(pg.pageName) === repoNameKey(currentPage)) || null;
         }
         if (!owner && (project.scenarios || []).length) {
-            owner = project.scenarios[0];
+            owner = project.scenarios.find(sc => repoNameKey(sc.pageName) === repoNameKey(currentPage) || repoNameKey(sc.name) === repoNameKey(currentPage)) || null;
+        }
+        if (!owner && currentPage && repoNameKey(currentPage) && repoNameKey(currentPage) !== 'all') {
+            if (!Array.isArray(project.pages)) project.pages = [];
+            owner = {
+                pageName: String(currentPage).trim(),
+                elements: [],
+                features: [],
+                timestamp: Date.now()
+            };
+            project.pages.push(owner);
         }
         if (owner) nestFeatureOnOwner(owner, featureItem);
 
-        if (!Array.isArray(project.features)) project.features = [];
-        const existingFeatIdx = project.features.findIndex(f => f && f.name && f.name.trim().toLowerCase() === featureName.trim().toLowerCase());
         const featObj = {
-            id: existingFeatIdx >= 0 ? (project.features[existingFeatIdx].id || ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6))) : ('feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)),
-            name: featureName.trim(),
-            rect: rect || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].rect : null),
-            fullPage: !!fullPage,
-            pageName: currentPage || (existingFeatIdx >= 0 ? project.features[existingFeatIdx].pageName : 'Default'),
-            platform: currentPlatform,
-            timestamp: existingFeatIdx >= 0 ? (project.features[existingFeatIdx].timestamp || Date.now()) : Date.now()
+            ...featureItem,
+            pageName: currentPage || 'Default',
+            platform: currentPlatform
         };
         if (existingFeatIdx >= 0) {
             project.features[existingFeatIdx] = { ...project.features[existingFeatIdx], ...featObj };
@@ -13552,20 +14384,81 @@ if (platformVersionField) {
             project.features.unshift(featObj);
         }
 
+        if (typeof dedupeProjectFeatureLists === 'function') dedupeProjectFeatureLists(project);
         project.lastUpdated = Date.now();
         } finally {
             endRepoWrite(true);
         }
     };
 
-    window.removeFeatureCompletely = function(featureName, projectKey) {
+    window.renameFeatureInRepo = function(oldName, newName, pageName, screenSignature) {
+        const oldLower = String(oldName || '').trim().toLowerCase();
+        const trimmed = String(newName || '').trim();
+        if (!oldLower || !trimmed) return;
+        const currentSig = screenSignature || ((typeof computeScreenSignature === 'function') ? computeScreenSignature(window.xmlDoc) : '');
+
+        const store = beginRepoWrite();
+        try {
+            const projectKey = window.activeResumedProjectKey;
+            const project = projectKey ? store[projectKey] : null;
+            if (!project) return;
+
+            const matchesScreen = (f) => {
+                if (!currentSig) return true;
+                if (!f || !f.screenSignature) return true;
+                return (typeof screenSignatureSimilarity === 'function')
+                    ? screenSignatureSimilarity(f.screenSignature, currentSig) >= 0.68
+                    : f.screenSignature === currentSig;
+            };
+
+            const renameInList = (list) => {
+                if (!Array.isArray(list)) return;
+                list.forEach(f => {
+                    if (!f || !f.name) return;
+                    if (String(f.name).trim().toLowerCase() !== oldLower) return;
+                    if (!matchesScreen(f)) return;
+                    f.name = trimmed;
+                });
+            };
+
+            renameInList(project.features);
+            (project.pages || []).forEach(pg => {
+                renameInList(pg.features);
+                (pg.elements || []).forEach(el => {
+                    const cur = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
+                    if (cur !== oldLower) return;
+                    // elements rarely store screenSignature — only rename when feature list on same screen was updated
+                    // skip bulk element rename across screens; table rename already handled live rows
+                });
+            });
+            (project.scenarios || []).forEach(sc => {
+                renameInList(sc.features);
+            });
+            // Also rename nested feature refs on elements that belong to matching screen features only via live table.
+            project.lastUpdated = Date.now();
+        } finally {
+            endRepoWrite(true);
+        }
+    };
+
+    window.removeFeatureCompletely = function(featureName, projectKey, pageName) {
         if (!featureName) return;
         const cleanFeatName = featureName.trim().toLowerCase();
         const targetProjectKey = projectKey || window.activeResumedProjectKey;
+        const pageKey = (typeof repoNameKey === 'function') ? repoNameKey(pageName || '') : String(pageName || '').trim().toLowerCase();
+        const matchesPage = (p) => {
+            if (!pageKey) return true;
+            const key = (typeof repoNameKey === 'function') ? repoNameKey(p || '') : String(p || '').trim().toLowerCase();
+            return key === pageKey;
+        };
 
-        // 1. Remove from registeredFeatureAreas in memory
+        // 1. Remove from registeredFeatureAreas in memory (page-scoped when pageName given)
         if (typeof registeredFeatureAreas !== 'undefined' && Array.isArray(registeredFeatureAreas)) {
-            registeredFeatureAreas = registeredFeatureAreas.filter(a => !a || !a.name || a.name.trim().toLowerCase() !== cleanFeatName);
+            registeredFeatureAreas = registeredFeatureAreas.filter(a => {
+                if (!a || !a.name || a.name.trim().toLowerCase() !== cleanFeatName) return true;
+                if (pageKey && !matchesPage(a.pageName)) return true;
+                return false;
+            });
             window.registeredFeatureAreas = registeredFeatureAreas;
         }
 
@@ -13588,13 +14481,14 @@ if (platformVersionField) {
             });
         }
 
-        // 3. In live #myTable: update all cells having this feature name to their row's Page Name
+        // 3. In live #myTable: update cells having this feature name (on this page only when scoped)
         const tableRows = document.querySelectorAll("#myTable tr:not(.empty-excel-row)");
         tableRows.forEach(tr => {
             const featCell = tr.querySelector('.featureName');
             const pageCell = tr.querySelector('.page');
+            const rowPageName = (pageCell ? pageCell.innerText.trim() : '') || document.getElementById('pagename_searchbox')?.value || 'Default';
+            if (pageKey && !matchesPage(rowPageName)) return;
             if (featCell && featCell.innerText.trim().toLowerCase() === cleanFeatName) {
-                const rowPageName = (pageCell ? pageCell.innerText.trim() : '') || document.getElementById('pagename_searchbox')?.value || 'Default';
                 featCell.innerText = rowPageName;
             }
         });
@@ -13608,19 +14502,27 @@ if (platformVersionField) {
             if (proj) {
                 // Remove from proj.features
                 if (Array.isArray(proj.features)) {
-                    proj.features = proj.features.filter(f => !f || !f.name || f.name.trim().toLowerCase() !== cleanFeatName);
+                    proj.features = proj.features.filter(f => {
+                        if (!f || !f.name || f.name.trim().toLowerCase() !== cleanFeatName) return true;
+                        if (pageKey && !matchesPage(f.pageName)) return true;
+                        return false;
+                    });
                 }
-                const stripOwnerFeatures = (owner) => {
+                const stripOwnerFeatures = (owner, ownerPage) => {
                     if (!owner || !Array.isArray(owner.features)) return;
-                    owner.features = owner.features.filter(f => !f || !((f.name || f) + '').trim() || ((f.name || f) + '').trim().toLowerCase() !== cleanFeatName);
+                    owner.features = owner.features.filter(f => {
+                        if (!f || !((f.name || f) + '').trim() || ((f.name || f) + '').trim().toLowerCase() !== cleanFeatName) return true;
+                        if (pageKey && !matchesPage(f.pageName || ownerPage)) return true;
+                        return false;
+                    });
                 };
                 (proj.scenarios || []).forEach(s => {
-                    stripOwnerFeatures(s);
+                    stripOwnerFeatures(s, s.pageName || s.name);
                     if (Array.isArray(s.elements)) {
                         s.elements.forEach(el => {
                             const curFeat = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
-                            if (curFeat === cleanFeatName) {
-                                const pName = el['PAGE NAME'] || s.pageName || 'Default';
+                            const pName = el['PAGE NAME'] || s.pageName || 'Default';
+                            if (curFeat === cleanFeatName && matchesPage(pName)) {
                                 el['FEATURE NAME'] = pName;
                                 el.FeatureName = pName;
                             }
@@ -13630,13 +14532,13 @@ if (platformVersionField) {
                 // Update elements in proj.pages: replace FEATURE NAME with PAGE NAME
                 if (Array.isArray(proj.pages)) {
                     proj.pages.forEach(pg => {
-                        stripOwnerFeatures(pg);
+                        stripOwnerFeatures(pg, pg.pageName);
                         const fallbackPage = pg.pageName || 'Default';
                         if (Array.isArray(pg.elements)) {
                             pg.elements.forEach(el => {
                                 const curFeat = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
-                                if (curFeat === cleanFeatName) {
-                                    const pName = el['PAGE NAME'] || fallbackPage;
+                                const pName = el['PAGE NAME'] || fallbackPage;
+                                if (curFeat === cleanFeatName && matchesPage(pName)) {
                                     el['FEATURE NAME'] = pName;
                                     el.FeatureName = pName;
                                 }
@@ -13703,7 +14605,6 @@ if (platformVersionField) {
             timestamp: Date.now(),
             features: mergeFeatureItems(
                 (existingIdx >= 0 && project.pages[existingIdx].features) || [],
-                featureItemsFromElements(cleanElements, pName),
                 collectLiveFeatureItemsForPage(pName)
             )
         };
@@ -13775,7 +14676,21 @@ if (platformVersionField) {
             if (Array.isArray(liveFeatures)) {
                 liveFeatures.forEach(area => {
                     if (area && area.name) {
-                        window.saveFeatureToRepo(area.name, area.rect, area.fullPage, platform, appName);
+                        window.saveFeatureToRepo(
+                            area.name,
+                            area.rect,
+                            area.fullPage,
+                            platform,
+                            appName,
+                            area.pageName,
+                            area.screenSignature,
+                            area.screenContentKeys,
+                            area.nodeText,
+                            area.nodeFingerprint,
+                            area.uniqueIdentifier,
+                            area.xpaths,
+                            area.id
+                        );
                     }
                 });
             }
@@ -13900,18 +14815,24 @@ if (platformVersionField) {
                 }
             }
 
-            const cleanElList = rawElList.map(el => ({
-                "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
-                "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                "XPATH": el['XPATH'] || el.ControlId || '',
-                "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
-                "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || 'Name',
-                "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
-                "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
-                "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
-                "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
-                "APP URL": el['APP URL'] || el.AppUrl || ''
-            }));
+            const cleanElList = rawElList.map(el => {
+                const loc = el['XPATH'] || el.ControlId || '';
+                const inferredIdType = (typeof inferIdentificationType === 'function')
+                    ? inferIdentificationType(loc)
+                    : ((loc.startsWith('//') || loc.startsWith('(')) ? 'XPath' : (loc ? 'AccessibilityId' : 'Name'));
+                return {
+                    "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
+                    "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
+                    "XPATH": loc,
+                    "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
+                    "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
+                    "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
+                    "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
+                    "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
+                    "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
+                    "APP URL": el['APP URL'] || el.AppUrl || project.appName || ''
+                };
+            });
 
             const downloadPayload = {
                 "isRecordscenario": false,
@@ -13940,18 +14861,24 @@ if (platformVersionField) {
             }
 
             const pageName = item.pageName || item.name || 'Default';
-            const cleanSteps = rawSteps.map(el => ({
-                "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
-                "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                "XPATH": el['XPATH'] || el.ControlId || '',
-                "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
-                "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || 'Name',
-                "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
-                "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
-                "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
-                "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
-                "APP URL": el['APP URL'] || el.AppUrl || ''
-            }));
+            const cleanSteps = rawSteps.map(el => {
+                const loc = el['XPATH'] || el.ControlId || '';
+                const inferredIdType = (typeof inferIdentificationType === 'function')
+                    ? inferIdentificationType(loc)
+                    : ((loc.startsWith('//') || loc.startsWith('(')) ? 'XPath' : (loc ? 'AccessibilityId' : 'Name'));
+                return {
+                    "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
+                    "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
+                    "XPATH": loc,
+                    "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
+                    "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
+                    "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
+                    "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
+                    "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
+                    "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
+                    "APP URL": el['APP URL'] || el.AppUrl || project.appName || ''
+                };
+            });
 
             const downloadPayload = {
                 "isRecordscenario": true,
@@ -14425,6 +15352,15 @@ if (platformVersionField) {
         }
 
         const store = getProjectStore();
+        // One-time cleanup of inflated feature duplicates from earlier sync bugs
+        let cleaned = false;
+        Object.keys(store).forEach(k => {
+            const p = store[k];
+            if (!p) return;
+            if (typeof dedupeProjectFeatureLists === 'function' && dedupeProjectFeatureLists(p)) cleaned = true;
+            if (typeof pruneProjectAssetOwnership === 'function' && pruneProjectAssetOwnership(p)) cleaned = true;
+        });
+        if (cleaned && typeof setProjectStore === 'function') setProjectStore(store);
         const projectKeys = Object.keys(store);
 
         // Elements
