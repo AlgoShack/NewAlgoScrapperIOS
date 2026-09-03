@@ -5940,15 +5940,60 @@ html.platform-win .device-bezel-android .phone-welcome-overlay {
   background: #f8fafc !important;
   border: 0 !important;
   box-shadow: none !important;
-  padding: 20px 16px !important;
+  padding: 24px 20px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.phone-welcome-overlay .info-svg {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 14px;
+}
+
+.phone-welcome-loader {
+  height: 46px;
+  width: 46px;
+  margin-bottom: 14px;
+  object-fit: contain;
 }
 
 #tab-home .phone-welcome-title {
-  font-size: 12px !important;
-  font-weight: 600;
-  line-height: 1.45;
-  color: #4b5563 !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1.5 !important;
+  margin: 0 !important;
+  max-width: 250px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
 }
+
+#tab-home .phone-welcome-detail {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  line-height: 1.45 !important;
+  margin-top: 8px !important;
+  max-width: 250px !important;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+}
+
+/* THEMES: Consistent icon fill + text colors */
+.phone-welcome-info .info-svg { fill: #2F8BCC !important; }
+.phone-welcome-info .phone-welcome-title { color: #2F8BCC !important; }
+.phone-welcome-info .phone-welcome-detail { color: #475569 !important; }
+
+.phone-welcome-warning .info-svg { fill: #f59e0b !important; }
+.phone-welcome-warning .phone-welcome-title { color: #b45309 !important; }
+.phone-welcome-warning .phone-welcome-detail { color: #78350f !important; }
+
+.phone-welcome-error .info-svg { fill: #ef4444 !important; }
+.phone-welcome-error .phone-welcome-title { color: #dc2626 !important; }
+.phone-welcome-error .phone-welcome-detail { color: #991b1b !important; }
+
+.phone-welcome-loading .phone-welcome-title { color: #64748b !important; }
+
 
 html.platform-win .home-layout {
   grid-template-columns: minmax(240px, 32%) minmax(0, 1fr) !important;

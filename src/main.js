@@ -1938,51 +1938,72 @@
         if (process.platform !== 'darwin') {
             return [];
         }
-        return new Promise((resolve) => {
-            const devices = [];
 
-            // 1. Get BOOTED simulators
-            exec("xcrun simctl list devices booted", (simError, simStdout) => {
-                if (!simError) {
+        const simPromise = new Promise((resolve) => {
+            exec("xcrun simctl list devices booted", { timeout: 8000 }, (simError, simStdout) => {
+                const simDevices = [];
+                if (!simError && simStdout) {
                     const lines = simStdout.split("\n");
+                    let currentOSVersion = "";
                     lines.forEach(line => {
-                        const match = line.match(/(.*?)\s+\(([A-F0-9-]+)\)\s+\(Booted\)/);
+                        const osMatch = line.match(/--\s*(?:iOS|watchOS|tvOS|visionOS)?\s*([\d\.]+)\s*--/i);
+                        if (osMatch) {
+                            currentOSVersion = osMatch[1];
+                        }
+                        const match = line.match(/(.*?)\s+\(([A-F0-9-]+)\)\s+\(Booted\)/i);
                         if (match) {
-                            devices.push({
+                            simDevices.push({
                                 id: match[2],
                                 name: match[1].trim(),
                                 type: "simulator",
-                                platform: 'IOS' // Tells the frontend to switch to iOS
+                                platform: 'IOS',
+                                version: currentOSVersion || ""
                             });
                         }
                     });
                 }
-
-                // 2. Get CONNECTED physical iPhones
-                exec("xcrun xcdevice list", (phyError, phyStdout) => {
-                    if (!phyError && phyStdout) {
-                        try {
-                            const allDevices = JSON.parse(phyStdout);
-                            if (Array.isArray(allDevices)) {
-                                allDevices.forEach(device => {
-                                    if (device && device.available === true && device.simulator === false && device.platform === "com.apple.platform.iphoneos") {
-                                        devices.push({
-                                            id: device.identifier,
-                                            name: device.name,
-                                            type: "physical",
-                                            platform: 'IOS'
-                                        });
-                                    }
-                                });
-                            }
-                        } catch (e) {
-                            console.log("xcdevice parse error safely caught:", e);
-                        }
-                    }
-                    resolve(devices);
-                });
+                resolve(simDevices);
             });
         });
+
+        const phyPromise = new Promise((resolve) => {
+            exec("xcrun xcdevice list", { timeout: 8000 }, (phyError, phyStdout) => {
+                const phyDevices = [];
+                if (!phyError && phyStdout) {
+                    try {
+                        const firstBracket = phyStdout.indexOf('[');
+                        const lastBracket = phyStdout.lastIndexOf(']');
+                        const jsonStr = (firstBracket !== -1 && lastBracket !== -1)
+                            ? phyStdout.substring(firstBracket, lastBracket + 1)
+                            : phyStdout;
+                        const allDevices = JSON.parse(jsonStr);
+                        if (Array.isArray(allDevices)) {
+                            allDevices.forEach(device => {
+                                if (device && device.available === true && device.simulator === false && device.platform === "com.apple.platform.iphoneos") {
+                                    phyDevices.push({
+                                        id: device.identifier,
+                                        name: device.name,
+                                        type: "physical",
+                                        platform: 'IOS',
+                                        version: device.operatingSystemVersion || ""
+                                    });
+                                }
+                            });
+                        }
+                    } catch (e) {
+                        console.log("xcdevice parse error safely caught:", e);
+                    }
+                }
+                resolve(phyDevices);
+            });
+        });
+
+        try {
+            const [sims, phys] = await Promise.all([simPromise, phyPromise]);
+            return [...sims, ...phys];
+        } catch (_) {
+            return [];
+        }
     }
 
     /**
@@ -2422,6 +2443,28 @@
         });
     });
 
+    // Read iOS OS version for the Platform Version field
+    ipcMain.handle("get-ios-version", async (event, udid) => {
+        if (process.platform !== 'darwin' || !udid) return null;
+        try {
+            const dev = (connectedDevices || []).find(d => String(d.id).trim().toLowerCase() === String(udid).trim().toLowerCase());
+            if (dev && dev.version) return dev.version;
+
+            const { stdout } = await execAsync(`xcrun simctl list devices -j`, { timeout: 6000 });
+            const data = JSON.parse(stdout);
+            const devMap = data?.devices || {};
+            for (const runtime of Object.keys(devMap)) {
+                const devList = devMap[runtime] || [];
+                const found = devList.find(d => String(d.udid).trim().toLowerCase() === String(udid).trim().toLowerCase());
+                if (found) {
+                    const vMatch = runtime.match(/iOS[.-](\d+)[.-](\d+)/i);
+                    if (vMatch) return `${vMatch[1]}.${vMatch[2]}`;
+                }
+            }
+        } catch (_) {}
+        return null;
+    });
+
     // Soft-launch Android app WITHOUT force-stop (-S). Force-stop kills UiAutomator2 on many OEMs.
     ipcMain.handle("android-soft-launch", async (event, data) => {
         const udid = data && data.udid;
@@ -2443,7 +2486,7 @@
 
         const activityArg = (() => {
             const a = String(activity || "").trim();
-            if (!a) return "";
+            if (!a || a.toLowerCase() === "loading activity...") return "";
             if (a.includes("/")) return a;
             return `${pkg}/${a.replace(/^\//, "")}`;
         })();
@@ -2465,12 +2508,13 @@
                 resolve({ success: false, error: "Missing udid" });
                 return;
             }
-            const cmd = `adb -s ${udid} shell "dumpsys window 2>/dev/null | grep -E 'mCurrentFocus|mFocusedApp'"`;
-            exec(cmd, { timeout: 8000 }, (error, stdout) => {
+            exec(`adb -s ${udid} shell dumpsys window windows`, { timeout: 8000 }, (error, stdout) => {
                 const text = String(stdout || "");
-                const match = text.match(/([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/);
-                if (match) {
-                    resolve({ success: true, pkg: match[1], raw: text.trim() });
+                const focusMatch = text.match(/mCurrentFocus[^\n]*\b([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/)
+                    || text.match(/mFocusedApp[^\n]*\b([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/)
+                    || text.match(/([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/);
+                if (focusMatch) {
+                    resolve({ success: true, pkg: focusMatch[1], raw: focusMatch[0] });
                     return;
                 }
                 resolve({ success: false, error: error ? error.message : "No focused app" });

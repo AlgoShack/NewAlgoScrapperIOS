@@ -403,9 +403,10 @@
         updateZoomTooltips();
     }
 
-    function showErrorPopup(title, error) {
+    function showErrorPopup(title, error, hint = "") {
         const titleElem = document.getElementById('launchErrorTitle');
         const logElem = document.getElementById('launchErrorLog');
+        const hintElem = document.getElementById('launchErrorHint');
         const popupElem = document.getElementById('launchErrorPopup');
         const overlayElem = document.getElementById('overlay');
         const appRunningPopup = document.getElementById('AppRunningPopup');
@@ -413,9 +414,26 @@
         if (appRunningPopup) appRunningPopup.style.display = 'none';
         if (overlayElem) overlayElem.style.display = 'block';
 
-        if (titleElem) titleElem.innerText = title;
+        if (titleElem) titleElem.innerText = title || "Application Launch Error";
+        if (hintElem) {
+            if (hint) {
+                hintElem.innerHTML = `<b>Recommended Action:</b> ${escapeDummyHtml(hint)}`;
+                hintElem.style.display = 'block';
+            } else {
+                hintElem.style.display = 'none';
+            }
+        }
         if (logElem) {
-            logElem.innerText = error?.stack || error?.message || String(error);
+            let logText = "";
+            if (error && error.message) {
+                logText = error.message;
+                if (error.stack && error.stack !== error.message) {
+                    logText += "\n\n--- Stack Trace ---\n" + error.stack;
+                }
+            } else {
+                logText = String(error || "No log recorded.");
+            }
+            logElem.innerText = logText;
         }
 
         if (popupElem) popupElem.style.display = 'block';
@@ -425,11 +443,6 @@
             okBtn.onclick = () => {
                 if (popupElem) popupElem.style.display = 'none';
                 if (overlayElem) overlayElem.style.display = 'none';
-                // Do NOT quit the whole app — let the user retry Launch
-                resetLaunchPlaceholder(
-                    "Launch failed. Fix the issue above, then click Launch Application again.",
-                    "error"
-                );
             };
         }
     }
@@ -470,23 +483,22 @@
 
         updateDeviceFrameStyle();
 
-        const theme = options.theme || 'info';
-        const title = options.title || getIdleDummyTitle();
-        const detail = options.detail || '';
+        let theme = options.theme || 'info';
+        let title = options.title || getIdleDummyTitle();
+        let detail = options.detail || options.desc || '';
 
-        const themes = {
-            info: { color: '#2F8BCC', iconFill: '#2F8BCC' },
-            warning: { color: '#b06000', iconFill: '#f9a825' },
-            error: { color: '#c5221f', iconFill: '#d93025' },
-            loading: { color: '#3c4043', iconFill: '#2F8BCC' }
-        };
-        const t = themes[theme] || themes.info;
+        const rawTitle = String(title || '');
+        const rawDetail = String(detail || '');
+        const lowerTitle = rawTitle.toLowerCase();
+        const lowerDetail = rawDetail.toLowerCase();
 
-        dummy.style.display = "block";
-
-        if (theme === 'loading') {
+        // Detect loading: ALWAYS use the user's loader GIF only
+        if (theme === 'loading' || lowerTitle.includes('starting session') || lowerTitle.includes('launching')) {
+            theme = 'loading';
+            if (!title || lowerTitle.includes('starting session')) title = 'Starting session and loading screen…';
+            dummy.style.display = "block";
             dummy.innerHTML = `
-                <div class="phone-welcome-overlay phone-welcome-${theme}">
+                <div class="phone-welcome-overlay phone-welcome-loading">
                     <img class="phone-welcome-loader" src="icon/load-8510_256.gif" alt="" />
                     <p id="dummyMainText" class="phone-welcome-title">${escapeDummyHtml(title)}</p>
                     ${detail ? `<p id="dummyErrorText" class="phone-welcome-detail">${escapeDummyHtml(detail)}</p>` : `<p id="dummyErrorText" class="phone-welcome-detail" style="display:none;"></p>`}
@@ -495,31 +507,58 @@
             return;
         }
 
+        // Detect app in background
+        if (lowerTitle.includes('session interrupted') || lowerDetail.includes('closed or running in the background') || lowerTitle.includes('in the background')) {
+            theme = 'warning';
+            title = 'Application is closed or running in the background.';
+            detail = 'Keep the app open, then click Launch Application to reconnect.';
+        } else if (lowerTitle.includes('disconnected') || lowerDetail.includes('disconnected') || lowerTitle.includes('offline')) {
+            theme = 'error';
+            title = 'Device Disconnected';
+            detail = 'Please reconnect your device and click Launch Application.';
+        }
+
+        let svgPath = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>';
+        if (theme === 'warning') {
+            svgPath = '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>';
+        } else if (theme === 'error') {
+            svgPath = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>';
+        }
+
+        dummy.style.display = "block";
         dummy.innerHTML = `
             <div class="phone-welcome-overlay phone-welcome-${theme}">
-                <svg id="dummyIcon" class="info-svg" viewBox="0 0 24 24" fill="${t.iconFill}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                <svg id="dummyIcon" class="info-svg" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    ${svgPath}
                 </svg>
-                <p id="dummyMainText" class="phone-welcome-title" style="color:${t.color};">${escapeDummyHtml(title)}</p>
-                <p id="dummyErrorText" class="phone-welcome-detail" style="${detail ? 'display:block;' : 'display:none;'}color:${t.color};">${detail ? escapeDummyHtml(detail) : ''}</p>
+                <p id="dummyMainText" class="phone-welcome-title">${escapeDummyHtml(title)}</p>
+                <p id="dummyErrorText" class="phone-welcome-detail" style="${detail ? 'display:block;' : 'display:none;'}">${escapeDummyHtml(detail)}</p>
             </div>
         `;
     }
 
     function getIdleDummyTitle() {
-        // Same copy on Windows + macOS (Windows platform field stays Android-only)
         return 'Select platform, app and device, then click Launch Application.';
     }
 
     function resetLaunchPlaceholder(message, theme = 'error') {
         if (!message) {
-            showDummyDeviceMessage({ theme: 'info', title: getIdleDummyTitle() });
+            showDummyDeviceMessage({ theme: 'info', title: getIdleDummyTitle(), detail: '' });
             return;
         }
+
+        let title = message;
+        let detail = '';
+        if (message.includes(':')) {
+            const parts = message.split(':');
+            title = parts[0].trim();
+            detail = parts.slice(1).join(':').trim();
+        }
+
         showDummyDeviceMessage({
             theme,
-            title: message,
-            detail: ''
+            title: title || 'Launch Notice',
+            detail: detail
         });
     }
 
@@ -1332,6 +1371,28 @@
         deviceSelect.value = deviceName;
         const udidInput = document.getElementById('udid');
         if (udidInput) udidInput.value = deviceId;
+
+        if (normalizePlatformName(ordered[0].platform) === 'Android') {
+            ipcRenderer.invoke("get-android-version", ordered[0].id).then((ver) => {
+                if (ver) {
+                    const pv = document.getElementById('platformversion');
+                    if (pv) { pv.value = ver; pv.dataset.userEdited = 'true'; }
+                }
+            }).catch(() => {});
+        } else {
+            if (ordered[0].version) {
+                const pv = document.getElementById('platformversion');
+                if (pv) { pv.value = ordered[0].version; pv.dataset.userEdited = 'true'; }
+            } else {
+                ipcRenderer.invoke("get-ios-version", ordered[0].id).then((ver) => {
+                    if (ver) {
+                        const pv = document.getElementById('platformversion');
+                        if (pv) { pv.value = ver; pv.dataset.userEdited = 'true'; }
+                    }
+                }).catch(() => {});
+            }
+        }
+
         if (typeof deviceSelect._rebuildCustomSelect === 'function') {
             deviceSelect._rebuildCustomSelect();
         }
@@ -1610,6 +1671,20 @@
             if (normalizePlatformName(selectedDevice.platform) === 'Android') {
                 try {
                     const ver = await ipcRenderer.invoke("get-android-version", selectedDevice.id);
+                    if (ver) {
+                        const pv = document.getElementById('platformversion');
+                        if (pv) {
+                            pv.value = ver;
+                            pv.dataset.userEdited = 'true';
+                        }
+                    }
+                } catch (_) {}
+            } else {
+                try {
+                    let ver = selectedDevice.version;
+                    if (!ver) {
+                        ver = await ipcRenderer.invoke("get-ios-version", selectedDevice.id);
+                    }
                     if (ver) {
                         const pv = document.getElementById('platformversion');
                         if (pv) {
@@ -2380,115 +2455,271 @@
             var appActivity = document.getElementById('appactivity').value;
             var appiumURL = document.getElementById('appiumurl').value;
 
-    // ===========================================================================
-    // ===========================================================================
-    // [LAUNCH] Launch Application
-    // Validates platform fields → ensure-appium IPC → builds caps → wd session
-    // Android: prepare device, no force-stop launch; then android-soft-launch
-    // iOS:     appium:bundleId + mobile: activateApp after session
-    // On success: enables Scrape UI / Download / Record / Send (Load Page stays disabled)
-    // ===========================================================================
-    // Android: UiAutomator2 + appPackage/appActivity (+ optional ADB prepare/soft-launch)
-    // iOS:     XCUITest + bundleId (+ mobile: activateApp)
-    // Always ensure bundled Appium is up via IPC before creating the session.
-    // ===========================================================================
+            // Windows compatibility check: iOS automation is strictly macOS only
+            if (process.platform === 'win32' && plateformOption === 'IOS') {
+                showCustomAlert(
+                    "Platform Not Supported on Windows",
+                    "iOS automation requires macOS with Xcode and Apple developer tools.<br><br>Windows only supports Android devices and emulators. Please switch Platform to <b>Android</b>.",
+                    "error"
+                );
+                return;
+            }
+
             // 1. Smart Validation based on Platform
             let isValid = true;
-            if (appName.trim() === '') { document.getElementById('appname').style.borderColor = 'red'; isValid = false; }
-            if (deviceName.trim() === '') { document.getElementById('devicename').style.borderColor = 'red'; isValid = false; }
-            if (udidName.trim() === '') { document.getElementById('udid').style.borderColor = 'red'; isValid = false; }
-            if (appiumURL.trim() === '') { document.getElementById('appiumurl').style.borderColor = 'red'; isValid = false; }
-            if (automationName.trim() === '') { document.getElementById('automationName').style.borderColor = 'red'; isValid = false; }
+            const missingFields = [];
+
+            if (!appName.trim() || appName.toLowerCase() === 'select app' || appName.toLowerCase() === 'loading apps...') {
+                document.getElementById('appname').style.borderColor = 'red';
+                isValid = false;
+                missingFields.push("App Name");
+            } else {
+                document.getElementById('appname').style.borderColor = '';
+            }
+
+            if (!deviceName.trim() || deviceName.toLowerCase() === 'select device') {
+                document.getElementById('devicename').style.borderColor = 'red';
+                isValid = false;
+                missingFields.push("Device / Emulator");
+            } else {
+                document.getElementById('devicename').style.borderColor = '';
+            }
+
+            if (!udidName.trim()) {
+                document.getElementById('udid').style.borderColor = 'red';
+                isValid = false;
+                missingFields.push("Device UDID");
+            } else {
+                document.getElementById('udid').style.borderColor = '';
+            }
+
+            if (!appiumURL.trim()) {
+                document.getElementById('appiumurl').style.borderColor = 'red';
+                isValid = false;
+                missingFields.push("Appium URL");
+            } else {
+                document.getElementById('appiumurl').style.borderColor = '';
+            }
+
+            if (!automationName.trim()) {
+                document.getElementById('automationName').style.borderColor = 'red';
+                isValid = false;
+                missingFields.push("Automation Name");
+            } else {
+                document.getElementById('automationName').style.borderColor = '';
+            }
+
             if (plateformOption === 'Android') {
-                if (appPackage.trim() === '') { document.getElementById('apppackage').style.borderColor = 'red'; isValid = false; }
-                if (appActivity.trim() === '') { document.getElementById('appactivity').style.borderColor = 'red'; isValid = false; }
-                // platformVersion is helpful but UiAutomator2 can work with udid alone
-                if (platformVersion.trim() === '') {
+                if (!appPackage.trim()) {
+                    document.getElementById('apppackage').style.borderColor = 'red';
+                    isValid = false;
+                    missingFields.push("App Package");
+                } else {
+                    document.getElementById('apppackage').style.borderColor = '';
+                }
+
+                if (!appActivity.trim() || appActivity.trim().toLowerCase() === 'loading activity...') {
+                    document.getElementById('appactivity').style.borderColor = 'red';
+                    isValid = false;
+                    missingFields.push("App Activity");
+                } else {
+                    document.getElementById('appactivity').style.borderColor = '';
+                }
+
+                if (!platformVersion.trim()) {
                     platformVersion = '14';
                     document.getElementById('platformversion').value = platformVersion;
                 }
             } else {
-                if (bundleID.trim() === '') { document.getElementById('bundleID').style.borderColor = 'red'; isValid = false; }
-                if (platformVersion.trim() === '') { document.getElementById('platformversion').style.borderColor = 'red'; isValid = false; }
+                if (!bundleID.trim()) {
+                    document.getElementById('bundleID').style.borderColor = 'red';
+                    isValid = false;
+                    missingFields.push("Bundle ID");
+                } else {
+                    document.getElementById('bundleID').style.borderColor = '';
+                }
+
+                if (!platformVersion.trim()) {
+                    platformVersion = '17.0';
+                    document.getElementById('platformversion').value = platformVersion;
+                }
+            }
+
+            if (!isValid) {
+                showCustomAlert(
+                    "Missing Required Fields",
+                    `Please fill in or select the required field(s) before launching:<br><br>• <b>${missingFields.join('</b><br>• <b>')}</b>`,
+                    "warning"
+                );
+                return;
             }
 
             // 2. Launch if Valid
-            if (isValid) {
-                // IMPORTANT: Create the exact 9-item array expected by launchApp
-                initialData = [plateformOption, deviceName, platformVersion, automationName, appiumURL, udidName, bundleID, appPackage, appActivity];
+            initialData = [plateformOption, deviceName, platformVersion, automationName, appiumURL, udidName, bundleID, appPackage, appActivity];
 
-                const appSelect = document.getElementById('appname');
-                let selectedAppName = '';
-                if (appSelect && appSelect.options && appSelect.selectedIndex >= 0) {
-                    const opt = appSelect.options[appSelect.selectedIndex];
-                    selectedAppName = (opt.text || opt.innerText || '').trim();
-                }
-                if (!selectedAppName || selectedAppName.toLowerCase() === 'select app' || selectedAppName.toLowerCase() === 'loading apps...') {
-                    selectedAppName = (appSelect?.value || appName || '').trim();
-                }
-                const activeApp = (typeof getCleanAppName === 'function' ? getCleanAppName(selectedAppName) : selectedAppName) || appName;
-                const existingProjects = (typeof findExistingRepoProjects === 'function')
-                    ? findExistingRepoProjects(activeApp, plateformOption)
-                    : [];
-
-                if (existingProjects.length > 0) {
-                    const launchParams = [
-                        plateformOption,
-                        deviceName,
-                        platformVersion,
-                        automationName,
-                        appiumURL,
-                        udidName,
-                        bundleID,
-                        appPackage,
-                        appActivity
-                    ];
-                    pendingLaunchProjectData = {
-                        key: existingProjects[0].key,
-                        project: existingProjects[0].project,
-                        initialData: launchParams
-                    };
-                    window.pendingLaunchProjectData = pendingLaunchProjectData;
-                    pendingExportAction = "confirmExistingProjectLaunch";
-                    window.pendingExportAction = "confirmExistingProjectLaunch";
-                    showLaunchProjectPicker({
-                        appName: activeApp,
-                        platform: plateformOption,
-                        projects: existingProjects,
-                        launchParams
-                    });
-                    return;
-                }
-
-                const store = getProjectStore();
-                const uniqueInfo = generateUniqueProjectKey(store, activeApp, plateformOption);
-                window.activeProjectSessionMode = 'new';
-                window.activeResumedProjectKey = uniqueInfo.key;
-                window.activeResumedAppName = uniqueInfo.appName;
-
-                if (!store[uniqueInfo.key]) {
-                    store[uniqueInfo.key] = {
-                        projectId: uniqueInfo.projectId || null,
-                        appName: uniqueInfo.appName,
-                        platform: plateformOption,
-                        createdAt: Date.now(),
-                        lastUpdated: Date.now(),
-                        lastActivePageName: uniqueInfo.appName,
-                        scenarios: [],
-                        features: [],
-                        pages: [buildInitialProjectPage(uniqueInfo.appName, plateformOption)]
-                    };
-                    persistProjectStore(store);
-                }
-
-                triggerScreenshotLoader();
-                resetFormLockActive = false;
-                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
-                launchApp(initialData);
+            const appSelect = document.getElementById('appname');
+            let selectedAppName = '';
+            if (appSelect && appSelect.options && appSelect.selectedIndex >= 0) {
+                const opt = appSelect.options[appSelect.selectedIndex];
+                selectedAppName = (opt.text || opt.innerText || '').trim();
             }
-        });
+            if (!selectedAppName || selectedAppName.toLowerCase() === 'select app' || selectedAppName.toLowerCase() === 'loading apps...') {
+                selectedAppName = (appSelect?.value || appName || '').trim();
+            }
+            const activeApp = (typeof getCleanAppName === 'function' ? getCleanAppName(selectedAppName) : selectedAppName) || appName;
+            const existingProjects = (typeof findExistingRepoProjects === 'function')
+                ? findExistingRepoProjects(activeApp, plateformOption)
+                : [];
 
-        async function launchApp(initialData) {
+            if (existingProjects.length > 0) {
+                const launchParams = [
+                    plateformOption,
+                    deviceName,
+                    platformVersion,
+                    automationName,
+                    appiumURL,
+                    udidName,
+                    bundleID,
+                    appPackage,
+                    appActivity
+                ];
+                pendingLaunchProjectData = {
+                    key: existingProjects[0].key,
+                    project: existingProjects[0].project,
+                    initialData: launchParams
+                };
+                window.pendingLaunchProjectData = pendingLaunchProjectData;
+                pendingExportAction = "confirmExistingProjectLaunch";
+                window.pendingExportAction = "confirmExistingProjectLaunch";
+                showLaunchProjectPicker({
+                    appName: activeApp,
+                    platform: plateformOption,
+                    projects: existingProjects,
+                    launchParams
+                });
+                return;
+            }
+
+            const store = getProjectStore();
+            const uniqueInfo = generateUniqueProjectKey(store, activeApp, plateformOption);
+            window.activeProjectSessionMode = 'new';
+            window.activeResumedProjectKey = uniqueInfo.key;
+            window.activeResumedAppName = uniqueInfo.appName;
+
+            if (!store[uniqueInfo.key]) {
+                store[uniqueInfo.key] = {
+                    projectId: uniqueInfo.projectId || null,
+                    appName: uniqueInfo.appName,
+                    platform: plateformOption,
+                    createdAt: Date.now(),
+                    lastUpdated: Date.now(),
+                    lastActivePageName: uniqueInfo.appName,
+                    scenarios: [],
+                    features: [],
+                    pages: [buildInitialProjectPage(uniqueInfo.appName, plateformOption)]
+                };
+                persistProjectStore(store);
+            }
+
+            triggerScreenshotLoader();
+            resetFormLockActive = false;
+            if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
+            launchApp(initialData);
+    });
+
+    function formatLaunchFailure(error, platform, deviceName, udid, details = {}) {
+        const rawMsg = String((error && error.message) || error || "");
+        const isAndroid = platform === 'Android';
+        const appRef = isAndroid ? (details.appPackage || details.appName || 'application') : (details.bundleID || details.appName || 'application');
+
+        // Extract original cause from Appium / WebDriver response
+        let cleanCause = rawMsg;
+        const origMatch = rawMsg.match(/Original error:\s*([^\n\r]+)/i);
+        if (origMatch) {
+            cleanCause = origMatch[1].trim();
+        } else {
+            cleanCause = cleanCause
+                .replace(/^(WebDriverError|SessionNotCreatedError|Error):\s*/i, '')
+                .replace(/^Response code \d+\.?\s*Message:\s*/i, '')
+                .replace(/^An unknown server-side error occurred while processing the command\.?\s*/i, '')
+                .trim();
+        }
+
+        let title = "Application Launch Failed";
+        let friendlyMessage = cleanCause;
+        let hint = "";
+
+        if (/ECONNREFUSED|connect ECONNREFUSED|127\.0\.0\.1:4723|Appium is not running/i.test(rawMsg)) {
+            title = "Appium Server Unreachable";
+            friendlyMessage = `Cannot connect to Appium server at ${details.serverURL || '127.0.0.1:4723'}. The service is not responding.`;
+            hint = "Restart AlgoScraper or ensure port 4723 is not occupied by another process.";
+        } else if (/unauthorized/i.test(rawMsg)) {
+            title = "Device Unauthorized";
+            friendlyMessage = `Device "${deviceName || udid}" is connected but unauthorized.`;
+            hint = "Unlock your phone and tap 'Allow' or 'Always allow' on the USB debugging authorization dialog on your phone screen.";
+        } else if (/device.*offline/i.test(rawMsg)) {
+            title = "Device Offline";
+            friendlyMessage = `Device "${deviceName || udid}" is in an offline state.`;
+            hint = "Unplug and reconnect the USB cable, or restart the device/emulator.";
+        } else if (/device '[^']+' not found|could not find a device with udid|device.*not found/i.test(rawMsg)) {
+            title = "Device Not Found";
+            friendlyMessage = `Could not locate device with identifier "${udid || deviceName}".`;
+            hint = isAndroid
+                ? "Ensure your Android device has USB debugging enabled or emulator is running, then click refresh."
+                : "Ensure the iOS Simulator is booted or your physical iPhone is connected and trusted.";
+        } else if (/Could not find a driver for automationName 'UiAutomator2'/i.test(rawMsg)) {
+            title = "UiAutomator2 Driver Missing";
+            friendlyMessage = "Appium cannot find the UiAutomator2 automation driver for Android.";
+            hint = "Restart AlgoScraper or run 'appium driver install uiautomator2' in your terminal.";
+        } else if (/Could not find a driver for automationName 'XCUITest'/i.test(rawMsg)) {
+            title = "XCUITest Driver Missing";
+            friendlyMessage = "Appium cannot find the XCUITest automation driver for iOS.";
+            hint = "Run 'appium driver install xcuitest' in your terminal on macOS.";
+        } else if (/not installed|was not found on the device|does not exist/i.test(rawMsg)) {
+            title = isAndroid ? "Android App Not Installed" : "iOS App Not Installed";
+            friendlyMessage = `The application "${appRef}" is not installed on device "${deviceName || udid}".`;
+            hint = isAndroid
+                ? "Install the APK on the device or select the correct app from the App dropdown."
+                : "Install the app on the simulator/device or select the correct Bundle ID from the dropdown.";
+        } else if (/Developer Mode/i.test(rawMsg)) {
+            title = "iOS Developer Mode Disabled";
+            friendlyMessage = "Developer Mode is required on iOS 16+ devices to run automation.";
+            hint = "On your iPhone, go to Settings → Privacy & Security → Developer Mode, turn it ON, and restart the device.";
+        } else if (/passcode|locked/i.test(rawMsg)) {
+            title = "Device Screen Locked";
+            friendlyMessage = "The device screen is locked with a passcode or PIN.";
+            hint = "Unlock the device screen and keep it unlocked while using AlgoScraper.";
+        } else if (/WebDriverAgent|xcodebuild/i.test(rawMsg)) {
+            title = "iOS WebDriverAgent Failed";
+            friendlyMessage = `WebDriverAgent failed to start: ${cleanCause}`;
+            hint = "For physical iPhones, ensure your developer profile is trusted in Settings → General → VPN & Device Management. For simulators, check Xcode Command Line Tools.";
+        } else if (/process crashed|instrumentation crashed/i.test(rawMsg)) {
+            title = "UiAutomator2 Instrumentation Crashed";
+            friendlyMessage = `UiAutomator2 process was terminated by Android OS: ${cleanCause}`;
+            hint = "On Xiaomi/OPPO/Vivo/Realme devices, enable 'Install via USB' and 'USB Debugging (Security Settings)' in Developer Options.";
+        } else if (/ANDROID_HOME|ANDROID_SDK_ROOT/i.test(rawMsg)) {
+            title = "Android SDK Missing";
+            friendlyMessage = "Android SDK tools (adb) were not found.";
+            hint = "Install Android platform-tools or configure the ANDROID_HOME environment variable.";
+        } else if (/did not open/i.test(rawMsg)) {
+            title = "Application Did Not Open";
+            friendlyMessage = cleanCause;
+            hint = "Check if the app package and activity are correct, or launch the app manually on the device.";
+        } else {
+            title = "Launch Error";
+            friendlyMessage = cleanCause || "An unexpected error occurred during launch.";
+            hint = "Review the log details below to identify the problem.";
+        }
+
+        return {
+            title,
+            friendlyMessage,
+            hint,
+            technicalError: error
+        };
+    }
+
+    async function launchApp(initialData) {
             window.launchApp = launchApp;
             window._resettingHome = false;
             if (!Array.isArray(initialData) || initialData.length < 9 || !initialData[0] || (!initialData[1] && !initialData[5])) {
@@ -2521,21 +2752,28 @@
                 const liveDevices = await refreshConnectedDevicesList();
                 const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(platform) : (platform === 'Android' ? 'Android' : 'IOS');
                 const platformDevices = devicesForPlatform(platformTarget, liveDevices);
-                const isStillConnected = platformDevices.some(d => d.id === udid || d.name === deviceName);
-                if (!isStillConnected) {
+                const udidLower = String(udid || '').trim().toLowerCase();
+                const nameLower = String(deviceName || '').trim().toLowerCase();
+                const matchedDevice = platformDevices.find(d => {
+                    const dId = String(d.id || '').trim().toLowerCase();
+                    const dName = String(d.name || '').trim().toLowerCase();
+                    return (udidLower && dId === udidLower) || (nameLower && dName === nameLower);
+                });
+
+                if (!matchedDevice) {
                     const isIos = platformTarget === 'IOS';
                     const hint = isIos
-                        ? 'Please open an iOS Simulator or connect an iPhone, then try again.'
-                        : 'Please connect an Android device or start an emulator, then try again.';
+                        ? 'Please launch an iOS Simulator from Xcode or connect an iPhone with Trust enabled, then click refresh.'
+                        : 'Please connect an Android device with USB debugging or start an emulator from Android Studio, then click refresh.';
                     unlockLaunchForm();
                     document.getElementById('overlay').style.display = 'none';
                     resetLaunchPlaceholder(
-                        `${isIos ? 'iOS' : 'Android'} device not connected. Connect a device or start simulator/emulator, then click Launch Application.`,
+                        `${isIos ? 'iOS' : 'Android'} device not connected: "${deviceName || udid}". Reconnect device and click Launch Application.`,
                         "error"
                     );
                     showCustomAlert(
                         "Device Not Connected",
-                        `The selected ${isIos ? 'iOS' : 'Android'} device (<b>${deviceName || udid}</b>) is not connected.<br><br>${hint}`,
+                        `The selected ${isIos ? 'iOS' : 'Android'} device (<b>${deviceName || udid}</b>) is not detected.<br><br>${hint}`,
                         "warning"
                     );
                     return;
@@ -2548,12 +2786,12 @@
                     if (!sdk || !sdk.found) {
                         const err = new Error(
                             (sdk && sdk.message)
-                            || "Android SDK was not found (ANDROID_HOME / ANDROID_SDK_ROOT)."
+                            || "Android SDK tools (adb) were not found on this machine."
                         );
-                        showErrorPopup("Android SDK Required", err);
+                        showErrorPopup("Android SDK Not Found", err, "Set ANDROID_HOME or install Android platform-tools, and ensure adb is on PATH.");
                         unlockLaunchForm();
                         resetLaunchPlaceholder(
-                            "Could not set up Android tools. Check internet and try Launch again.",
+                            `Android SDK Not Found: ${(sdk && sdk.message) || 'Missing adb'}. Check Android tools and try Launch again.`,
                             "error"
                         );
                         return;
@@ -2567,14 +2805,14 @@
             try {
                 const boot = await ipcRenderer.invoke("ensure-appium");
                 if (!boot || !boot.success) {
-                    throw new Error(boot && boot.error ? boot.error : "Appium is not running on port 4723");
+                    throw new Error(boot && boot.error ? boot.error : "Appium is not responding on port 4723.");
                 }
             } catch (bootErr) {
                 console.error("Appium ensure failed:", bootErr);
-                showErrorPopup("Appium Not Running", bootErr);
+                showErrorPopup("Appium Server Unreachable", bootErr, "Check if port 4723 is occupied by another process, or restart AlgoScraper.");
                 unlockLaunchForm();
                 resetLaunchPlaceholder(
-                    "Appium is not running on port 4723. Restart AlgoScraper or run npm run setup.",
+                    "Appium Server Unreachable: Appium is not responding on port 4723. Restart AlgoScraper.",
                     "error"
                 );
                 return;
@@ -2582,10 +2820,19 @@
 
             const isAndroid = platform === 'Android';
 
-            // Auto-correct Android platform version from the device when possible
+            // Auto-detect platform version from device when possible
             if (isAndroid && udid) {
                 try {
                     const detected = await ipcRenderer.invoke("get-android-version", udid);
+                    if (detected) {
+                        platformVersion = String(detected);
+                        const pv = document.getElementById('platformversion');
+                        if (pv) pv.value = platformVersion;
+                    }
+                } catch (_) {}
+            } else if (!isAndroid && udid) {
+                try {
+                    const detected = await ipcRenderer.invoke("get-ios-version", udid);
                     if (detected) {
                         platformVersion = String(detected);
                         const pv = document.getElementById('platformversion');
@@ -2603,7 +2850,7 @@
             const autoInput = document.getElementById('automationName');
             if (autoInput) autoInput.value = automationName;
 
-            // Quit any previous driver so UiAutomator2 server is not left in a bad state
+            // Quit any previous driver so session is clean
             if (driver) {
                 try { await driver.quit(); } catch (_) {}
                 driver = null;
@@ -2615,15 +2862,16 @@
             var caps = {
                 platformName: isAndroid ? 'Android' : 'iOS',
                 "appium:deviceName": deviceName,
-                "appium:platformVersion": platformVersion,
                 "appium:automationName": automationName,
                 "appium:udid": udid,
                 "appium:newCommandTimeout": 500000
             };
+            if (platformVersion && platformVersion.trim()) {
+                caps["appium:platformVersion"] = platformVersion.trim();
+            }
 
             if (isAndroid) {
-                // Clean leftover UIA2 / go HOME before creating session.
-                // Do NOT open the target app yet — opening ChatGPT before UIA2 boots can crash instrumentation on OPPO.
+                // Clean leftover UIA2 / go HOME before creating session
                 try {
                     await ipcRenderer.invoke("android-prepare-device", udid);
                     await new Promise(r => setTimeout(r, 800));
@@ -2631,8 +2879,6 @@
                     console.log("Android prepare skipped:", prepErr.message);
                 }
 
-                // Never pass appPackage/appActivity / forceAppLaunch on ColorOS — that triggers `am start -S`
-                // and kills UiAutomator2 (session "not known" / Process crashed).
                 caps["appium:autoGrantPermissions"] = true;
                 caps["appium:noReset"] = true;
                 caps["appium:dontStopAppOnReset"] = true;
@@ -2643,7 +2889,6 @@
                 caps["appium:uiautomator2ServerLaunchTimeout"] = 90000;
                 caps["appium:adbExecTimeout"] = 90000;
                 caps["appium:systemPort"] = 8200 + Math.floor(Math.random() * 100);
-                // Full accessibility tree like iOS XCUITest (default skips "unimportant" Compose/Calendar nodes)
                 caps["appium:settings"] = {
                     ignoreUnimportantViews: false,
                     allowInvisibleElements: true,
@@ -2651,10 +2896,13 @@
                     snapshotMaxDepth: 100
                 };
             } else {
-                caps["appium:bundleId"] = bundleID;
+                caps["appium:bundleId"] = bundleID.trim();
+                caps["appium:noReset"] = true;
                 caps["appium:simpleIsVisibleCheck"] = true;
                 caps["appium:preventWDAAttachments"] = true;
                 caps["appium:useJSONSource"] = false;
+                caps["appium:wdaLaunchTimeout"] = 90000;
+                caps["appium:wdaConnectionTimeout"] = 90000;
             }
 
             try {
@@ -2670,8 +2918,8 @@
                     driver = await buildSession();
                 } catch (firstErr) {
                     const msg = String(firstErr && firstErr.message || firstErr);
-                    if (/Could not find a driver|UiAutomator2|automationName/i.test(msg)) {
-                        console.warn("UiAutomator2 missing on Appium — restarting bundled engine and retrying");
+                    if (/Could not find a driver|UiAutomator2|XCUITest|automationName/i.test(msg)) {
+                        console.warn("Automation driver missing on Appium — restarting engine and retrying");
                         await ipcRenderer.invoke("ensure-appium", { forceRestart: true });
                         driver = await buildSession();
                     } else {
@@ -2679,8 +2927,7 @@
                     }
                 }
 
-                // AFTER session is healthy: wait for UiAutomator2, then open the app once.
-                // Do not activateApp immediately — that can crash instrumentation and black the emulator.
+                // After session is healthy: launch target app and verify foreground state
                 if (isAndroid) {
                     await waitMs(2000);
                     try {
@@ -2696,14 +2943,17 @@
                         console.log("android-soft-launch skipped:", softErr.message);
                     }
                     await waitMs(1500);
-                    await assertAndroidAppOpened(appPackage);
+                    await assertAndroidAppOpened(appPackage, udid);
                 } else {
                     try {
                         await mobileExecute("mobile: activateApp", { bundleId: bundleID });
                     } catch (activateErr) {
                         console.log("activate/soft-launch skipped:", activateErr.message);
                     }
+                    await waitMs(1500);
+                    await assertIOSAppOpened(bundleID);
                 }
+
                 if (isAndroid) {
                     try { await applyAndroidFullHierarchySettings(); } catch (setErr) {
                         console.warn("Android hierarchy settings skipped:", setErr.message || setErr);
@@ -2712,48 +2962,17 @@
             } catch (error) {
                 console.error("Failed to initialize driver session:", error);
                 driver = null;
-                const msg = String((error && error.message) || error || "");
-                const isDeviceOffline = /device.*offline|device.*not found|could not connect|econnrefused|device '[^']+' not found/i.test(msg);
-                const androidOpenFailed = isAndroid && /did not open|package is missing/i.test(msg);
-                const sdkMissing = isAndroid && /ANDROID_HOME|ANDROID_SDK_ROOT/i.test(msg);
+                const diag = formatLaunchFailure(error, platform, deviceName, udid, {
+                    appName: document.getElementById('appname')?.value || '',
+                    appPackage,
+                    appActivity,
+                    bundleID,
+                    serverURL
+                });
 
-                if (isDeviceOffline) {
-                    showCustomAlert(
-                        "Device Disconnected",
-                        `Connection to the <b>${isAndroid ? 'Android' : 'iOS'}</b> device failed.<br><br>Please check that your device or emulator is connected, unlocked, and responsive, then try again.`,
-                        "warning"
-                    );
-                    unlockLaunchForm();
-                    resetLaunchPlaceholder(
-                        "Device disconnected or unresponsive. Reconnect device and click Launch Application.",
-                        "error"
-                    );
-                    return;
-                }
-
-                showErrorPopup(
-                    androidOpenFailed
-                        ? "Application Did Not Open"
-                        : sdkMissing
-                            ? "Android SDK Required"
-                            : "Appium Driver Initialization Failed",
-                    sdkMissing
-                        ? new Error(
-                            "AlgoScraper could not set up Android tools (ANDROID_HOME).\n\n"
-                            + "It normally downloads platform-tools automatically. Check internet and retry Launch.\n\n"
-                            + "You still need a running emulator or a phone with USB debugging."
-                        )
-                        : error
-                );
+                showErrorPopup(diag.title, diag.technicalError, diag.hint);
                 unlockLaunchForm();
-                resetLaunchPlaceholder(
-                    androidOpenFailed
-                        ? "The selected app did not open. Check package/activity, then click Launch Application again."
-                        : sdkMissing
-                            ? "Could not set up Android tools. Check internet and try Launch again."
-                            : "Launch failed. Check the error popup, then try Launch Application again.",
-                    "error"
-                );
+                resetLaunchPlaceholder(`${diag.title}: ${diag.friendlyMessage}`, "error");
                 return;
             }
 
@@ -4199,6 +4418,7 @@ function markSessionInterrupted(err) {
     const rawMsg = err && err.message ? err.message : String(err || "");
     const readableError = rawMsg.split('\n')[0].substring(0, 150);
     const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection/i.test(rawMsg);
+    const isAppBackground = /closed or running in the background|not running|background/i.test(rawMsg);
 
     const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
     const isAndroid = platform === 'Android';
@@ -4206,15 +4426,25 @@ function markSessionInterrupted(err) {
     const screenshotImg = document.getElementById("screenshot");
     if (screenshotImg) screenshotImg.style.display = "none";
 
-    const bannerTitle = isDeviceDisconnected
-        ? `${isAndroid ? 'Android device' : 'Device'} disconnected. Reconnect device and click Launch Application.`
-        : 'Session interrupted. Keep the app open, then click Launch Application to reconnect.';
-
-    showDummyDeviceMessage({
-        theme: 'error',
-        title: bannerTitle,
-        detail: readableError
-    });
+    if (isDeviceDisconnected) {
+        showDummyDeviceMessage({
+            theme: 'error',
+            title: isAndroid ? 'Android Device Disconnected' : 'iOS Device Disconnected',
+            detail: 'Please reconnect your device and click Launch Application.'
+        });
+    } else if (isAppBackground) {
+        showDummyDeviceMessage({
+            theme: 'warning',
+            title: 'Application is closed or running in the background.',
+            detail: 'Keep the app open, then click Launch Application to reconnect.'
+        });
+    } else {
+        showDummyDeviceMessage({
+            theme: 'error',
+            title: 'Session Interrupted',
+            detail: readableError || 'Communication with the application was interrupted.'
+        });
+    }
 
     setLaunchEnabled(canEnableLaunch());
 
@@ -4294,14 +4524,8 @@ function handleDeviceCommandError(err, label) {
         return;
     }
 
-    // Windows Android emulator: never kill session for flaky "app background" / transient errors
-    if (isWindowsAndroid() && driver && !isDeadSessionError(err)) {
-        const msg = rawMsg.split('\n')[0].substring(0, 180);
-        showCustomAlert("Device action failed", msg, "warning");
-        return;
-    }
-
-    if (isAndroidPlatform() && driver && !isDeadSessionError(err) && !isAppClosedOrBackgroundError(err)) {
+    // If driver is still active and app is open, do not kill the session
+    if (driver && !isDeadSessionError(err) && !isAppClosedOrBackgroundError(err)) {
         const msg = rawMsg.split('\n')[0].substring(0, 180);
         showCustomAlert("Device action failed", msg, "warning");
         return;
@@ -4338,19 +4562,19 @@ async function checkAppForegroundState(opts = {}) {
     }
 
     // Appium App States: 0 (Not Installed), 1 (Not Running), 2 (Suspended), 3 (Background), 4 (Foreground)
-    // executeScript may return a string ("4") — strict !== 4 was killing Android refresh/touch/swipe
     const code = Number(state);
     if (code === 4) return;
 
-    // Windows Android emulator: queryAppState is unreliable — verify via ADB, else soft-continue
-    if (!isIos && process.platform === 'win32') {
-        try {
-            await mobileExecute("mobile: activateApp", { appId });
-            await waitMs(400);
-            const again = Number(await mobileExecute("mobile: queryAppState", { appId }));
-            if (again === 4) return;
-        } catch (_) {}
+    // Attempt to bring the app back to foreground before giving up
+    try {
+        await mobileExecute("mobile: activateApp", isIos ? { bundleId: appId } : { appId });
+        await waitMs(600);
+        const again = Number(await mobileExecute("mobile: queryAppState", isIos ? { bundleId: appId } : { appId }));
+        if (again === 4) return;
+    } catch (_) {}
 
+    // On Android: check foreground window via ADB before giving up
+    if (!isIos) {
         try {
             const udid = document.getElementById('udid') && document.getElementById('udid').value;
             const fg = await ipcRenderer.invoke("android-foreground-package", udid);
@@ -4360,23 +4584,16 @@ async function checkAppForegroundState(opts = {}) {
             }
         } catch (_) {}
 
-        // Soft: do not throw — caller (Refresh/touch) can still use ADB screenshot fallback
-        if (opts.soft !== false) {
+        if (opts.soft !== false && process.platform === 'win32') {
             console.warn("Windows Android foreground check soft-passed (queryAppState=", code, ")");
             return;
         }
     }
 
-    if (!isIos) {
-        throw new Error("Application is closed or running in the background.");
-    }
-
-    if (code !== 4) {
-        throw new Error("Application is closed or running in the background.");
-    }
+    throw new Error("Application is closed or running in the background.");
 }
 
-async function assertAndroidAppOpened(pkg) {
+async function assertAndroidAppOpened(pkg, udid) {
     const appId = String(pkg || '').trim();
     if (!appId) {
         throw new Error("Application package is missing. Select an app, then click Launch Application.");
@@ -4390,32 +4607,86 @@ async function assertAndroidAppOpened(pkg) {
         }
     };
 
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < 4; i++) {
         const code = await queryState();
-        if (code === 4) return;
+        if (code === 4) return; // In foreground
+        if (code === 0) {
+            throw new Error(`Application "${appId}" is not installed on this Android device or emulator.`);
+        }
         if (i === 0) {
             try {
                 await mobileExecute("mobile: activateApp", { appId });
             } catch (_) {}
-            await waitMs(1200);
         }
+        await waitMs(1000);
     }
 
-    if ((await queryState()) === 4) return;
+    const finalCode = await queryState();
+    if (finalCode === 4) return;
 
-    const udid = document.getElementById('udid') && document.getElementById('udid').value;
+    const deviceUdid = udid || (document.getElementById('udid') && document.getElementById('udid').value);
+    let focused = '';
     try {
-        const fg = await ipcRenderer.invoke("android-foreground-package", udid);
-        const focused = fg && fg.pkg ? String(fg.pkg) : '';
+        const fg = await ipcRenderer.invoke("android-foreground-package", deviceUdid);
+        focused = fg && fg.pkg ? String(fg.pkg) : '';
         if (focused && (focused === appId || focused.startsWith(appId + '.') || appId.startsWith(focused))) {
+            return;
+        }
+        // If a system permission dialog is up, the app is open behind it
+        if (focused && (focused.includes('permissioncontroller') || focused.includes('packageinstaller') || focused === 'android')) {
             return;
         }
     } catch (_) {}
 
-    throw new Error(
-        "Application did not open. The device is still on the home/app list screen. " +
-        "Check App Package and Activity, open the selected app on the phone, then click Launch Application again."
-    );
+    if (finalCode === 0) {
+        throw new Error(`Application "${appId}" is not installed on the selected device.`);
+    } else if (finalCode === 1) {
+        throw new Error(`Application "${appId}" failed to run (process not running). It may have crashed or package/activity may be wrong.`);
+    } else if (focused) {
+        throw new Error(`Application "${appId}" did not appear in foreground. Current active screen on device is "${focused}".`);
+    } else {
+        throw new Error(`Application "${appId}" did not appear in foreground. Please unlock your device and verify the app opens.`);
+    }
+}
+
+async function assertIOSAppOpened(bundleId) {
+    const bId = String(bundleId || '').trim();
+    if (!bId) {
+        throw new Error("iOS Bundle ID is missing. Select an app, then click Launch Application.");
+    }
+
+    const queryState = async () => {
+        try {
+            return Number(await mobileExecute("mobile: queryAppState", { bundleId: bId }));
+        } catch (_) {
+            return NaN;
+        }
+    };
+
+    for (let i = 0; i < 4; i++) {
+        const code = await queryState();
+        if (code === 4) return; // In foreground
+        if (code === 0) {
+            throw new Error(`Application with Bundle ID "${bId}" is not installed on this iOS device or simulator.`);
+        }
+        if (i === 0) {
+            try {
+                await mobileExecute("mobile: activateApp", { bundleId: bId });
+            } catch (_) {}
+        }
+        await waitMs(1000);
+    }
+
+    const finalCode = await queryState();
+    if (finalCode === 4 || isNaN(finalCode)) return;
+
+    if (finalCode === 0) {
+        throw new Error(`Application with Bundle ID "${bId}" is not installed on this iOS device or simulator.`);
+    } else if (finalCode === 1) {
+        throw new Error(`Application "${bId}" failed to start on the iOS device (state: not running). Check if the app crashed or needs trust permission in Settings.`);
+    } else if (finalCode === 2 || finalCode === 3) {
+        throw new Error(`Application "${bId}" is suspended or running in the background and could not be brought to the foreground.`);
+    }
 }
 
 // Show frosted loader centered on #zoomFrame (phone screenshot), not the wider panel.
@@ -4670,230 +4941,311 @@ async function performTouch(x, y) {
 }
 
 
-//Perform swipe action on connected device
+
+/**
+ * Extracts meaningful content nodes (ignoring status bars, home indicators, and root wrappers)
+ * with robust identification keys and bounding rectangles.
+ */
+function extractContentNodes(xmlDoc) {
+    if (!xmlDoc) return [];
+    const all = xmlDoc.getElementsByTagName("*");
+    const ignoreTypes = new Set([
+        "AppiumAUT", "XCUIElementTypeApplication", "XCUIElementTypeWindow",
+        "hierarchy", "android.widget.FrameLayout", "android.view.ViewGroup",
+        "XCUIElementTypeStatusBar", "XCUIElementTypeHomeIndicator",
+        "XCUIElementTypeScrollBar"
+    ]);
+
+    const items = [];
+    for (let i = 0; i < all.length; i++) {
+        const node = all[i];
+        const tag = node.nodeName;
+
+        if (
+            ignoreTypes.has(tag) ||
+            tag.includes("StatusBar") ||
+            tag.includes("HomeIndicator") ||
+            tag.includes("ActivityIndicator") ||
+            tag.includes("ScrollBar")
+        ) {
+            continue;
+        }
+
+        const rect = typeof parseNodeRect === "function" ? parseNodeRect(node) : null;
+        if (!rect || rect.width <= 6 || rect.height <= 6) continue;
+
+        let text = node.getAttribute("label")
+            || node.getAttribute("text")
+            || node.getAttribute("content-desc")
+            || node.getAttribute("name")
+            || node.getAttribute("value")
+            || node.getAttribute("resource-id")
+            || "";
+        text = String(text).trim();
+
+        // Skip transient clock, battery, wifi text
+        if (text && (/^\d{1,2}:\d{2}/.test(text) || /battery/i.test(text) || /wifi/i.test(text) || /carrier/i.test(text))) {
+            continue;
+        }
+
+        const roundW = Math.round(rect.width / 6) * 6;
+        const roundH = Math.round(rect.height / 6) * 6;
+        const key = text ? `${tag}:${text}` : `${tag}#${roundW}x${roundH}`;
+
+        items.push({
+            key,
+            text,
+            tag,
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height
+        });
+    }
+    return items;
+}
+
+/**
+ * Accurately determines if content meaningfully moved during a swipe.
+ * Distinguishes true scrolling from unscrollable pages or elastic rubber-band bounces.
+ */
+function hasScreenContentScrolled(preDoc, postDoc, preImage, postImage) {
+    if (preDoc && postDoc) {
+        const preItems = extractContentNodes(preDoc);
+        const postItems = extractContentNodes(postDoc);
+
+        if (preItems.length > 0 && postItems.length > 0) {
+            const preMap = new Map();
+            for (const item of preItems) {
+                if (!preMap.has(item.key)) preMap.set(item.key, []);
+                preMap.get(item.key).push(item.y);
+            }
+
+            const postMap = new Map();
+            for (const item of postItems) {
+                if (!postMap.has(item.key)) postMap.set(item.key, []);
+                postMap.get(item.key).push(item.y);
+            }
+
+            let newItemsCount = 0;
+            let removedItemsCount = 0;
+            const yDeltas = [];
+
+            for (const [key, postYs] of postMap.entries()) {
+                if (!preMap.has(key)) {
+                    newItemsCount += postYs.length;
+                } else {
+                    const preYs = preMap.get(key);
+                    preYs.sort((a, b) => a - b);
+                    postYs.sort((a, b) => a - b);
+                    for (let i = 0; i < Math.min(preYs.length, postYs.length); i++) {
+                        yDeltas.push(Math.abs(postYs[i] - preYs[i]));
+                    }
+                    if (postYs.length > preYs.length) {
+                        newItemsCount += (postYs.length - preYs.length);
+                    }
+                }
+            }
+
+            for (const [key, preYs] of preMap.entries()) {
+                if (!postMap.has(key)) {
+                    removedItemsCount += preYs.length;
+                } else {
+                    const postYs = postMap.get(key);
+                    if (preYs.length > postYs.length) {
+                        removedItemsCount += (preYs.length - postYs.length);
+                    }
+                }
+            }
+
+            // Real movement threshold: >= 28px
+            const MIN_SCROLL_SHIFT_PX = 28;
+
+            if (newItemsCount > 0 || removedItemsCount > 0) {
+                console.log(`[Scroll Check] Content scrolled: ${newItemsCount} new items, ${removedItemsCount} removed items.`);
+                return true;
+            }
+
+            if (yDeltas.length > 0) {
+                const significantMoves = yDeltas.filter(delta => delta >= MIN_SCROLL_SHIFT_PX);
+                if (significantMoves.length >= Math.max(1, Math.round(yDeltas.length * 0.20))) {
+                    console.log(`[Scroll Check] Content scrolled: ${significantMoves.length}/${yDeltas.length} elements shifted by >= ${MIN_SCROLL_SHIFT_PX}px.`);
+                    return true;
+                }
+            }
+
+            console.log("[Scroll Check] No meaningful scroll detected (content remained static or bounced back).");
+            return false;
+        }
+    }
+
+    // Fallback if no DOM items: compare image hashes / lengths if available
+    if (preImage && postImage) {
+        return preImage !== postImage;
+    }
+
+    return false;
+}
+
+// Perform swipe action on connected device
 async function performSwipe(startX, startY, endX, endY) {
     if (touchInProgress) return;
     touchInProgress = true; // Lock interactions instantly
 
-    // Loader should already be visible from mouseup; ensure it is centered on the phone frame
     await showLocalDeviceLoader();
 
-    // --- Bulletproof Screen State Comparison ---
-    function getPageStructureState(xmlDocument) {
-        if (!xmlDocument) return "";
-        let state = [];
-        const nodes = xmlDocument.getElementsByTagName("*");
-        const ignoreRoots = new Set([
-            "AppiumAUT", "XCUIElementTypeApplication", "XCUIElementTypeWindow", "hierarchy"
-        ]);
-
-        for (let i = 0; i < nodes.length; i++) {
-            let n = nodes[i];
-            let nodeName = n.nodeName;
-
-            // Ignore chrome / transient UI that falsely looks like a scroll change
-            if (
-                nodeName.includes("StatusBar") ||
-                nodeName.includes("ScrollBar") ||
-                nodeName.includes("ActivityIndicator") ||
-                nodeName.includes("HomeIndicator") ||
-                ignoreRoots.has(nodeName)
-            ) {
-                continue;
-            }
-
-            const rect = typeof parseNodeRect === "function" ? parseNodeRect(n) : null;
-            if (rect && (rect.width <= 0 || rect.height <= 0)) continue;
-
-            let text = n.getAttribute("label")
-                || n.getAttribute("text")
-                || n.getAttribute("content-desc")
-                || n.getAttribute("value")
-                || n.getAttribute("name")
-                || n.getAttribute("resource-id")
-                || "";
-            text = String(text).trim();
-
-            // Skip empty tags and clock/battery text
-            if (text === "" || /^\d{1,2}:\d{2}/.test(text) || /battery/i.test(text)) {
-                // Still track sized unlabeled nodes via rounded bounds (Android lists often lack text)
-                if (rect && rect.width > 2 && rect.height > 2) {
-                    state.push(`${nodeName}_${Math.round(rect.x / 20) * 20}_${Math.round(rect.y / 20) * 20}_${Math.round(rect.width / 20) * 20}`);
-                }
-                continue;
-            }
-
-            let y = rect ? rect.y : parseFloat(n.getAttribute("y"));
-            if (isNaN(y) && rect) y = rect.y;
-            if (!isNaN(y)) {
-                state.push(`${text}_${Math.round(y / 10) * 10}`);
-            }
-        }
-        return state.join("|");
-    }
-
     try {
-        // 2. NOW check the Page Name. (The loader is already spinning on screen!)
         const pageName = document.getElementById("pagename_searchbox").value.trim();
         if (pageName === "") {
             document.getElementById("pagename_searchbox").style.borderColor = "red";
             showCustomAlert("Missing Information", "Please enter Page Name before attempting to scroll.", "warning");
-            flashPageNameError(); // Flashes the badge red for 2 seconds
-            return; // Exit! The loader stays visible behind the alert until 'Okay' is clicked.
+            flashPageNameError();
+            return;
         }
 
-        // ---> Verifies app is actually in foreground <---
         await checkAppForegroundState();
 
-        // Fresh hierarchy + screenshot BEFORE swipe (needed for reliable end-of-page detection)
+        // Fresh pre-swipe snapshot
+        let preXmlDoc = null;
         try {
             const preSource = await capturePageSource();
-            window.xmlDoc = new DOMParser().parseFromString(preSource, "text/xml");
+            preXmlDoc = new DOMParser().parseFromString(preSource, "text/xml");
         } catch (_) {}
-        const preSwipeState = getPageStructureState(window.xmlDoc);
+        if (!preXmlDoc && window.xmlDoc) {
+            preXmlDoc = window.xmlDoc;
+        }
+
         let preImage = "";
         try {
             preImage = await captureDeviceScreenshot();
         } catch (_) {}
 
-                console.log("Swipe from:", startX, startY, "to", endX, endY);
+        console.log("Swipe from:", startX, startY, "to", endX, endY);
 
-                        var plateformOption = getSelectedPlatform();
-                        const dims = (typeof getDeviceDimensions === 'function')
-                            ? getDeviceDimensions()
-                            : { width: Math.max(startX, endX, 1) + 1, height: Math.max(startY, endY, 1) + 1 };
-                        const dx = endX - startX;
-                        const dy = endY - startY;
-                        // Finger moved up → swipe direction "up" (content scrolls down)
-                        const direction = Math.abs(dy) >= Math.abs(dx)
-                            ? (dy < 0 ? 'up' : 'down')
-                            : (dx < 0 ? 'left' : 'right');
-                        // Scroll/swipe area: wide viewport around the gesture (not the thin drag bbox)
-                        const areaLeft = Math.max(0, Math.round(dims.width * 0.08));
-                        const areaTop = Math.max(0, Math.round(dims.height * 0.15));
-                        const areaWidth = Math.max(40, Math.round(dims.width * 0.84));
-                        const areaHeight = Math.max(40, Math.round(dims.height * 0.65));
-                        const travel = Math.sqrt(dx * dx + dy * dy);
-                        const percent = Math.min(0.95, Math.max(0.35, travel / Math.max(dims.height, dims.width, 1)));
+        var plateformOption = getSelectedPlatform();
+        const dims = (typeof getDeviceDimensions === 'function')
+            ? getDeviceDimensions()
+            : { width: Math.max(startX, endX, 1) + 1, height: Math.max(startY, endY, 1) + 1 };
+        const dx = endX - startX;
+        const dy = endY - startY;
+        const direction = Math.abs(dy) >= Math.abs(dx)
+            ? (dy < 0 ? 'up' : 'down')
+            : (dx < 0 ? 'left' : 'right');
+        const areaLeft = Math.max(0, Math.round(dims.width * 0.08));
+        const areaTop = Math.max(0, Math.round(dims.height * 0.15));
+        const areaWidth = Math.max(40, Math.round(dims.width * 0.84));
+        const areaHeight = Math.max(40, Math.round(dims.height * 0.65));
+        const travel = Math.sqrt(dx * dx + dy * dy);
+        const percent = Math.min(0.95, Math.max(0.35, travel / Math.max(dims.height, dims.width, 1)));
 
-                        if (plateformOption === 'Android') {
-                            // Prefer swipe/scroll gestures — dragGesture often presses a control (looks like a click)
-                            let swiped = false;
-                            try {
-                                await mobileExecute("mobile: swipeGesture", {
-                                    left: areaLeft,
-                                    top: areaTop,
-                                    width: areaWidth,
-                                    height: areaHeight,
-                                    direction,
-                                    percent,
-                                    speed: 2200
-                                });
-                                swiped = true;
-                            } catch (e1) {
-                                console.warn("swipeGesture failed, trying scrollGesture:", e1.message || e1);
-                            }
-                            if (!swiped) {
-                                try {
-                                    await mobileExecute("mobile: scrollGesture", {
-                                        left: areaLeft,
-                                        top: areaTop,
-                                        width: areaWidth,
-                                        height: areaHeight,
-                                        direction,
-                                        percent: Math.max(percent, 0.5),
-                                        speed: 1800
-                                    });
-                                    swiped = true;
-                                } catch (e2) {
-                                    console.warn("scrollGesture failed, trying W3C drag:", e2.message || e2);
-                                }
-                            }
-                            if (!swiped) {
-                                // Last resort: quick press-move-release (short hold so it does not "click")
-                                const actions = driver.actions({ bridge: true, async: false });
-                                await actions
-                                    .move({ x: Math.round(startX), y: Math.round(startY) })
-                                    .press()
-                                    .move({ x: Math.round(endX), y: Math.round(endY), duration: 250 })
-                                    .release()
-                                    .perform();
-                            }
-                        } else {
-                            // iOS: short duration = flick/scroll; long duration feels like a press/click
-                            try {
-                                await mobileExecute("mobile: dragFromToForDuration", {
-                                    fromX: startX,
-                                    fromY: startY,
-                                    toX: endX,
-                                    toY: endY,
-                                    duration: 0.18
-                                });
-                            } catch (iosErr) {
-                                await mobileExecute("mobile: swipe", {
-                                    direction,
-                                    velocity: 500
-                                });
-                            }
-                        }
-
-                await waitMs(2000);
-
-                const image = await captureDeviceScreenshot();
-                require("fs").writeFileSync(`${folderPath}/image0.png`, image, "base64");
-
-                const screenshot = document.getElementById("screenshot");
-                if (screenshot) {
-                    screenshot.src = `${folderPath}/image0.png?${Date.now()}`;
-                    await new Promise(resolve => { screenshot.onload = resolve; screenshot.onerror = resolve; });
-                    adjustDevicePreviewSize(screenshot);
-                    applyScreenshotZoom(screenshot);
+        if (plateformOption === 'Android') {
+            let swiped = false;
+            try {
+                await mobileExecute("mobile: swipeGesture", {
+                    left: areaLeft,
+                    top: areaTop,
+                    width: areaWidth,
+                    height: areaHeight,
+                    direction,
+                    percent,
+                    speed: 2200
+                });
+                swiped = true;
+            } catch (e1) {
+                console.warn("swipeGesture failed, trying scrollGesture:", e1.message || e1);
+            }
+            if (!swiped) {
+                try {
+                    await mobileExecute("mobile: scrollGesture", {
+                        left: areaLeft,
+                        top: areaTop,
+                        width: areaWidth,
+                        height: areaHeight,
+                        direction,
+                        percent: Math.max(percent, 0.5),
+                        speed: 1800
+                    });
+                    swiped = true;
+                } catch (e2) {
+                    console.warn("scrollGesture failed, trying W3C drag:", e2.message || e2);
                 }
+            }
+            if (!swiped) {
+                const actions = driver.actions({ bridge: true, async: false });
+                await actions
+                    .move({ x: Math.round(startX), y: Math.round(startY) })
+                    .press()
+                    .move({ x: Math.round(endX), y: Math.round(endY), duration: 250 })
+                    .release()
+                    .perform();
+            }
+        } else {
+            try {
+                await mobileExecute("mobile: dragFromToForDuration", {
+                    fromX: startX,
+                    fromY: startY,
+                    toX: endX,
+                    toY: endY,
+                    duration: 0.18
+                });
+            } catch (iosErr) {
+                await mobileExecute("mobile: swipe", {
+                    direction,
+                    velocity: 500
+                });
+            }
+        }
 
-                const pageSource = await capturePageSource();
-                const parser = new DOMParser();
-                window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
-                clearOverlay();
+        // Allow rubber-band bounce / scroll momentum to fully settle
+        await waitMs(1400);
 
-                // 4. Capture the exact text & layout state AFTER swiping
-                const postSwipeState = getPageStructureState(window.xmlDoc);
+        const image = await captureDeviceScreenshot();
+        require("fs").writeFileSync(`${folderPath}/image0.png`, image, "base64");
 
-                // 5. End of page / no scroll room: nothing meaningful moved — do NOT store swipe in table
-                const hierarchyUnchanged = preSwipeState === postSwipeState;
-                const screenshotUnchanged = !!(preImage && image && preImage === image);
-                if (hierarchyUnchanged || screenshotUnchanged) {
-                    showCustomAlert(
-                        "Scroll Complete",
-                        "No more content to scroll on this page (end of page reached). Swipe was not added to the table.",
-                        "info"
-                    );
-                    return;
-                }
+        const screenshot = document.getElementById("screenshot");
+        if (screenshot) {
+            screenshot.src = `${folderPath}/image0.png?${Date.now()}`;
+            await new Promise(resolve => { screenshot.onload = resolve; screenshot.onerror = resolve; });
+            adjustDevicePreviewSize(screenshot);
+            applyScreenshotZoom(screenshot);
+        }
 
-                // 6. Record the Scroll Action in the Table ONLY if a successful scroll occurred
-                let rootXPath = (plateformOption === 'IOS' || plateformOption === 'iOS') ? "//XCUIElementTypeApplication" : "//hierarchy";
+        const pageSource = await capturePageSource();
+        const parser = new DOMParser();
+        window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
+        clearOverlay();
 
-                createAndAppendTable([
-                    {
-                        ControlName: `act_Scroll_${Math.round(startX)}_${Math.round(startY)}`,
-                        ControlType: "Scroll",
-                        ControlId: [
-                            `SWIPE(${Math.round(startX)},${Math.round(startY)},${Math.round(endX)},${Math.round(endY)})`,
-                            rootXPath
-                        ],
-                        IdentificationType: "Scroll",
-                        Fingerprint: "<Action Type=\"Scroll\" />"
-                    }
-                ]);
+        // Check if content genuinely scrolled
+        if (!hasScreenContentScrolled(preXmlDoc, window.xmlDoc, preImage, image)) {
+            showCustomAlert(
+                "Scroll Complete",
+                "No more content to scroll on this page (end of page reached). Swipe was not added to the table.",
+                "info"
+            );
+            return;
+        }
+
+        // Record the Scroll Action in the Table ONLY if content actually scrolled
+        let rootXPath = (plateformOption === 'IOS' || plateformOption === 'iOS') ? "//XCUIElementTypeApplication" : "//hierarchy";
+
+        createAndAppendTable([
+            {
+                ControlName: `act_Scroll_${Math.round(startX)}_${Math.round(startY)}`,
+                ControlType: "Scroll",
+                ControlId: [
+                    `SWIPE(${Math.round(startX)},${Math.round(startY)},${Math.round(endX)},${Math.round(endY)})`,
+                    rootXPath
+                ],
+                IdentificationType: "Scroll",
+                Fingerprint: "<Action Type=\"Scroll\" />"
+            }
+        ]);
 
     } catch (err) {
         handleDeviceCommandError(err, "Swipe Error:");
     } finally {
-        // ONLY turn the loader off automatically if we are NOT waiting for the user to click "Okay" on an alert
-        if (pendingExportAction !== "alertOnly") {
-            hideLocalDeviceLoader();
-            touchInProgress = false;
-        }
+        hideLocalDeviceLoader();
+        touchInProgress = false;
     }
 }
 
@@ -9894,12 +10246,28 @@ function displayScreenshotError(err) {
     const screenshotImg = document.getElementById("screenshot");
     if (screenshotImg) screenshotImg.style.display = "none";
 
-    // Always rebuild placeholder — Launch loader replaces the original DOM nodes
-    showDummyDeviceMessage({
-        theme: 'error',
-        title: 'Session interrupted. Keep the app open, then click Launch Application to reconnect.',
-        detail: readableError
-    });
+    const isAppBackground = /closed or running in the background|not running|background/i.test(readableError);
+    const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection/i.test(readableError);
+
+    if (isDeviceDisconnected) {
+        showDummyDeviceMessage({
+            theme: 'error',
+            title: 'Device Disconnected',
+            detail: 'Please reconnect your device and click Launch Application.'
+        });
+    } else if (isAppBackground) {
+        showDummyDeviceMessage({
+            theme: 'warning',
+            title: 'Application is closed or running in the background.',
+            detail: 'Keep the app open, then click Launch Application to reconnect.'
+        });
+    } else {
+        showDummyDeviceMessage({
+            theme: 'error',
+            title: 'Session Interrupted',
+            detail: readableError || 'Communication with the application was interrupted.'
+        });
+    }
 
     // --- BUTTON LOGIC ---
     setLaunchEnabled(canEnableLaunch());
