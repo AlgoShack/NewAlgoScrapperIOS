@@ -46,7 +46,7 @@ It comes with a fully self-contained, bundled Appium runtime and bundled Node en
 - **Dynamic Customizable Table**:
   - Toggle columns on/off on demand via the Customize Columns menu.
   - **Auto-Adjust Layout**: Dynamically measures text dimensions on both Windows and macOS, guaranteeing **zero `...` text truncation** across all column headers and cells.
-  - Smooth horizontal scrolling with a subtle, non-intrusive 6px scrollbar.
+  - Clean borderless horizontal scrolling without visible scrollbar chrome.
 - **Scenario Recording**: Live user journey recorder that captures sequential user flows, taps, text entries, and swipes.
 - **Centralized Repository**: Organize elements, pages, and scenarios into projects with real-time bidirectional synchronization between Home, Scenarios, and the Repository.
 - **Root-Cause Launch Diagnostics**: Context-aware launch failure hints provide actionable troubleshooting steps for port conflicts, offline devices, or permission issues.
