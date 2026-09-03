@@ -69,6 +69,40 @@
     letter-spacing: 0.02em;
   }
 
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cancel-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.18s ease;
+    outline: none;
+    padding: 0;
+  }
+
+  .cancel-btn:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.4);
+    color: #f87171;
+    transform: scale(1.05);
+  }
+
+  .cancel-btn:active {
+    transform: scale(0.95);
+    background: rgba(239, 68, 68, 0.3);
+  }
+
   .content {
     flex: 1;
     display: flex;
@@ -219,7 +253,15 @@
         <img src="icon/algoScraper-logo.png" class="brand-logo" alt="Logo" onerror="this.style.display='none';" />
         <span class="brand-title">AlgoScraper</span>
       </div>
-      <span class="brand-pill">Powered by algoShack</span>
+      <div class="header-right">
+        <span class="brand-pill">Powered by algoShack</span>
+        <button id="cancelStartupBtn" class="cancel-btn" title="Cancel launch" aria-label="Cancel startup">
+          <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <div class="content">
@@ -249,6 +291,24 @@
   </div>
 
 <script>
+  let electronIpc = null;
+  try {
+    electronIpc = require('electron').ipcRenderer;
+  } catch (_) {}
+
+  const cancelBtn = document.getElementById("cancelStartupBtn");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (electronIpc) {
+        electronIpc.send("cancel-startup");
+      } else {
+        window.close();
+      }
+    });
+  }
+
   const STEP_PROGRESS = { prereq: 18, appium: 55, device: 80, launch: 100 };
   let msgTimer = null;
 

@@ -1901,19 +1901,23 @@
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
     async function getConnectedAndroidDevices() {
         return new Promise((resolve) => {
-            exec("adb devices -l", (error, stdout) => {
+            exec("adb devices -l", { timeout: 3500 }, (error, stdout) => {
                 const devices = [];
                 if (!error && stdout) {
                     const lines = stdout.split('\n');
                     lines.forEach(line => {
+                        const trimmed = line.trim();
+                        if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
+
                         // Match any authorized device/emulator line from `adb devices -l`
-                        const deviceMatch = line.match(/^(\S+)\s+device\b/);
+                        const deviceMatch = trimmed.match(/^([a-zA-Z0-9._:-]+)\s+device\b/);
                         if (deviceMatch) {
                             const id = deviceMatch[1];
+                            if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb')) return;
                             let name = id;
 
                             // Try to extract a friendly model name
-                            const modelMatch = line.match(/model:([^\s]+)/);
+                            const modelMatch = trimmed.match(/model:([^\s]+)/);
                             if (modelMatch) {
                                 name = modelMatch[1].replace(/_/g, ' ');
                             }
@@ -1940,7 +1944,7 @@
         }
 
         const simPromise = new Promise((resolve) => {
-            exec("xcrun simctl list devices booted", { timeout: 8000 }, (simError, simStdout) => {
+            exec("xcrun simctl list devices booted", { timeout: 3500 }, (simError, simStdout) => {
                 const simDevices = [];
                 if (!simError && simStdout) {
                     const lines = simStdout.split("\n");
@@ -1967,7 +1971,7 @@
         });
 
         const phyPromise = new Promise((resolve) => {
-            exec("xcrun xcdevice list", { timeout: 8000 }, (phyError, phyStdout) => {
+            exec("xcrun xcdevice list", { timeout: 3500 }, (phyError, phyStdout) => {
                 const phyDevices = [];
                 if (!phyError && phyStdout) {
                     try {
@@ -1979,7 +1983,14 @@
                         const allDevices = JSON.parse(jsonStr);
                         if (Array.isArray(allDevices)) {
                             allDevices.forEach(device => {
-                                if (device && device.available === true && device.simulator === false && device.platform === "com.apple.platform.iphoneos") {
+                                if (
+                                    device &&
+                                    device.available === true &&
+                                    device.simulator === false &&
+                                    device.ignored !== true &&
+                                    !device.error &&
+                                    device.platform === "com.apple.platform.iphoneos"
+                                ) {
                                     phyDevices.push({
                                         id: device.identifier,
                                         name: device.name,
@@ -2028,6 +2039,9 @@
         if (connectedDevices.length > 0) {
             deviceId = connectedDevices[0].id;
             deviceName = connectedDevices[0].name;
+        } else {
+            deviceId = "";
+            deviceName = "";
         }
 
         return connectedDevices.length > 0;
@@ -2057,6 +2071,27 @@
                 error: err?.message || String(err)
             };
         }
+    });
+
+    let startupCancelled = false;
+
+    // Handle cancel button from splash startup popup
+    ipcMain.on("cancel-startup", () => {
+        console.log("[STARTUP] User clicked cancel on startup popup. Aborting launch.");
+        startupCancelled = true;
+        startupGateActive = false;
+
+        if (loadingWindow && !loadingWindow.isDestroyed()) {
+            try { loadingWindow.destroy(); } catch (_) {}
+            loadingWindow = null;
+        }
+
+        if (appiumProcess) {
+            try { appiumProcess.kill(); } catch (_) {}
+            appiumProcess = null;
+        }
+
+        app.exit(0);
     });
 
     // ===========================================================================
@@ -2089,20 +2124,29 @@
             console.log('Cold-start protocol launch detected:', coldStartLink);
         }
 
+        if (startupCancelled) return;
+
         startupGateActive = true;
         createLoadingWindow();
         await waitForLoadingWindowReady();
+
+        if (startupCancelled) return;
 
         await showStep('prereq', 'Checking Prerequisites', {
             headline: 'Preparing AlgoScraper',
             live: 'Checking Prerequisites',
             delay: 450
         });
+
+        if (startupCancelled) return;
+
         await showSuccess('prereq', 'Prerequisites Checked', {
             headline: 'Preparing AlgoScraper',
             live: 'Prerequisites Checked',
             delay: 400
         });
+
+        if (startupCancelled) return;
 
             if (!resolveAndroidSdkRoot()) {
                 await showStep('sdk', 'Preparing Android tools', {
@@ -2110,7 +2154,12 @@
                     live: 'Downloading Android tools',
                     delay: 200
                 });
+
+                if (startupCancelled) return;
+
                 const sdkResult = await ensureManagedAndroidSdk();
+                if (startupCancelled) return;
+
                 if (sdkResult && sdkResult.sdk) {
                     await showSuccess('sdk', 'Android tools ready', {
                         headline: 'Preparing AlgoScraper',
@@ -2124,6 +2173,8 @@
                 applyAndroidToolingToEnv(process.env);
             }
 
+            if (startupCancelled) return;
+
             console.log("CHECKING APPIUM");
             await showStep('appium', 'Checking Appium', {
                 headline: 'Preparing AlgoScraper',
@@ -2131,8 +2182,12 @@
                 delay: 400
             });
 
+            if (startupCancelled) return;
+
             // Prefer bundled Appium+Node; if that fails, fall back to system Appium+Node
             const bootResult = await ensureAppiumStarted({ forceRestart: true });
+
+            if (startupCancelled) return;
 
             if (bootResult && bootResult.success) {
                 const engineLabel = bootResult.mode === 'system'
@@ -2144,6 +2199,7 @@
                     delay: 450
                 });
             } else {
+                if (startupCancelled) return;
                 await setStartupStatus({
                     step: 'appium',
                     status: 'error',
@@ -2154,6 +2210,8 @@
                 await sleep(600);
                 await closeLoadingWindow();
                 startupGateActive = false;
+
+                if (startupCancelled) return;
 
                 dialog.showErrorBox(
                     "Automation Engine Startup Failed",
@@ -2174,12 +2232,16 @@
                 return;
             }
 
+            if (startupCancelled) return;
+
             console.log("CHECKING DEVICE");
             await showStep('device', 'Checking Connected Device', {
                 headline: 'Preparing AlgoScraper',
                 live: 'Checking Connected Device',
                 delay: 400
             });
+
+            if (startupCancelled) return;
 
             let deviceConnected = false;
             let deviceErrorStr = process.platform === 'win32'
@@ -2193,6 +2255,8 @@
                 deviceConnected = false;
             }
 
+            if (startupCancelled) return;
+
             if (deviceConnected) {
                 await showSuccess('device', `${deviceName} Ready`, {
                     headline: 'Preparing AlgoScraper',
@@ -2200,42 +2264,30 @@
                     delay: 450
                 });
             } else {
-                await setStartupStatus({
-                    step: 'device',
-                    status: 'error',
-                    detail: 'No device connected',
+                await showStep('device', 'No device connected', {
                     headline: 'Preparing AlgoScraper',
-                    live: 'No Device Connected'
+                    live: 'No device connected',
+                    delay: 400
                 });
-                await sleep(700);
-                await closeLoadingWindow();
-                startupGateActive = false;
-
-                const deviceHelp = process.platform === 'win32'
-                    ? `Please start an Android emulator or connect a phone with USB debugging.\n\nAlgoScraper installs ADB automatically. You still need a running device.\n\nError Log:\n${deviceErrorStr}`
-                    : `Please connect an Android emulator/device or start an iOS Simulator / connect an iPhone.\n\nAndroid: AlgoScraper installs ADB automatically; you still need a running device.\nMac iOS: Xcode Command Line Tools are required.\n\nError Log:\n${deviceErrorStr}`;
-                dialog.showErrorBox("Device Connection Failed", deviceHelp);
-
-                // Terminate Appium process and quit application completely
-                if (appiumProcess) {
-                    appiumProcess.kill();
-                    appiumProcess = null;
-                }
-
-                app.quit();
-                return;
             }
+
+        if (startupCancelled) return;
 
         await showStep('launch', 'Launching AlgoScraper', {
             headline: 'Preparing AlgoScraper',
             live: 'Launching AlgoScraper',
             delay: 400
         });
+
+        if (startupCancelled) return;
+
         await showSuccess('launch', 'Ready', {
             headline: 'Preparing AlgoScraper',
             live: 'Ready',
             delay: 350
         });
+
+        if (startupCancelled) return;
 
         // IMPORTANT (Windows): never close the splash before main exists.
         // Closing the last window fires window-all-closed → app.quit() →

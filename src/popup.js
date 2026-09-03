@@ -1734,18 +1734,20 @@
         const deviceSelect = document.getElementById('devicename');
         if (!deviceSelect) return null;
 
-        // Safety: never mix platforms in the Device Name dropdown
+        // Safety: strictly filter by the selected/active platform
         const platformSelect = document.getElementById('platformname');
         const activePlatform = platformSelect?.value || lastSelectedPlatform || 'Android';
-        const filtered = devicesForPlatform(activePlatform, devices);
-        const ordered = preferAndroidDevicesFirst(filtered.length ? filtered : devices);
+        const targetPlatform = normalizePlatformName(activePlatform);
+        const filtered = devicesForPlatform(targetPlatform, devices);
 
         deviceSelect.innerHTML = '';
 
-        if (ordered.length === 0) {
+        if (!filtered || filtered.length === 0) {
             setNoDeviceConnectedState();
             return null;
         }
+
+        const ordered = preferAndroidDevicesFirst(filtered);
 
         ordered.forEach((device) => {
             const option = document.createElement('option');
@@ -1793,6 +1795,8 @@
             const result = await ipcRenderer.invoke('refresh-connected-devices');
             if (result && Array.isArray(result.devices)) {
                 connectedDevices = preferAndroidDevicesFirst(result.devices);
+            } else {
+                connectedDevices = [];
             }
             return connectedDevices || [];
         } catch (err) {
@@ -1835,49 +1839,63 @@
         connectedDevices = preferAndroidDevicesFirst(message.connectedDevices || []);
         console.log("connectedDevices =", connectedDevices);
 
-        if (connectedDevices.length > 0) {
-            // Default platform: Android if any Android device exists, else iOS
-            // Windows builds are Android-only — never switch platform to iOS
-            let preferredPlatform = connectedDevices.some(
-                (d) => normalizePlatformName(d.platform) === 'Android'
-            ) ? 'Android' : 'IOS';
-            if (process.platform === 'win32') {
-                preferredPlatform = 'Android';
+        const platformSelect = document.getElementById('platformname');
+        let activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
+        let targetPlatform = normalizePlatformName(activePlatform);
+
+        let platformDevices = devicesForPlatform(targetPlatform, connectedDevices);
+
+        // If current platform has no devices, but alternate platform has devices on macOS, switch platform
+        if (platformDevices.length === 0 && connectedDevices.length > 0 && process.platform !== 'win32') {
+            const alternatePlatform = targetPlatform === 'Android' ? 'IOS' : 'Android';
+            const altDevices = devicesForPlatform(alternatePlatform, connectedDevices);
+            if (altDevices.length > 0) {
+                targetPlatform = alternatePlatform;
+                platformDevices = altDevices;
+                if (platformSelect) {
+                    applyingPlatformFromDevice = true;
+                    platformSelect.value = alternatePlatform;
+                    lastSelectedPlatform = alternatePlatform;
+                    if (typeof updatePlatformUI === 'function') updatePlatformUI();
+                    if (typeof platformSelect._rebuildCustomSelect === 'function') {
+                        platformSelect._rebuildCustomSelect();
+                    }
+                    applyingPlatformFromDevice = false;
+                }
             }
+        }
 
-            const platformDevices = devicesForPlatform(preferredPlatform, connectedDevices);
+        if (platformDevices.length > 0) {
             const selectedDevice = populateDeviceDropdown(platformDevices);
-            if (!selectedDevice) return;
-
-            const platformSelect = document.getElementById('platformname');
-            if (platformSelect) {
-                applyingPlatformFromDevice = true;
-                platformSelect.value = preferredPlatform;
-                lastSelectedPlatform = preferredPlatform;
-                if (platformSelect.tagName === 'SELECT') {
-                    platformSelect.dispatchEvent(new Event('change'));
-                } else if (typeof updatePlatformUI === 'function') {
-                    updatePlatformUI();
+            if (selectedDevice) {
+                if (normalizePlatformName(selectedDevice.platform) === 'Android') {
+                    ipcRenderer.invoke("get-android-version", selectedDevice.id).then((ver) => {
+                        if (ver) {
+                            const pv = document.getElementById('platformversion');
+                            if (pv) {
+                                pv.value = ver;
+                                pv.dataset.userEdited = 'true';
+                            }
+                        }
+                    }).catch(() => {});
                 }
 
-                applyingPlatformFromDevice = false;
-            }
+                ipcRenderer.send("get-installed-apps", selectedDevice);
 
-            if (normalizePlatformName(selectedDevice.platform) === 'Android') {
-                ipcRenderer.invoke("get-android-version", selectedDevice.id).then((ver) => {
-                    if (ver) {
-                        const pv = document.getElementById('platformversion');
-                        if (pv) {
-                            pv.value = ver;
-                            pv.dataset.userEdited = 'true';
-                        }
-                    }
-                }).catch(() => {});
+                if (typeof window.switchAppTab === 'function') {
+                    window.switchAppTab('home');
+                }
+            } else {
+                setNoDeviceConnectedState();
+                if (typeof window.switchAppTab === 'function') {
+                    window.switchAppTab('repository');
+                }
             }
-
-            ipcRenderer.send("get-installed-apps", selectedDevice);
         } else {
             setNoDeviceConnectedState();
+            if (typeof window.switchAppTab === 'function') {
+                window.switchAppTab('repository');
+            }
         }
 
         lastKnownDeviceFingerprint = computeDeviceFingerprint(connectedDevices);
