@@ -1931,16 +1931,51 @@
                     const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint;
                     lastKnownDeviceFingerprint = freshFingerprint;
 
+                    const closeDeviceDisconnectedAlertIfOpen = () => {
+                        const popup = document.getElementById('confirmationPopup');
+                        const overlay = document.getElementById('overlay');
+                        const popupTitle = document.getElementById('popup_title')?.innerText || '';
+                        if (popup && popup.style.display === 'block' && popupTitle.toLowerCase().includes('disconnected')) {
+                            popup.style.display = 'none';
+                            if (overlay) overlay.style.display = 'none';
+                            window._customAlertOnOkay = null;
+                        }
+                    };
+
                     const platformSelect = document.getElementById('platformname');
                     const activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
                     const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
-                    const matching = devicesForPlatform(platformTarget, freshDevices);
+                    let matching = devicesForPlatform(platformTarget, freshDevices);
+
+                    // If current platform has no devices, but alternate platform has devices, auto-switch platform
+                    let activeTarget = platformTarget;
+                    if (matching.length === 0 && freshDevices.length > 0 && process.platform !== 'win32') {
+                        const alternateTarget = platformTarget === 'Android' ? 'IOS' : 'Android';
+                        const alternateMatching = devicesForPlatform(alternateTarget, freshDevices);
+                        if (alternateMatching.length > 0) {
+                            activeTarget = alternateTarget;
+                            matching = alternateMatching;
+                            applyingPlatformFromDevice = true;
+                            if (platformSelect) {
+                                platformSelect.value = alternateTarget;
+                                lastSelectedPlatform = alternateTarget;
+                                if (typeof updatePlatformUI === 'function') updatePlatformUI();
+                                if (typeof platformSelect._rebuildCustomSelect === 'function') {
+                                    platformSelect._rebuildCustomSelect();
+                                }
+                            }
+                            applyingPlatformFromDevice = false;
+                        }
+                    }
 
                     const currentUdid = document.getElementById('udid')?.value || deviceId;
-                    const isCurrentSelectedStillConnected = matching.some(d => d.id === currentUdid);
+                    const currentDeviceOption = document.getElementById('devicename')?.value;
+                    const isCurrentSelectedStillConnected = !!(currentUdid && matching.some(d => d.id === currentUdid || d.name === currentDeviceOption));
 
                     if (matching.length > 0) {
-                        if (!isCurrentSelectedStillConnected || !currentUdid) {
+                        closeDeviceDisconnectedAlertIfOpen();
+
+                        if (!isCurrentSelectedStillConnected || !currentUdid || !currentDeviceOption || currentDeviceOption === 'No device connected') {
                             const selected = populateDeviceDropdown(matching);
                             if (selected) {
                                 if (normalizePlatformName(selected.platform) === 'Android') {
@@ -1962,69 +1997,23 @@
                             if (deviceSelect && deviceName) deviceSelect.value = deviceName;
                         }
 
-                        if (!resetFormLockActive) {
-                            setLaunchEnabled(canEnableLaunch());
+                        if (typeof setPlatformAppDeviceEditable === 'function') {
+                            setPlatformAppDeviceEditable(true);
                         }
+                        setLaunchEnabled(canEnableLaunch());
                     } else {
-                        // Current platform has no devices!
-                        // Check if an ALTERNATE platform has an available device
-                        const alternateTarget = platformTarget === 'Android' ? 'IOS' : 'Android';
-                        const alternateMatching = devicesForPlatform(alternateTarget, freshDevices);
+                        // NO devices connected on ANY platform!
+                        setNoDeviceConnectedState();
 
-                        if (alternateMatching.length > 0 && process.platform !== 'win32') {
-                            // Automatically switch to available platform!
-                            applyingPlatformFromDevice = true;
-                            if (platformSelect) {
-                                platformSelect.value = alternateTarget;
-                                lastSelectedPlatform = alternateTarget;
-                                if (typeof updatePlatformUI === 'function') updatePlatformUI();
-                                if (typeof platformSelect._rebuildCustomSelect === 'function') {
-                                    platformSelect._rebuildCustomSelect();
+                        if (wasDeviceConnectedBefore) {
+                            showCustomAlert(
+                                "Device Disconnected",
+                                `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
+                                "warning",
+                                () => {
+                                    setNoDeviceConnectedState();
                                 }
-                            }
-                            applyingPlatformFromDevice = false;
-
-                            const selectedAlt = populateDeviceDropdown(alternateMatching);
-                            if (selectedAlt) {
-                                if (alternateTarget === 'Android') {
-                                    ipcRenderer.invoke("get-android-version", selectedAlt.id).then((ver) => {
-                                        if (ver) {
-                                            const pv = document.getElementById('platformversion');
-                                            if (pv) {
-                                                pv.value = ver;
-                                                pv.dataset.userEdited = 'true';
-                                            }
-                                        }
-                                    }).catch(() => {});
-                                }
-                                ipcRenderer.send("get-installed-apps", selectedAlt);
-                            }
-
-                            if (!resetFormLockActive) {
-                                setLaunchEnabled(canEnableLaunch());
-                            }
-
-                            if (wasDeviceConnectedBefore) {
-                                showCustomAlert(
-                                    "Device Disconnected",
-                                    `The <b>${platformTarget === 'Android' ? 'Android' : 'iOS'}</b> device was disconnected.<br><br>Automatically switched to available <b>${alternateTarget === 'Android' ? 'Android' : 'iOS'}</b> device: <b>${selectedAlt ? selectedAlt.name : ''}</b>.`,
-                                    "warning"
-                                );
-                            }
-                        } else {
-                            // NO devices connected on ANY platform! (or on Windows where only Android is supported)
-                            setNoDeviceConnectedState();
-
-                            if (wasDeviceConnectedBefore) {
-                                showCustomAlert(
-                                    "Device Disconnected",
-                                    `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
-                                    "warning",
-                                    () => {
-                                        setNoDeviceConnectedState();
-                                    }
-                                );
-                            }
+                            );
                         }
                     }
                 }
