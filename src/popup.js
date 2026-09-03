@@ -4105,12 +4105,12 @@ document.getElementById("Scrape").addEventListener('click', async () => {
             if (featCell) rowObj["FEATURE NAME"] = getCellValue(featCell);
             if (nodeCell) rowObj["NODE NAME"] = getCellValue(nodeCell);
             if (fingerprintCell) rowObj["FINGERPRINT"] = getCellValue(fingerprintCell);
-            if (appUrlCell) rowObj["APP URL"] = getCellValue(appUrlCell);
+            rowObj["APP URL"] = "";
 
             // 2. Map custom or position-based cells if present
             allCells.forEach((cell, cellIndex) => {
                 const fieldName = colIndexToField[cellIndex];
-                if (!fieldName) return;
+                if (!fieldName || fieldName === "APP URL") return;
                 const cellVal = getCellValue(cell);
                 if (!rowObj[fieldName] || (fieldName !== "CONTROL NAME" && fieldName !== "CONTROL TYPE" && fieldName !== "XPATH" && fieldName !== "PAGE NAME" && fieldName !== "IDENTIFICATION TYPE" && fieldName !== "CONTROL VALUE" && fieldName !== "FEATURE NAME" && fieldName !== "NODE NAME")) {
                     rowObj[fieldName] = cellVal;
@@ -4140,9 +4140,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                 }
             }
 
-            if (!rowObj["APP URL"]) {
-                rowObj["APP URL"] = activeApp;
-            }
+            rowObj["APP URL"] = "";
 
             if (!rowObj["FINGERPRINT"] && row.dataset.fingerprint) {
                 rowObj["FINGERPRINT"] = row.dataset.fingerprint;
@@ -4165,6 +4163,16 @@ document.getElementById("Scrape").addEventListener('click', async () => {
     }
     window.extractAllTableData = extractAllTableData;
 
+    function sanitizeExportRow(row) {
+        if (!row || typeof row !== 'object') return row;
+        const clean = { ...row };
+        delete clean.rect;
+        delete clean.DELETE;
+        clean["APP URL"] = "";
+        return clean;
+    }
+    window.sanitizeExportRow = sanitizeExportRow;
+
     function downloadTableAsJSON(tableId) {
         const statusBar = document.getElementById('sttus_bar_div');
         if (statusBar) statusBar.style.display = 'none';
@@ -4172,7 +4180,8 @@ document.getElementById("Scrape").addEventListener('click', async () => {
         const now = new Date();
         const dateTime = now.toISOString().split('T')[0] + 'T' + now.toTimeString().split(' ')[0];
 
-        const dashboardControls = extractAllTableData(tableId);
+        const rawControls = extractAllTableData(tableId);
+        const dashboardControls = rawControls.map(sanitizeExportRow);
 
         // Detect if we are in Record Scenario Mode based on whether scenario data was created
         const isRecordMode = window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0;
@@ -4194,7 +4203,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                 const scenarioInfo = window.pageScenarioData[pageName];
                 if (scenarioInfo && scenarioInfo.scenarioName) {
                     const pageKey = pageName.trim().toLowerCase();
-                    const matchedSteps = stepsByPage[pageKey] || [];
+                    const matchedSteps = (stepsByPage[pageKey] || []).map(sanitizeExportRow);
                     scenariosList.push({
                         "SCENARIO_NAME": scenarioInfo.scenarioName,
                         "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
@@ -7354,7 +7363,10 @@ function createAndAppendTable(dtControls) {
             return;
         }
 
-        const tableData = extractAllTableData(tableId);
+        const rawTableData = extractAllTableData(tableId);
+        const tableData = (typeof sanitizeExportRow === 'function')
+            ? rawTableData.map(sanitizeExportRow)
+            : rawTableData.map(r => { const { rect, DELETE, ...rest } = r; rest["APP URL"] = ""; return rest; });
 
         if (tableData.length === 0) {
             showCustomAlert("Export Failed", "No scraped data found.", "error");
@@ -7381,7 +7393,11 @@ function createAndAppendTable(dtControls) {
                 var scenarioInfo = window.pageScenarioData[pageName];
                 if (scenarioInfo && scenarioInfo.scenarioName) {
                     var pageKey = pageName.trim().toLowerCase();
-                    var matchedSteps = stepsByPage[pageKey] || [];
+                    var matchedSteps = (stepsByPage[pageKey] || []).map(r => {
+                        const { rect, DELETE, ...rest } = r;
+                        rest["APP URL"] = "";
+                        return rest;
+                    });
                     scenariosList.push({
                         "SCENARIO_NAME": scenarioInfo.scenarioName,
                         "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
@@ -9168,7 +9184,8 @@ function handleInvalidPageNameAttempt() {
     showCustomAlert("Invalid Page Name", "Please enter a valid Page Name. It must be at least 3 characters, can accept alphanumeric characters, a single space between words, and must start with an alphabet.", "warning");
 }
 
-function verifyPageNameSavedBeforeScraping() {
+function verifyPageNameSavedBeforeScraping(actionLabel) {
+    const action = actionLabel || "scraping";
     if (typeof window.isPageNameReadyForScraping === 'function') {
         const check = window.isPageNameReadyForScraping();
         if (!check.valid) {
@@ -9181,19 +9198,19 @@ function verifyPageNameSavedBeforeScraping() {
             if (check.reason === "unsaved") {
                 showCustomAlert(
                     "Save Page Name",
-                    "Please save the Page Name (click the green checkmark) before scraping.",
+                    `Please save the Page Name first (click the green checkmark ✓) before ${action}.`,
                     "warning"
                 );
             } else if (check.reason === "empty") {
                 showCustomAlert(
                     "Page Name Required",
-                    "Please enter and save a Page Name before scraping.",
+                    `Please enter and save a Page Name before ${action}.`,
                     "warning"
                 );
             } else if (check.reason === "all_reserved") {
                 showCustomAlert(
                     "Action Restricted",
-                    "Cannot scrape while viewing 'All' pages. Please select or create a specific Page Name first.",
+                    `Cannot perform action while viewing 'All' pages. Please select or create a specific Page Name first.`,
                     "warning"
                 );
             } else {
@@ -9210,6 +9227,18 @@ function verifyPageNameSavedBeforeScraping() {
         handleInvalidPageNameAttempt();
         return false;
     }
+
+    const confirmIcon = document.querySelector('.confirm-edit-icon');
+    const isConfirmVisible = confirmIcon && confirmIcon.style.display !== 'none' && window.getComputedStyle(confirmIcon).display !== 'none';
+    if (isConfirmVisible) {
+        showCustomAlert(
+            "Save Page Name",
+            `Please save the Page Name first (click the green checkmark ✓) before ${action}.`,
+            "warning"
+        );
+        return false;
+    }
+
     return true;
 }
 
@@ -13040,20 +13069,26 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         function handleRecordScenarioClick() {
-            const pageNameEl = document.getElementById("pagename_searchbox");
-            const pageVal = (pageNameEl?.value || "").trim();
-
-            if (!pageVal || pageVal.toLowerCase() === "all" || (typeof isGlobalPageNameValid === "function" && !isGlobalPageNameValid(pageVal))) {
-                showCustomAlert(
-                    "Page Name Required",
-                    "Please enter a valid Page Name before recording a scenario.",
-                    "warning"
-                );
-                if (pageNameEl) {
-                    pageNameEl.focus();
-                    pageNameEl.style.borderColor = "red";
+            if (typeof verifyPageNameSavedBeforeScraping === 'function') {
+                if (!verifyPageNameSavedBeforeScraping("recording a scenario")) {
+                    return;
                 }
-                return;
+            } else {
+                const pageNameEl = document.getElementById("pagename_searchbox");
+                const pageVal = (pageNameEl?.value || "").trim();
+
+                if (!pageVal || pageVal.toLowerCase() === "all" || (typeof isGlobalPageNameValid === "function" && !isGlobalPageNameValid(pageVal))) {
+                    showCustomAlert(
+                        "Page Name Required",
+                        "Please enter a valid Page Name before recording a scenario.",
+                        "warning"
+                    );
+                    if (pageNameEl) {
+                        pageNameEl.focus();
+                        pageNameEl.style.borderColor = "red";
+                    }
+                    return;
+                }
             }
 
             const pageCount = getUniquePageCount();
@@ -13083,7 +13118,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
         // Pass 'RECORD' or 'ADD' so the system knows what to do
         recordScenarioBtn.addEventListener("click", handleRecordScenarioClick);
-        addScenarioBtn.addEventListener("click", () => openScenarioModal("ADD"));
+        addScenarioBtn.addEventListener("click", () => {
+            if (typeof verifyPageNameSavedBeforeScraping === 'function') {
+                if (!verifyPageNameSavedBeforeScraping("adding a scenario")) {
+                    return;
+                }
+            }
+            openScenarioModal("ADD");
+        });
 
         const createFeatureBtn = document.getElementById("createFeatureBtn");
         if (createFeatureBtn) {
@@ -13091,14 +13133,20 @@ document.addEventListener("DOMContentLoaded", () => {
                 const turningOn = !createFeatureMode;
 
                 if (turningOn) {
-                    const pageVal = (document.getElementById("pagename_searchbox")?.value || "").trim();
-                    if (!pageVal || (typeof isGlobalPageNameValid === "function" && !isGlobalPageNameValid(pageVal))) {
-                        showCustomAlert(
-                            "Page Name Required",
-                            "Please enter a valid Page Name before Create Feature mode.",
-                            "warning"
-                        );
-                        return;
+                    if (typeof verifyPageNameSavedBeforeScraping === 'function') {
+                        if (!verifyPageNameSavedBeforeScraping("creating a feature")) {
+                            return;
+                        }
+                    } else {
+                        const pageVal = (document.getElementById("pagename_searchbox")?.value || "").trim();
+                        if (!pageVal || (typeof isGlobalPageNameValid === "function" && !isGlobalPageNameValid(pageVal))) {
+                            showCustomAlert(
+                                "Page Name Required",
+                                "Please enter a valid Page Name before Create Feature mode.",
+                                "warning"
+                            );
+                            return;
+                        }
                     }
 
                     // Create Feature only works in Tap mode
@@ -15128,7 +15176,7 @@ if (platformVersionField) {
                     "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
                     "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
                     "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
-                    "APP URL": el['APP URL'] || el.AppUrl || project.appName || ''
+                    "APP URL": ""
                 };
             });
 
@@ -15174,7 +15222,7 @@ if (platformVersionField) {
                     "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
                     "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
                     "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
-                    "APP URL": el['APP URL'] || el.AppUrl || project.appName || ''
+                    "APP URL": ""
                 };
             });
 
