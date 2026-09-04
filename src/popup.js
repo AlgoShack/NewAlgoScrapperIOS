@@ -2242,13 +2242,47 @@
         const platform = (typeof getSelectedPlatform === 'function'
             ? getSelectedPlatform()
             : (document.getElementById('platformname')?.value || 'Android'));
+        const platformVersion = (document.getElementById('platformversion')?.value || '').trim();
+        const automationName = (document.getElementById('automationName')?.value || '').trim();
+        const appiumUrl = (document.getElementById('appiumurl')?.value || '').trim();
+        const bundleID = (document.getElementById('bundleID')?.value || '').trim();
+        const appPackage = (document.getElementById('apppackage')?.value || '').trim();
+        const appActivity = (document.getElementById('appactivity')?.value || '').trim();
+        const appSelect = document.getElementById('appname');
+        let appSelectLabel = '';
+        if (appSelect && appSelect.options && appSelect.selectedIndex >= 0) {
+            const opt = appSelect.options[appSelect.selectedIndex];
+            appSelectLabel = (opt && (opt.text || opt.innerText || opt.value)) || '';
+        }
+        if (!appSelectLabel) appSelectLabel = (appSelect && appSelect.value) || '';
+
+        // Prefer live form; fall back to last successful launch array
+        const fromInitial = (Array.isArray(initialData) && initialData.length >= 9) ? initialData : null;
+
         return {
-            udid,
-            name,
-            platform,
+            udid: udid || (fromInitial && fromInitial[5]) || '',
+            name: name || (fromInitial && fromInitial[1]) || '',
+            platform: platform || (fromInitial && fromInitial[0]) || 'Android',
             projectKey: window.activeResumedProjectKey || null,
-            appName: window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '') || null,
+            appName: window.activeResumedAppName
+                || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '')
+                || appSelectLabel
+                || null,
+            appSelectValue: (appSelect && appSelect.value) || '',
+            appSelectLabel: String(appSelectLabel || '').trim(),
             mode: window.activeProjectSessionMode || null,
+            hadSession: !!driver,
+            launchParams: [
+                platform || (fromInitial && fromInitial[0]) || 'Android',
+                name || (fromInitial && fromInitial[1]) || '',
+                platformVersion || (fromInitial && fromInitial[2]) || '',
+                automationName || (fromInitial && fromInitial[3]) || '',
+                appiumUrl || (fromInitial && fromInitial[4]) || '',
+                udid || (fromInitial && fromInitial[5]) || '',
+                bundleID || (fromInitial && fromInitial[6]) || '',
+                appPackage || (fromInitial && fromInitial[7]) || '',
+                appActivity || (fromInitial && fromInitial[8]) || ''
+            ],
             parked: false,
             updatedAt: Date.now()
         };
@@ -2259,9 +2293,94 @@
         const meta = captureWorkingSessionDeviceMeta();
         if (!meta.udid) return;
         meta.parked = false;
+        meta.hadSession = true;
         writeLastSessionDeviceMeta(meta);
     }
     window.rememberWorkingSessionDevice = rememberWorkingSessionDevice;
+
+    function applySavedLaunchParamsToForm(meta, selectedDevice) {
+        if (!meta) return;
+        const params = Array.isArray(meta.launchParams) ? meta.launchParams.slice() : [];
+        const platform = meta.platform || params[0] || 'Android';
+        const udid = (selectedDevice && selectedDevice.id) || meta.udid || params[5] || '';
+        const dName = (selectedDevice && (selectedDevice.name || selectedDevice.id)) || meta.name || params[1] || '';
+
+        const platformSelect = document.getElementById('platformname');
+        if (platformSelect && platform) {
+            applyingPlatformFromDevice = true;
+            platformSelect.value = platform;
+            lastSelectedPlatform = platform;
+            if (typeof updatePlatformUI === 'function') updatePlatformUI();
+            if (typeof platformSelect._rebuildCustomSelect === 'function') platformSelect._rebuildCustomSelect();
+            applyingPlatformFromDevice = false;
+        }
+
+        const udidEl = document.getElementById('udid');
+        if (udidEl) udidEl.value = udid;
+        deviceId = udid;
+        deviceName = dName;
+
+        const deviceSelect = document.getElementById('devicename');
+        if (deviceSelect && udid) {
+            const matchOpt = Array.from(deviceSelect.options || []).find(
+                (o) => o.value === udid || o.value === dName || (o.dataset && o.dataset.deviceId === udid)
+            );
+            if (matchOpt) {
+                deviceSelect.value = matchOpt.value;
+                if (typeof deviceSelect._rebuildCustomSelect === 'function') deviceSelect._rebuildCustomSelect();
+            }
+        }
+
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el && val != null && String(val).trim() !== '') el.value = val;
+        };
+        setVal('platformversion', params[2] || '');
+        setVal('automationName', params[3] || '');
+        setVal('appiumurl', params[4] || '');
+        setVal('bundleID', params[6] || '');
+        setVal('apppackage', params[7] || '');
+        setVal('appactivity', params[8] || '');
+
+        const appSelect = document.getElementById('appname');
+        if (appSelect && (meta.appSelectValue || meta.appSelectLabel || meta.appName)) {
+            const wantVal = String(meta.appSelectValue || '').trim();
+            const wantLabel = String(meta.appSelectLabel || meta.appName || '').trim().toLowerCase();
+            let found = false;
+            for (let i = 0; i < (appSelect.options || []).length; i++) {
+                const opt = appSelect.options[i];
+                const text = String(opt.text || opt.innerText || '').trim().toLowerCase();
+                if ((wantVal && opt.value === wantVal) || (wantLabel && text === wantLabel)) {
+                    appSelect.selectedIndex = i;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found && wantVal) {
+                // Keep package/activity even if app list not loaded yet
+                appSelect.value = wantVal;
+            }
+            if (typeof appSelect._rebuildCustomSelect === 'function') appSelect._rebuildCustomSelect();
+        }
+
+        if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
+    }
+
+    function buildLaunchParamsForReconnect(meta, selectedDevice) {
+        const params = (Array.isArray(meta.launchParams) ? meta.launchParams.slice() : new Array(9).fill(''));
+        while (params.length < 9) params.push('');
+        params[0] = meta.platform || params[0] || 'Android';
+        params[1] = (selectedDevice && (selectedDevice.name || selectedDevice.id)) || meta.name || params[1] || '';
+        params[5] = (selectedDevice && selectedDevice.id) || meta.udid || params[5] || '';
+        // Live form may already be filled by applySavedLaunchParamsToForm
+        params[2] = document.getElementById('platformversion')?.value || params[2] || '';
+        params[3] = document.getElementById('automationName')?.value || params[3] || '';
+        params[4] = document.getElementById('appiumurl')?.value || params[4] || '';
+        params[6] = document.getElementById('bundleID')?.value || params[6] || '';
+        params[7] = document.getElementById('apppackage')?.value || params[7] || '';
+        params[8] = document.getElementById('appactivity')?.value || params[8] || '';
+        return params;
+    }
 
     function homeHasWorkToPark() {
         if (window.activeResumedProjectKey
@@ -2432,7 +2551,7 @@
             return false;
         }
 
-        console.log('[Device Session] Same device reconnected — restoring project', last.projectKey);
+        console.log('[Device Session] Same device reconnected — restoring project + relaunching app', last.projectKey);
         window.activeResumedProjectKey = last.projectKey;
         window.activeResumedAppName = last.appName || snapshot.appName || null;
         window.activeConfiguredProjectKey = last.projectKey;
@@ -2440,9 +2559,7 @@
         window._resumedProjectSnapshot = snapshot;
         window._resettingHome = false;
 
-        if (typeof window.restoreProjectDataToHomePage === 'function') {
-            window.restoreProjectDataToHomePage(snapshot);
-        }
+        applySavedLaunchParamsToForm(last, selectedDevice);
 
         last.parked = false;
         last.udid = (selectedDevice && selectedDevice.id) || last.udid;
@@ -2451,25 +2568,88 @@
         writeLastSessionDeviceMeta(last);
 
         if (typeof setPlatformAppDeviceEditable === 'function') setPlatformAppDeviceEditable(true);
-        if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
-            setLaunchEnabled(canEnableLaunch());
-        }
-        // Session not live yet — scrape stays off until Launch
-        ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn'].forEach((id) => {
-            const btn = document.getElementById(id);
-            if (btn && (id === 'reset' || id === 'download' || id === 'algoQA')) {
-                // Allow export of restored table before re-launch
-                btn.disabled = false;
-                btn.style.backgroundColor = '#2F8BCC';
-            }
-        });
         if (typeof setPageNameBoxEnabled === 'function') setPageNameBoxEnabled(true);
 
-        if (typeof showDeviceScreenMessage === 'function') {
-            showDeviceScreenMessage('ready_to_launch', {
-                detail: 'Same device restored. Click Launch Application to continue.'
-            });
+        const launchParams = buildLaunchParamsForReconnect(last, selectedDevice);
+        const canLaunch = typeof canEnableLaunch === 'function' ? canEnableLaunch() : true;
+        const hasAppTarget = !!(launchParams[7] || launchParams[6]); // package or bundle
+        const shouldAutoLaunch = canLaunch && hasAppTarget && (last.hadSession !== false);
+
+        if (!shouldAutoLaunch) {
+            // Fallback: restore table only; user can press Launch
+            if (typeof window.restoreProjectDataToHomePage === 'function') {
+                window.restoreProjectDataToHomePage(snapshot);
+            }
+            if (typeof setLaunchEnabled === 'function') setLaunchEnabled(canLaunch);
+            if (typeof showDeviceScreenMessage === 'function') {
+                showDeviceScreenMessage('ready_to_launch', {
+                    detail: 'Same device restored. Click Launch Application to continue.'
+                });
+            }
+            return true;
         }
+
+        if (window._autoRelaunchInFlight) return true;
+        window._autoRelaunchInFlight = true;
+
+        if (typeof showDeviceScreenMessage === 'function') {
+            showDeviceScreenMessage('loading');
+        } else if (typeof triggerScreenshotLoader === 'function') {
+            triggerScreenshotLoader();
+        }
+
+        const runRelaunch = async () => {
+            try {
+                // Give device UI / installed-apps a brief moment after plug-in
+                await new Promise((r) => setTimeout(r, 600));
+                applySavedLaunchParamsToForm(last, selectedDevice);
+                const params = buildLaunchParamsForReconnect(last, selectedDevice);
+                initialData = params;
+
+                if (typeof resumeExistingProjectAndLaunch === 'function') {
+                    await resumeExistingProjectAndLaunch(last.projectKey, snapshot, params);
+                } else if (typeof window.launchApp === 'function') {
+                    window._restoringProject = true;
+                    try {
+                        await window.launchApp(params);
+                        if (typeof window.restoreProjectDataToHomePage === 'function') {
+                            window.restoreProjectDataToHomePage(snapshot);
+                        }
+                    } finally {
+                        window._restoringProject = false;
+                    }
+                } else {
+                    if (typeof window.restoreProjectDataToHomePage === 'function') {
+                        window.restoreProjectDataToHomePage(snapshot);
+                    }
+                    const runBtn = document.getElementById('Run');
+                    if (runBtn && canLaunch) {
+                        runBtn.disabled = false;
+                        runBtn.click();
+                    }
+                }
+            } catch (err) {
+                console.error('[Device Session] Auto relaunch failed:', err);
+                if (typeof window.restoreProjectDataToHomePage === 'function') {
+                    try { window.restoreProjectDataToHomePage(snapshot); } catch (_) {}
+                }
+                if (typeof setLaunchEnabled === 'function') setLaunchEnabled(canEnableLaunch());
+                if (typeof showStructuredAlert === 'function') {
+                    showStructuredAlert(
+                        'Relaunch Failed',
+                        {
+                            lead: 'Same device was restored, but the app could not be opened automatically.',
+                            hint: 'Click Launch Application to try again.'
+                        },
+                        'warning'
+                    );
+                }
+            } finally {
+                window._autoRelaunchInFlight = false;
+            }
+        };
+
+        runRelaunch();
         return true;
     }
 
