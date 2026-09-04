@@ -3824,7 +3824,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                     }
 
                     var controlName = "";
-                    var controlType = mapControlType(node.nodeName);
+                    var controlType = mapControlType(node.nodeName, node);
                     var controlIdentificationType = "";
                     var controlId = "";
                     var xpath = "";
@@ -3908,7 +3908,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                             }
                         }
 
-                        let controlValue = getInputControlValue(node);
+                        let controlValue = getInputControlValue(node, controlName);
 
                         dtControls.push({
                             ControlName: controlName,
@@ -7190,7 +7190,7 @@ function createAndAppendTable(dtControls) {
             let allXPaths = getAllPossibleXPaths(node);
 
             // Extract input value if it's a text entry field
-            let controlValue = getInputControlValue(node);
+            let controlValue = getInputControlValue(node, controlName);
 
             // CHECK: Is the node center within a feature created on THIS device screen only?
             let nodeEffectiveFeatureName = "";
@@ -7220,7 +7220,7 @@ function createAndAppendTable(dtControls) {
 
             dtControls.push({
                 ControlName: controlName,
-                ControlType: mapControlType(uiName),
+                ControlType: mapControlType(uiName, node),
                 ControlId: allXPaths,
                 ControlValue: controlValue,
                 IdentificationType: inferIdentificationType(allXPaths[0]),
@@ -9410,13 +9410,13 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
 
             // 1. Generate Clean Variable Name & Type normally
                         let controlName = generateProfessionalControlName(matchedNode);
-                        let controlType = mapControlType(typeof getUiNodeName === 'function' ? getUiNodeName(matchedNode) : matchedNode.nodeName);
+                        let controlType = mapControlType(typeof getUiNodeName === 'function' ? getUiNodeName(matchedNode) : matchedNode.nodeName, matchedNode);
 
                         // 2. Fetch XPaths
                         let allXPaths = getAllPossibleXPaths(matchedNode);
 
                         // NEW: Extract the input value if the element is a text/search field
-                        let controlValue = getInputControlValue(matchedNode);
+                        let controlValue = getInputControlValue(matchedNode, controlName);
                         let nodeRect = parseNodeRect(matchedNode);
 
                         createAndAppendTable([
@@ -9538,11 +9538,12 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                 screenContentKeys: computeScreenContentKeys(window.xmlDoc, targetRect)
             };
         } else {
+            const featName = generateProfessionalControlName(matchedNode);
             pendingFeatureData = {
-                ControlName: generateProfessionalControlName(matchedNode),
-                ControlType: mapControlType(matchedNode.nodeName),
+                ControlName: featName,
+                ControlType: mapControlType(matchedNode.nodeName, matchedNode),
                 ControlId: nodeAllXPaths.length > 0 ? nodeAllXPaths : getAllPossibleXPaths(matchedNode),
-                ControlValue: getInputControlValue(matchedNode),
+                ControlValue: getInputControlValue(matchedNode, featName),
                 Fingerprint: generateNodeFingerprint(matchedNode),
                 rect: targetRect,
                 fullPage: false,
@@ -13896,11 +13897,20 @@ function isMeaningfulControlNode(node) {
     return false;
 }
 
-function mapControlType(nodeName) {
-    const n = nodeName || '';
-    if (n === 'XCUIElementTypeButton' || n === 'android.widget.Button' || n === 'android.widget.ImageButton') {
+function mapControlType(nodeName, node) {
+    const n = nodeName || (node ? ((node.getAttribute && node.getAttribute('class')) || node.nodeName) : '') || '';
+
+    // 1. Direct standard Button types
+    if (
+        n === 'XCUIElementTypeButton' ||
+        n === 'android.widget.Button' ||
+        n === 'android.widget.ImageButton' ||
+        /Button$|FloatingActionButton$|MaterialButton$/i.test(n)
+    ) {
         return 'Button';
     }
+
+    // 2. Direct standard TextBox types
     if (
         n === 'XCUIElementTypeTextField' ||
         n === 'XCUIElementTypeSecureTextField' ||
@@ -13908,31 +13918,130 @@ function mapControlType(nodeName) {
         n === 'XCUIElementTypeTextView' ||
         n === 'android.widget.EditText' ||
         n === 'android.widget.AutoCompleteTextView' ||
-        n === 'android.widget.MultiAutoCompleteTextView'
+        n === 'android.widget.MultiAutoCompleteTextView' ||
+        /EditText$|TextInputEditText$|SearchAutoComplete$/i.test(n)
     ) {
         return 'TextBox';
     }
-    if (n === 'XCUIElementTypeStaticText' || n === 'android.widget.TextView' || n === 'android.widget.CheckedTextView') {
+
+    // 3. Direct standard Label types
+    if (
+        n === 'XCUIElementTypeStaticText' ||
+        n === 'android.widget.TextView' ||
+        n === 'android.widget.CheckedTextView' ||
+        /TextView$|CheckedTextView$/i.test(n)
+    ) {
         return 'Label';
     }
-    if (n === 'XCUIElementTypeImage' || n === 'android.widget.ImageView') {
+
+    // 4. Direct standard Image types
+    if (
+        n === 'XCUIElementTypeImage' ||
+        n === 'android.widget.ImageView' ||
+        /ImageView$|ShapeableImageView$/i.test(n)
+    ) {
         return 'Image';
     }
+
+    // 5. CheckBox / Switch / Toggle types
     if (
         n === 'XCUIElementTypeSwitch' ||
         n === 'android.widget.Switch' ||
         n === 'android.widget.ToggleButton' ||
-        n === 'android.widget.CheckBox'
+        n === 'android.widget.CheckBox' ||
+        /CheckBox$|Switch$|ToggleButton$|SwitchMaterial$/i.test(n)
     ) {
         return 'CheckBox';
     }
-    if (n === 'android.widget.RadioButton') {
+
+    // 6. RadioButton types
+    if (n === 'android.widget.RadioButton' || /RadioButton$/i.test(n)) {
         return 'RadioButton';
     }
-    if (n === 'android.widget.Spinner') {
+
+    // 7. DropDownList / Spinner
+    if (n === 'android.widget.Spinner' || /Spinner$/i.test(n)) {
         return 'DropDownList';
     }
-    return n.replace('XCUIElementType', '').replace('android.widget.', '').replace('android.view.', '') || 'Other';
+
+    // 8. If node is provided or for ViewGroup/View/Layout/Other: inspect attributes & child hierarchy
+    if (node) {
+        const getAttr = (k) => node.getAttribute ? (node.getAttribute(k) || '') : '';
+        const isClickable = getAttr('clickable') === 'true' || getAttr('long-clickable') === 'true';
+        const isCheckable = getAttr('checkable') === 'true';
+        const isEditable = getAttr('editable') === 'true';
+        const isPassword = getAttr('password') === 'true';
+        const text = getAttr('text') || getAttr('label') || getAttr('value') || '';
+        const resId = getAttr('resource-id') || getAttr('id') || '';
+        const contentDesc = getAttr('content-desc') || '';
+
+        if (isEditable || isPassword || /edit|input|search|query/i.test(resId)) {
+            return 'TextBox';
+        }
+
+        if (isCheckable) {
+            if (/radio/i.test(resId) || /radio/i.test(n)) return 'RadioButton';
+            return 'CheckBox';
+        }
+
+        // Check if node contains specific child types
+        if (node.getElementsByTagName) {
+            if (node.getElementsByTagName('android.widget.EditText').length > 0 ||
+                node.getElementsByTagName('XCUIElementTypeTextField').length > 0 ||
+                node.getElementsByTagName('XCUIElementTypeSecureTextField').length > 0) {
+                return 'TextBox';
+            }
+            if (node.getElementsByTagName('android.widget.Button').length > 0 ||
+                node.getElementsByTagName('android.widget.ImageButton').length > 0 ||
+                node.getElementsByTagName('XCUIElementTypeButton').length > 0) {
+                return 'Button';
+            }
+            if (node.getElementsByTagName('android.widget.CheckBox').length > 0 ||
+                node.getElementsByTagName('android.widget.Switch').length > 0) {
+                return 'CheckBox';
+            }
+            if (node.getElementsByTagName('android.widget.RadioButton').length > 0) {
+                return 'RadioButton';
+            }
+            if (node.getElementsByTagName('android.widget.Spinner').length > 0) {
+                return 'DropDownList';
+            }
+            if (node.getElementsByTagName('android.widget.ImageView').length > 0) {
+                return isClickable ? 'Button' : 'Image';
+            }
+            if (node.getElementsByTagName('android.widget.TextView').length > 0) {
+                return isClickable ? 'Button' : 'Label';
+            }
+        }
+
+        // Check resource-id and content-desc hints for View / ViewGroup
+        if (/btn|button|fab|cta|submit|cancel|click|item|card/i.test(resId) || /btn|button/i.test(contentDesc)) {
+            return 'Button';
+        }
+        if (/icon|img|image|avatar|logo|thumbnail|pic/i.test(resId)) {
+            return isClickable ? 'Button' : 'Image';
+        }
+        if (/txt|text|label|title|header|lbl|tv/i.test(resId)) {
+            return isClickable ? 'Button' : 'Label';
+        }
+
+        if (isClickable) {
+            return 'Button';
+        }
+
+        if (text && text.trim()) {
+            return 'Label';
+        }
+    }
+
+    const clean = n.replace('XCUIElementType', '').replace('android.widget.', '').replace('android.view.', '').replace(/^androidx\.[a-z0-9_.]+\./i, '') || 'Other';
+    if (clean === 'ViewGroup' || clean === 'View') {
+        if (node && (node.getAttribute && (node.getAttribute('clickable') === 'true' || node.getAttribute('long-clickable') === 'true'))) {
+            return 'Button';
+        }
+        return 'Other';
+    }
+    return clean;
 }
 
 function generateNodeFingerprint(node) {
@@ -13988,31 +14097,56 @@ function generateNodeFingerprint(node) {
     }
 }
 
-function getInputControlValue(node) {
+function getInputControlValue(node, controlName) {
     if (!node) return '';
-    const textInputs = [
-        'XCUIElementTypeTextField',
-        'XCUIElementTypeSecureTextField',
-        'XCUIElementTypeSearchField',
-        'XCUIElementTypeTextView',
-        'android.widget.EditText',
-        'android.widget.AutoCompleteTextView',
-        'android.widget.MultiAutoCompleteTextView'
-    ];
-    if (!textInputs.includes(node.nodeName)) return '';
+    const tag = (typeof getUiNodeName === 'function' ? getUiNodeName(node) : node.nodeName) || '';
+    const isTextBox =
+        tag === 'XCUIElementTypeTextField' ||
+        tag === 'XCUIElementTypeSecureTextField' ||
+        tag === 'XCUIElementTypeSearchField' ||
+        tag === 'XCUIElementTypeTextView' ||
+        tag === 'android.widget.EditText' ||
+        tag === 'android.widget.AutoCompleteTextView' ||
+        tag === 'android.widget.MultiAutoCompleteTextView' ||
+        /EditText$|TextInputEditText$|SearchAutoComplete$/i.test(tag) ||
+        (node.getAttribute && (node.getAttribute('editable') === 'true' || node.getAttribute('password') === 'true'));
 
-    if (node.nodeName.startsWith('android.')) {
-        return node.getAttribute('text') || '';
+    if (!isTextBox) return '';
+
+    const text = (node.getAttribute('text') || '').trim();
+    const hint = (node.getAttribute('hint') || '').trim();
+    const value = (node.getAttribute('value') || '').trim();
+    const label = (node.getAttribute('label') || '').trim();
+    const name = (node.getAttribute('name') || '').trim();
+    const contentDesc = (node.getAttribute('content-desc') || '').trim();
+    const placeholder = (node.getAttribute('placeholderValue') || '').trim();
+    const resId = ((node.getAttribute('resource-id') || '').split('/').pop() || '').trim();
+
+    let val = value || text;
+
+    // Normalize strings to compare and avoid copying Control Name / placeholder / hint into Control Value
+    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const normalizedVal = norm(val);
+    const normalizedName = norm(controlName);
+    const normalizedHint = norm(hint);
+    const normalizedLabel = norm(label);
+    const normalizedDesc = norm(contentDesc);
+    const normalizedPlaceholder = norm(placeholder);
+    const normalizedResId = norm(resId);
+
+    if (
+        !val ||
+        (normalizedHint && normalizedVal === normalizedHint) ||
+        (normalizedLabel && normalizedVal === normalizedLabel) ||
+        (normalizedDesc && normalizedVal === normalizedDesc) ||
+        (normalizedPlaceholder && normalizedVal === normalizedPlaceholder) ||
+        (normalizedResId && normalizedVal === normalizedResId) ||
+        (normalizedName && (normalizedVal === normalizedName || normalizedVal.includes(normalizedName) || normalizedName.includes(normalizedVal)))
+    ) {
+        return '';
     }
 
-    let controlValue = node.getAttribute('value') || '';
-    const label = node.getAttribute('label') || '';
-    const name = node.getAttribute('name') || '';
-    const placeholder = node.getAttribute('placeholderValue') || '';
-    if (controlValue === placeholder || controlValue === label || controlValue === name) {
-        controlValue = '';
-    }
-    return controlValue;
+    return val;
 }
 
 function getLoadPageTags() {
