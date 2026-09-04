@@ -653,6 +653,116 @@ html.platform-win .custom-select-menu.is-visible {
   display: block !important;
 }
 
+/* Compact custom dropdowns inside Control ID / Control Type table cells (Win + Mac) */
+.custom-select-wrap--table {
+  width: 100% !important;
+  margin: 2px 0 !important;
+  z-index: 5;
+  display: block;
+  box-sizing: border-box;
+}
+
+.custom-select-wrap--table.is-open {
+  z-index: 50 !important;
+}
+
+.custom-select-trigger--table {
+  width: 100% !important;
+  min-height: 22px !important;
+  height: 22px !important;
+  padding: 0 22px 0 6px !important;
+  border: 1px solid #d0d4dc !important;
+  border-radius: 4px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: #1f2937 !important;
+  line-height: 20px !important;
+  text-align: left !important;
+}
+
+.custom-select-trigger--table .custom-select-label {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: inherit;
+}
+
+.custom-select-trigger--table .custom-select-caret {
+  width: 12px;
+  height: 12px;
+  right: 5px;
+}
+
+.custom-select-wrap--table.is-open .custom-select-trigger--table,
+.custom-select-trigger--table:hover:not(:disabled) {
+  border-color: #2F8BCC !important;
+  background-color: #f8fafc !important;
+  box-shadow: none !important;
+}
+
+.custom-select-menu.is-table-menu {
+  max-width: 620px !important;
+  max-height: 220px !important;
+  border-radius: 6px !important;
+  padding: 4px !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.custom-select-menu.is-table-menu::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+.custom-select-menu.is-table-menu .custom-select-option {
+  padding: 5px 8px !important;
+  margin: 1px 0 !important;
+  border-radius: 4px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+}
+
+#mainTable td.xpath .custom-select-wrap--table,
+#mainTable td.ct .custom-select-wrap--table,
+#repoTableElement td.xpath .custom-select-wrap--table,
+#repoTableElement td.ct .custom-select-wrap--table {
+  width: 100% !important;
+}
+
+#mainTable td.xpath select.native-select-hidden,
+#mainTable td.ct select.native-select-hidden,
+#repoTableElement td.xpath select.native-select-hidden,
+#repoTableElement td.ct select.native-select-hidden,
+html.platform-win #mainTable td.xpath select.native-select-hidden,
+html.platform-win #mainTable td.ct select.native-select-hidden {
+  position: absolute !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+
+html.platform-win .custom-select-trigger--table {
+  border: 1px solid #d0d4dc !important;
+  border-radius: 4px !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+html.platform-win .custom-select-menu.is-table-menu {
+  max-width: 620px !important;
+  border-radius: 6px !important;
+  scrollbar-width: none !important;
+}
+
 .custom-select-option {
   padding: 7px 10px !important;
   margin: 2px 0 !important;

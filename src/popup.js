@@ -1795,12 +1795,20 @@
 
         const wrap = document.createElement('div');
         wrap.className = 'custom-select-wrap';
+        const inTable = !!(selectEl.closest && (
+            selectEl.closest('#myTable')
+            || selectEl.closest('#repoTableElement')
+            || selectEl.closest('td.xpath, td.ct, td.control-type')
+            || selectEl.classList.contains('xpath-dropdown')
+            || selectEl.classList.contains('js-table-custom-select')
+        ));
+        if (inTable) wrap.classList.add('custom-select-wrap--table');
         selectEl.parentNode.insertBefore(wrap, selectEl);
         wrap.appendChild(selectEl);
 
         const trigger = document.createElement('button');
         trigger.type = 'button';
-        trigger.className = 'custom-select-trigger';
+        trigger.className = 'custom-select-trigger' + (inTable ? ' custom-select-trigger--table' : '');
         trigger.setAttribute('aria-haspopup', 'listbox');
         trigger.innerHTML = `
             <span class="custom-select-label is-placeholder">Select...</span>
@@ -1809,7 +1817,7 @@
             </svg>
         `;
         const menu = document.createElement('div');
-        menu.className = 'custom-select-menu';
+        menu.className = 'custom-select-menu' + (inTable ? ' is-table-menu' : '');
         menu.setAttribute('role', 'listbox');
         menu.style.display = 'none';
         // Body-fixed menu so overflow:hidden parents cannot clip it (Mac + Windows)
@@ -1821,6 +1829,13 @@
         menu.addEventListener('click', (e) => {
             e.stopPropagation();
         });
+        if (inTable && selectEl.classList.contains('control-id-dropdown')) {
+            menu.addEventListener('mouseleave', () => {
+                if (typeof window.onShowElementLeave === 'function') {
+                    try { window.onShowElementLeave(); } catch (_) {}
+                }
+            });
+        }
 
         selectEl.addEventListener('mousedown', (e) => {
             e.preventDefault();
@@ -1905,7 +1920,18 @@
                     menu.classList.remove('is-visible');
                     wrap.classList.remove('is-open');
                     selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    // Control ID: onchange="onDropdownChange(this)" on the native select handles highlight
                 });
+
+                // Control ID options: hover preview on device screen (Win + Mac)
+                if (inTable && selectEl.classList.contains('control-id-dropdown')) {
+                    item.addEventListener('mouseenter', () => {
+                        if (opt.disabled) return;
+                        if (typeof window.onOptionHover === 'function') {
+                            try { window.onOptionHover(opt.value); } catch (_) {}
+                        }
+                    });
+                }
 
                 menu.appendChild(item);
             });
@@ -1913,6 +1939,10 @@
             if (selectedOpt) {
                 const text = (selectedOpt.textContent || selectedOpt.value || '').trim();
                 labelEl.textContent = text || 'Select...';
+                if (inTable) {
+                    labelEl.title = text || '';
+                    trigger.title = text || '';
+                }
                 const softPlaceholder = !text
                     || /^loading apps/i.test(text)
                     || text === 'No device connected'
@@ -1935,15 +1965,15 @@
                 const fieldRect = fieldWrap ? fieldWrap.getBoundingClientRect() : rect;
 
                 const menuLeft = Math.round(fieldWrap ? fieldRect.left : rect.left);
-                const minW = Math.round(fieldWrap ? fieldRect.width : rect.width);
+                const minW = Math.round(fieldWrap ? fieldRect.width : Math.max(rect.width, inTable ? 160 : 140));
 
                 menu.style.display = 'block';
                 menu.classList.add('is-visible');
                 menu.style.position = 'fixed';
                 menu.style.left = `${menuLeft}px`;
-                menu.style.minWidth = `${Math.max(minW, 140)}px`;
+                menu.style.minWidth = `${Math.max(minW, inTable ? 160 : 140)}px`;
                 menu.style.width = 'auto';
-                menu.style.maxWidth = '420px';
+                menu.style.maxWidth = inTable ? '620px' : '420px';
                 menu.style.top = `${Math.round((fieldWrap ? fieldRect.bottom : rect.bottom) + 4)}px`;
                 menu.style.bottom = 'auto';
                 menu.style.zIndex = '999999';
@@ -1966,6 +1996,9 @@
                 menu.style.display = 'none';
                 menu.classList.remove('is-visible');
                 wrap.classList.remove('is-open');
+                if (inTable && typeof window.onShowElementLeave === 'function') {
+                    try { window.onShowElementLeave(); } catch (_) {}
+                }
             }
         }
 
@@ -2043,6 +2076,29 @@
             } catch (_) {}
         }
     }
+    window.enhanceCustomSelect = enhanceCustomSelect;
+
+    function enhanceTableCustomSelects(root) {
+        const scope = root && root.querySelectorAll ? root : document;
+        const nodes = scope.querySelectorAll
+            ? scope.querySelectorAll('select.xpath-dropdown, select.js-table-custom-select, select.control-id-dropdown')
+            : [];
+        nodes.forEach((el) => {
+            if (!el || el.tagName !== 'SELECT') return;
+            if (el.dataset.customized === '1') {
+                if (typeof el._rebuildCustomSelect === 'function') {
+                    try { el._rebuildCustomSelect(); } catch (_) {}
+                }
+                return;
+            }
+            try {
+                enhanceCustomSelect(el);
+            } catch (err) {
+                console.error('enhanceTableCustomSelects failed:', err);
+            }
+        });
+    }
+    window.enhanceTableCustomSelects = enhanceTableCustomSelects;
 
     function initAllCustomSelects() {
         document.querySelectorAll('select.js-custom-select, #platformname, #appname, #devicename').forEach((el) => {
@@ -2053,6 +2109,9 @@
                 console.error('init custom select failed:', el && el.id, err);
             }
         });
+        try {
+            enhanceTableCustomSelects(document.getElementById('myTable') || document);
+        } catch (_) {}
     }
     // Do NOT init custom selects here — wait until after IPC / Launch handlers (see deferred setTimeout below).
 
@@ -3682,14 +3741,14 @@
 
                 let controlIdCellHtml = (typeof buildControlIdSelectHtml === 'function')
                     ? buildControlIdSelectHtml(xpaths)
-                    : `<select class="xpath-dropdown control-id-dropdown"><option value="">${String(xpaths[0] || '')}</option></select>`;
+                    : `<select class="xpath-dropdown control-id-dropdown js-table-custom-select"><option value="">${String(xpaths[0] || '')}</option></select>`;
 
                 let currentControlType = el['CONTROL TYPE'] || el.ControlType || "";
                 let optionsList = [...new Set([currentControlType, ...allControlTypes])].filter(Boolean);
                 let ctSelectOptionsHtml = optionsList.map(type =>
                     `<option value="${type}" ${type === currentControlType ? 'selected' : ''}>${type}</option>`
                 ).join('');
-                let controlTypeCellHtml = `<select class="xpath-dropdown" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
+                let controlTypeCellHtml = `<select class="xpath-dropdown js-table-custom-select" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
 
                 const primaryLocator = (xpaths[0] || "").trim();
                 const identificationType = (el['IDENTIFICATION TYPE'] || el.IdentificationType || "").trim()
@@ -3791,6 +3850,9 @@
         if (typeof applyPagination === 'function') applyPagination();
         if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
         if (typeof syncRegisteredPageNames === 'function') syncRegisteredPageNames();
+        if (typeof window.enhanceTableCustomSelects === 'function') {
+            try { window.enhanceTableCustomSelects(tbody); } catch (_) {}
+        }
 
         // Show every restored page / scenario together when the project has multiple names
         const pagesList = Array.from(window.registeredPageNames).filter(p => p && p.toLowerCase() !== 'all');
@@ -7433,7 +7495,7 @@ async function performSwipe(startX, startY, endX, endY) {
                                            "NewTab", "Parent"
                                        ];
                        let ctSelectOptionsHtml = allControlTypes.map(type => `<option value="${type}">${type}</option>`).join('');
-                       let controlTypeCellHtml = `<select class="xpath-dropdown" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;"><option value="" disabled selected hidden>Controls</option>${ctSelectOptionsHtml}</select>`;
+                       let controlTypeCellHtml = `<select class="xpath-dropdown js-table-custom-select" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;"><option value="" disabled selected hidden>Controls</option>${ctSelectOptionsHtml}</select>`;
 
                        rowHtml += `<td class="ct pt-3-half" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-color: black; text-align: center; ${displayStyle}">${controlTypeCellHtml}</td>`;
                    } else if (thText.includes('CONTROL ID')) {
@@ -7468,6 +7530,9 @@ async function performSwipe(startX, startY, endX, endY) {
 
                updateRowNumbers();
                if (typeof applyPagination === 'function') applyPagination();
+               if (typeof window.enhanceTableCustomSelects === 'function') {
+                   try { window.enhanceTableCustomSelects(tableTopRow); } catch (_) {}
+               }
                if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
            });
        }
@@ -7608,7 +7673,7 @@ function createAndAppendTable(dtControls) {
                     const safe = String(xp).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
                     return `<option value="${safe}">${safe}</option>`;
                 }).join('');
-                return `<select class="xpath-dropdown control-id-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${opts}</select>`;
+                return `<select class="xpath-dropdown control-id-dropdown js-table-custom-select" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${opts}</select>`;
             })();
 
         let tr = tbody.insertRow(0);
@@ -7649,7 +7714,7 @@ function createAndAppendTable(dtControls) {
                 ).join('');
 
                 // 3. Create the Dropdown HTML
-                let controlTypeCellHtml = `<select class="xpath-dropdown" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
+                let controlTypeCellHtml = `<select class="xpath-dropdown js-table-custom-select" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
 
                 const primaryLocator = (xpaths[0] || "").trim();
                 const identificationType = (dtControls[i].IdentificationType || "").trim()
@@ -7729,6 +7794,9 @@ function createAndAppendTable(dtControls) {
     if (typeof autoAdjustTableLayout === 'function') autoAdjustTableLayout();
 
     applyPagination();
+    if (typeof window.enhanceTableCustomSelects === 'function') {
+        try { window.enhanceTableCustomSelects(tbody); } catch (_) {}
+    }
     if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 }
 
@@ -9352,7 +9420,7 @@ function buildControlIdSelectHtml(xpaths) {
         return `<option value="${safe}">${safe}</option>`;
     }).join('');
 
-    return `<select class="xpath-dropdown control-id-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${optionsHtml}</select>`;
+    return `<select class="xpath-dropdown control-id-dropdown js-table-custom-select" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${optionsHtml}</select>`;
 }
 window.buildControlIdSelectHtml = buildControlIdSelectHtml;
 window.escapeHtmlAttr = escapeHtmlAttr;
