@@ -1412,6 +1412,9 @@
         document.querySelectorAll('.custom-select-wrap.is-open').forEach((wrap) => {
             if (exceptWrap && wrap === exceptWrap) return;
             wrap.classList.remove('is-open');
+            if (wrap._customSelectMenu) {
+                wrap._customSelectMenu.style.display = 'none';
+            }
             const trigger = wrap.querySelector('.custom-select-trigger');
             if (trigger) trigger.style.borderRadius = '';
         });
@@ -1422,6 +1425,8 @@
         if (!selectEl || selectEl.dataset.customized === '1') return;
         selectEl.dataset.customized = '1';
         selectEl.classList.add('native-select-hidden', 'js-custom-select');
+        selectEl.setAttribute('tabindex', '-1');
+        selectEl.setAttribute('aria-hidden', 'true');
 
         const wrap = document.createElement('div');
         wrap.className = 'custom-select-wrap';
@@ -1440,9 +1445,15 @@
         const menu = document.createElement('div');
         menu.className = 'custom-select-menu';
         menu.setAttribute('role', 'listbox');
+        menu.style.display = 'none';
+        document.body.appendChild(menu);
 
         wrap.appendChild(trigger);
-        wrap.appendChild(menu);
+        wrap._customSelectMenu = menu;
+
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
 
         const labelEl = trigger.querySelector('.custom-select-label');
 
@@ -1450,7 +1461,10 @@
             const disabled = !!selectEl.disabled;
             trigger.disabled = disabled;
             wrap.classList.toggle('is-disabled', disabled);
-            if (disabled) wrap.classList.remove('is-open');
+            if (disabled) {
+                wrap.classList.remove('is-open');
+                menu.style.display = 'none';
+            }
 
             const border = (selectEl.style && selectEl.style.borderColor) || '';
             const hasError = border === 'red' || border === 'rgb(255, 0, 0)' || border === '#ff0000' || border === '#d9534f';
@@ -1509,6 +1523,7 @@
                     selectEl.value = opt.value;
                     selectEl.style.borderColor = '';
                     rebuildMenu();
+                    menu.style.display = 'none';
                     wrap.classList.remove('is-open');
                     selectEl.dispatchEvent(new Event('change', { bubbles: true }));
                 });
@@ -1524,9 +1539,7 @@
             syncDisabledAndError();
         }
 
-        trigger.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
+        function toggleMenu() {
             if (selectEl.disabled) return;
             selectEl.style.borderColor = '';
             syncDisabledAndError();
@@ -1541,12 +1554,15 @@
                 const menuLeft = Math.round(fieldWrap ? fieldRect.left : rect.left);
                 const minW = Math.round(fieldWrap ? fieldRect.width : rect.width);
 
+                menu.style.display = 'block';
+                menu.style.position = 'fixed';
                 menu.style.left = `${menuLeft}px`;
                 menu.style.minWidth = `${Math.max(minW, 140)}px`;
                 menu.style.width = 'auto';
-                menu.style.maxWidth = '400px';
-                menu.style.top = `${Math.round(rect.bottom + 4)}px`;
+                menu.style.maxWidth = '420px';
+                menu.style.top = `${Math.round((fieldWrap ? fieldRect.bottom : rect.bottom) + 4)}px`;
                 menu.style.bottom = 'auto';
+                menu.style.zIndex = '999999';
 
                 // Prevent overflowing off-screen on the right
                 requestAnimationFrame(() => {
@@ -1558,14 +1574,44 @@
                 });
 
                 // Flip upward if not enough space below
-                const spaceBelow = window.innerHeight - rect.bottom;
-                if (spaceBelow < 180 && rect.top > spaceBelow) {
+                const spaceBelow = window.innerHeight - (fieldWrap ? fieldRect.bottom : rect.bottom);
+                if (spaceBelow < 180 && (fieldWrap ? fieldRect.top : rect.top) > spaceBelow) {
                     menu.style.top = 'auto';
-                    menu.style.bottom = `${Math.round(window.innerHeight - rect.top + 4)}px`;
+                    menu.style.bottom = `${Math.round(window.innerHeight - (fieldWrap ? fieldRect.top : rect.top) + 4)}px`;
                 }
+                wrap.classList.add('is-open');
+            } else {
+                menu.style.display = 'none';
+                wrap.classList.remove('is-open');
             }
-            wrap.classList.toggle('is-open', willOpen);
+        }
+
+        trigger.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleMenu();
         });
+
+        const fieldWrap = wrap.closest('.home-field');
+        if (fieldWrap) {
+            const label = fieldWrap.querySelector('label');
+            if (label) {
+                label.removeAttribute('for');
+                label.style.cursor = 'pointer';
+                label.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleMenu();
+                });
+            }
+            fieldWrap.addEventListener('click', (e) => {
+                if (e.target !== trigger && !trigger.contains(e.target) && !menu.contains(e.target)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleMenu();
+                }
+            });
+        }
 
         // Keep UI in sync when options / disabled / style change programmatically
         const mo = new MutationObserver(() => rebuildMenu());
@@ -1616,6 +1662,7 @@
 
     initAllCustomSelects();
     document.addEventListener('click', () => closeAllCustomSelects());
+    window.addEventListener('resize', () => closeAllCustomSelects());
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') closeAllCustomSelects();
     });
