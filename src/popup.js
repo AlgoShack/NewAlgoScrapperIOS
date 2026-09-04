@@ -58,11 +58,22 @@
     const { exec } = require('child_process');
 
     // Windows: compact left-form density (html.platform-win) so the table gets more height.
-    // Windows remains Android-only via lockPlatformToAndroidOnWindows().
     if (process.platform === 'win32') {
         document.documentElement.classList.add('platform-win');
         if (document.body) document.body.classList.add('platform-win');
     }
+
+    /** Safe DOM-ready helper that runs immediately if DOM is already parsed/interactive */
+    function onDomReady(fn) {
+        if (!fn) return;
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', fn);
+        } else {
+            try { fn(); } catch (err) { console.error('onDomReady error:', err); }
+        }
+    }
+    window.onDomReady = onDomReady;
+
     var folderPath;
     const By = wd.By;
     const until = wd.until;
@@ -1093,7 +1104,7 @@
         requestAnimationFrame(adjustEmptyRows);
     });
 
-    window.addEventListener("DOMContentLoaded", () => {
+    onDomReady(() => {
         const tableContainer = document.getElementById('table-container');
 
         if (tableContainer) {
@@ -1110,17 +1121,12 @@
         }, 50);
     });
 
-   window.addEventListener("DOMContentLoaded", () => {
+   onDomReady(() => {
        document.getElementById("split-div3").style.display = "none";
        document.getElementById("tapBtn").style.background = "#2F8BCC";
        document.getElementById("tapBtn").style.color = "#fff";
        document.getElementById("touchBtn").style.background = "transparent";
        document.getElementById("touchBtn").style.color = "#333";
-
-       // Windows: keep same dropdown chrome, Android-only option list
-       if (typeof lockPlatformToAndroidOnWindows === 'function') {
-           lockPlatformToAndroidOnWindows();
-       }
 
        // ALWAYS clear past session on a fresh app launch so it never auto-connects
        localStorage.removeItem("algoQAUser");
@@ -1312,15 +1318,11 @@
             if (typeof applyLaunchModeState === 'function') applyLaunchModeState();
         };
 
-        if (document.readyState === "interactive" || document.readyState === "complete") {
-            apply();
-        } else {
-            window.addEventListener("DOMContentLoaded", apply, { once: true });
-        }
+        onDomReady(apply);
     });
 
     // Fresh window: clear prior token session, then lock Launch for double-click mode
-    window.addEventListener("DOMContentLoaded", () => {
+    onDomReady(() => {
         document.getElementById("split-div3").style.display = "none";
 
         document.getElementById("tapBtn").style.background = "#2F8BCC";
@@ -1329,11 +1331,11 @@
         document.getElementById("touchBtn").style.background = "transparent";
         document.getElementById("touchBtn").style.color = "#333";
 
-    // Do not restore a previous token across normal desktop restarts.
-    // Protocol / API launches may already have user-data — keep that session.
-    if (!launchedViaProtocol) {
-        localStorage.removeItem("algoQAUser");
-    }
+        // Do not restore a previous token across normal desktop restarts.
+        // Protocol / API launches may already have user-data — keep that session.
+        if (!launchedViaProtocol) {
+            localStorage.removeItem("algoQAUser");
+        }
 
         applyLaunchModeState();
     });
@@ -1700,6 +1702,9 @@
             }
         });
     }
+    onDomReady(() => {
+        initAllCustomSelects();
+    });
 
     // Delay custom-select chrome until after core IPC/handlers below are registered.
     // Windows was dying when select.value was monkey-patched during early init.
@@ -1759,19 +1764,10 @@
         return `${device.name} (${typeLabel})`;
     }
 
-    /** Windows builds are Android-only — keep Platform dropdown consistent. */
+    /** Platform helper — keeps custom dropdown behavior consistent across Windows and macOS. */
     function lockPlatformToAndroidOnWindows() {
-        if (process.platform !== 'win32') return;
-        const platformEl = document.getElementById('platformname');
-        if (!platformEl || platformEl.tagName !== 'SELECT') return;
-        platformEl.innerHTML = '<option value="Android" selected>Android</option>';
-        platformEl.value = 'Android';
-        lastSelectedPlatform = 'Android';
-        if (typeof platformEl._rebuildCustomSelect === 'function') {
-            platformEl._rebuildCustomSelect();
-        }
+        // Safe no-op: maintains full Platform options (Android & IOS) so custom dropdown looks & behaves identically on Windows and macOS
     }
-    lockPlatformToAndroidOnWindows();
 
     function setAppDropdownPlaceholder(label) {
         const appSelect = document.getElementById('appname');
@@ -10466,7 +10462,7 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
         }
 
         // Initialize and track window resizing automatically
-        window.addEventListener("DOMContentLoaded", () => {
+        onDomReady(() => {
             document.getElementById('table-container').style.display = "block";
             renderDefaultExcelGrid();
             initResizableTable();
@@ -13300,7 +13296,7 @@ function initScenarioOutlineLogic() {
 
 
 // Bind dropdown change event and initialize our methods
-document.addEventListener('DOMContentLoaded', () => {
+onDomReady(() => {
     const rppSelect = document.getElementById('rows_per_page');
     if (rppSelect) {
         rppSelect.addEventListener('change', () => {
@@ -13462,7 +13458,7 @@ function showConfirmDialog({ title, mainText, subText, action, theme, okayBtnTex
 // Download/Send switches to nested SCENARIOS when this object has entries.
 // Reset clears pageScenarioData so export returns to normal scrape JSON.
 // ===========================================================================
-document.addEventListener("DOMContentLoaded", () => {
+onDomReady(() => {
     const recordScenarioBtn = document.getElementById("recordScenarioBtn");
     const addScenarioBtn = document.getElementById("addScenarioBtn");
     const recordModal = document.getElementById("recordScenarioModal");
