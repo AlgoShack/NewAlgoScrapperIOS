@@ -49,19 +49,184 @@
      *   [XML-HELPERS]   Dual-platform bounds / locators / identification types
      * =============================================================================
      */
-    const wd = require("selenium-webdriver");
-    const fs = require('fs');
-    const path = require('path');
-    const { app, ipcRenderer } = require('electron');
+    // Visible boot failures (Windows: silent renderer death looks like "UI only")
+    (function installBootErrorHooks() {
+        function showBootError(msg) {
+            try {
+                console.error('[AlgoScraper boot]', msg);
+                let banner = document.getElementById('algoBootErrorBanner');
+                if (!banner) {
+                    banner = document.createElement('div');
+                    banner.id = 'algoBootErrorBanner';
+                    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;padding:10px 14px;background:#7f1d1d;color:#fecaca;font:13px/1.4 Segoe UI,sans-serif;';
+                    (document.body || document.documentElement).appendChild(banner);
+                }
+                banner.style.display = 'block';
+                banner.textContent = 'AlgoScraper script error: ' + String(msg || 'unknown');
+            } catch (_) {}
+        }
+        window.__algoShowBootError = showBootError;
+        window.addEventListener('error', (e) => {
+            showBootError((e && e.message) || (e && e.error && e.error.message) || 'window error');
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            const r = e && e.reason;
+            showBootError((r && r.message) || String(r || 'unhandledrejection'));
+        });
+    })();
 
-    const os = require('os');
-    const { exec } = require('child_process');
+    let wd = null;
+    let fs = null;
+    let path = null;
+    let ipcRenderer = null;
+    let app = null;
+    let os = null;
+    let exec = null;
+    let CryptoJS = null;
+    try {
+        wd = require("selenium-webdriver");
+        fs = require('fs');
+        path = require('path');
+        ({ app, ipcRenderer } = require('electron'));
+        os = require('os');
+        ({ exec } = require('child_process'));
+        CryptoJS = require("crypto-js");
+        window.__algoRequiresOk = true;
+    } catch (reqErr) {
+        window.__algoRequiresOk = false;
+        if (typeof window.__algoShowBootError === 'function') {
+            window.__algoShowBootError('require failed: ' + (reqErr && reqErr.message ? reqErr.message : reqErr));
+        }
+        console.error('AlgoScraper require failed:', reqErr);
+    }
 
     // Windows: compact left-form density (html.platform-win) so the table gets more height.
-    if (process.platform === 'win32') {
+    if (typeof process !== 'undefined' && process.platform === 'win32') {
         document.documentElement.classList.add('platform-win');
         if (document.body) document.body.classList.add('platform-win');
     }
+
+    const secretKey = "algoshackv5-123";
+
+    function decryptData(cipherText) {
+        if (!CryptoJS) return null;
+        if (!cipherText || typeof cipherText !== "string") return null;
+        const cleaned = cipherText.trim();
+        if (!cleaned) return null;
+
+        const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
+        if (!base64Regex.test(cleaned) || cleaned.length % 4 !== 0) {
+            console.warn("Token validation failed: Invalid base64 format or alignment");
+            return null;
+        }
+
+        try {
+            const cipherParams = CryptoJS.format.OpenSSL.parse(cleaned);
+            if (!cipherParams.salt || cipherParams.salt.sigBytes !== 8) return null;
+            if (!cipherParams.ciphertext || cipherParams.ciphertext.sigBytes === 0 || cipherParams.ciphertext.sigBytes % 16 !== 0) return null;
+            const canonicalBase64 = CryptoJS.format.OpenSSL.stringify(cipherParams);
+            if (canonicalBase64 !== cleaned) return null;
+            const bytes = CryptoJS.AES.decrypt(cipherParams, secretKey);
+            if (!bytes || bytes.sigBytes <= 0) return null;
+            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+            if (!decrypted || decrypted.trim() === "") return null;
+            const parsed = JSON.parse(decrypted);
+            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+            if (!parsed.userID && !parsed.baseUrl && !parsed.token && !parsed.username && !parsed.id) return null;
+            return decrypted;
+        } catch (err) {
+            console.error("Decrypt Error:", err);
+            return null;
+        }
+    }
+    window.decryptData = decryptData;
+
+    /** Shared token connect — bound EARLY so mid-file throws cannot kill auth on Windows. */
+    function connectAlgoTokenFromInput() {
+        const tokenInput = document.getElementById("tokenInput");
+        if (!tokenInput) return false;
+        const encryptedToken = (tokenInput.value || '').trim();
+        const tokenStatus = document.getElementById("tokenStatus");
+        if (!encryptedToken) return false;
+
+        tokenInput.readOnly = true;
+        const decryptedToken = decryptData(encryptedToken);
+        let isValidJson = false;
+        let parsedData = null;
+        if (decryptedToken) {
+            try {
+                parsedData = JSON.parse(decryptedToken);
+                if (parsedData && (parsedData.userID || parsedData.baseUrl)) isValidJson = true;
+            } catch (_) { isValidJson = false; }
+        }
+
+        if (isValidJson && parsedData) {
+            tokenInput.style.setProperty("display", "none", "important");
+            if (tokenStatus) {
+                tokenStatus.style.setProperty("display", "block", "important");
+                tokenStatus.innerHTML = "Connected";
+                tokenStatus.style.backgroundColor = "rgba(22, 163, 74, 0.18)";
+                tokenStatus.style.border = "1px solid rgba(74, 222, 128, 0.45)";
+                tokenStatus.style.color = "#bbf7d0";
+            }
+            const changeTokenBtn = document.getElementById("changeTokenBtn");
+            if (changeTokenBtn) changeTokenBtn.style.setProperty("display", "inline-block", "important");
+            try { localStorage.setItem("algoQAUser", JSON.stringify(parsedData)); } catch (_) {}
+            if (typeof setLaunchEnabled === 'function') {
+                if (typeof driver !== 'undefined' && driver) setLaunchEnabled(false);
+                else setLaunchEnabled(true);
+            } else {
+                const runBtn = document.getElementById("Run");
+                if (runBtn) {
+                    runBtn.disabled = false;
+                    runBtn.style.backgroundColor = "#2F8BCC";
+                }
+            }
+            return true;
+        }
+
+        if (tokenStatus) {
+            tokenInput.style.setProperty("display", "none", "important");
+            tokenStatus.style.setProperty("display", "block", "important");
+            tokenStatus.innerHTML = "Invalid token";
+            tokenStatus.style.backgroundColor = "rgba(239, 68, 68, 0.18)";
+            tokenStatus.style.border = "1px solid rgba(252, 165, 165, 0.45)";
+            tokenStatus.style.color = "#fecaca";
+        }
+        if (typeof setLaunchEnabled === 'function') setLaunchEnabled(false);
+        setTimeout(() => {
+            if (tokenStatus) tokenStatus.style.setProperty("display", "none", "important");
+            tokenInput.style.setProperty("display", "inline-block", "important");
+            tokenInput.value = "";
+            tokenInput.readOnly = false;
+            try { tokenInput.focus(); } catch (_) {}
+        }, 2000);
+        return false;
+    }
+    window.connectAlgoTokenFromInput = connectAlgoTokenFromInput;
+
+    function bindTokenConnectEarly() {
+        const tokenInput = document.getElementById("tokenInput");
+        if (!tokenInput || tokenInput.dataset.tokenBound === '1') return;
+        tokenInput.dataset.tokenBound = '1';
+        tokenInput.addEventListener("keydown", function (e) {
+            if (e.key !== "Enter") return;
+            e.preventDefault();
+            connectAlgoTokenFromInput();
+        });
+        // Windows: paste often doesn't include Enter — auto-connect after paste
+        tokenInput.addEventListener("paste", function () {
+            setTimeout(() => {
+                try {
+                    if ((tokenInput.value || '').trim()) connectAlgoTokenFromInput();
+                } catch (err) {
+                    console.error('token paste connect failed:', err);
+                }
+            }, 0);
+        });
+        window.__algoTokenBound = true;
+    }
+    bindTokenConnectEarly();
 
     /**
      * Safe DOM-ready helper.
@@ -83,9 +248,22 @@
     }
     window.onDomReady = onDomReady;
 
+    function safeOn(elOrId, eventName, handler) {
+        try {
+            const el = typeof elOrId === 'string' ? document.getElementById(elOrId) : elOrId;
+            if (!el || typeof el.addEventListener !== 'function') return false;
+            el.addEventListener(eventName, handler);
+            return true;
+        } catch (err) {
+            console.error('safeOn failed:', elOrId, eventName, err);
+            return false;
+        }
+    }
+    window.safeOn = safeOn;
+
     var folderPath;
-    const By = wd.By;
-    const until = wd.until;
+    const By = (wd && wd.By) || null;
+    const until = (wd && wd.until) || null;
     var initialData = [];
     var driver;                 // Active selenium-webdriver session (null after reset/failure)
     var imgTagFlag = false;     // Whether #screenshot <img> already exists in #zoomFrame
@@ -1381,78 +1559,7 @@
         }
     });
 
-    const CryptoJS = require("crypto-js");
-
-    const secretKey = "algoshackv5-123";
-
-    function decryptData(cipherText) {
-        if (!cipherText || typeof cipherText !== "string") return null;
-        const cleaned = cipherText.trim();
-        if (!cleaned) return null;
-
-        // 1. Strict Base64 validation (disallows appended characters, bad padding, or non-base64 characters)
-        const base64Regex = /^[A-Za-z0-9+/]+={0,2}$/;
-        if (!base64Regex.test(cleaned) || cleaned.length % 4 !== 0) {
-            console.warn("Token validation failed: Invalid base64 format or alignment");
-            return null;
-        }
-
-        try {
-            // 2. Parse OpenSSL cipher parameters
-            const cipherParams = CryptoJS.format.OpenSSL.parse(cleaned);
-
-            // Must contain a valid 8-byte salt
-            if (!cipherParams.salt || cipherParams.salt.sigBytes !== 8) {
-                console.warn("Token validation failed: Invalid salt structure");
-                return null;
-            }
-
-            // Must contain ciphertext whose byte length is a non-zero multiple of 16 (AES block size)
-            if (!cipherParams.ciphertext || cipherParams.ciphertext.sigBytes === 0 || cipherParams.ciphertext.sigBytes % 16 !== 0) {
-                console.warn("Token validation failed: Invalid ciphertext block alignment");
-                return null;
-            }
-
-            // 3. Exact Canonical Match (rejects appended characters like xyzabc where xyz is valid)
-            const canonicalBase64 = CryptoJS.format.OpenSSL.stringify(cipherParams);
-            if (canonicalBase64 !== cleaned) {
-                console.warn("Token validation failed: Ciphertext does not match canonical base64 representation");
-                return null;
-            }
-
-            // 4. AES Decryption with strict UTF-8 decoding
-            const bytes = CryptoJS.AES.decrypt(cipherParams, secretKey);
-            if (!bytes || bytes.sigBytes <= 0) {
-                console.warn("Token validation failed: Decrypted byte stream is empty or corrupt");
-                return null;
-            }
-
-            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
-            if (!decrypted || decrypted.trim() === "") {
-                console.warn("Token validation failed: Decrypted string is empty");
-                return null;
-            }
-
-            // 5. Strict JSON verification
-            const parsed = JSON.parse(decrypted);
-            if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-                console.warn("Token validation failed: Decrypted payload is not a valid JSON object");
-                return null;
-            }
-
-            // Validate structural fields
-            if (!parsed.userID && !parsed.baseUrl && !parsed.token && !parsed.username && !parsed.id) {
-                console.warn("Token validation failed: Missing required authentication fields");
-                return null;
-            }
-
-            console.log("Token successfully verified and decrypted");
-            return decrypted;
-        } catch (err) {
-            console.error("Decrypt Error:", err);
-            return null;
-        }
-    }
+    // CryptoJS + decryptData + token bind live at top of file (Windows boot-safe)
 
     // var controlIdList =[];
     // let screenName = false;
@@ -1463,7 +1570,11 @@
 //    document.getElementById('platformname').value = 'IOS';
 //    document.getElementById('platformname').disabled = true;
 
-    prestart();
+    try {
+        prestart();
+    } catch (preErr) {
+        console.error('prestart failed:', preErr);
+    }
 
     // ---- Custom dropdown enhancer (keeps native <select> API working) ----
     // Same custom white menu + checkmark on Windows and macOS (never native OS select).
@@ -4741,7 +4852,7 @@
                return validCount > 0;
            }
 
-        document.getElementById("download").addEventListener('click', async () => {
+        document.getElementById("download") && document.getElementById("download").addEventListener('click', async () => {
             if (!tableCreated || !hasValidTableData('myTable')) {
                 showCustomAlert("Export Failed", "No scraped data found to download.", "error");
                 return;
@@ -4999,7 +5110,7 @@
 
 
     // actions to perform on clicking reset button
-    document.getElementById("reset").addEventListener('click', async () => {
+    safeOn("reset", "click", async () => {
             showConfirmDialog({
                 title: "Confirm Reset",
                 mainText: "Do you really want to reset?",
@@ -5010,21 +5121,24 @@
         });
 
     // Legacy okay_btn handler replaced later by cloned newOkayBtn → executeResetAction()
-    document.getElementById("okay_btn").addEventListener('click', async () => {
+    safeOn("okay_btn", "click", async () => {
       // Intentionally left as a no-op fallback; unified handler below owns Confirm.
     });
 
     // Note: back_btn is cloned later in the file, so its main logic resides there.
-    document.getElementById("back_btn").addEventListener('click', async () => {
-      document.getElementById('overlay').style.display = 'none';
-      document.getElementById('confirmationPopup').style.display = 'none';
+    safeOn("back_btn", "click", async () => {
+      const overlay = document.getElementById('overlay');
+      if (overlay) overlay.style.display = 'none';
+      const conf = document.getElementById('confirmationPopup');
+      if (conf) conf.style.display = 'none';
     });
 
     var searchBox = document.getElementById('searchbox');
     var table = document.getElementById('myTable');
 
     // Add event listener to the search box
-    searchBox.addEventListener('keyup', function () {
+    if (searchBox) searchBox.addEventListener('keyup', function () {
+        if (!table) return;
         var searchText = this.value.toLowerCase().trim();
         var rawSearchText = this.value.trim();
         var found = false;
@@ -5033,7 +5147,7 @@
         var emptySubtitleEl = document.getElementById('tableSearchEmptySubtitle');
 
         // Remove legacy "No results found" row if present
-        var existingNoResultRow = tableBody.querySelector('.no-results-row');
+        var existingNoResultRow = tableBody && tableBody.querySelector('.no-results-row');
         if (existingNoResultRow) {
             existingNoResultRow.remove();
         }
@@ -5110,6 +5224,7 @@
     }
 
     const tableEl = document.getElementById("myTable");
+    if (tableEl) {
 
     tableEl.addEventListener("click", onTableClick);
     tableEl.addEventListener("mouseover", onShowElementHover);
@@ -5278,6 +5393,7 @@
             e.target.blur();
         }
     });
+    } // end if (tableEl)
 
 
     //show element
@@ -7855,7 +7971,7 @@ function createAndAppendTable(dtControls) {
     // Refreshes page source first, skips root/system/0-size nodes, keeps nodes
     // with label/name/text/resource-id/etc., maps types + XPath candidates.
     // ===========================================================================
-    document.getElementById("scrapeUI").addEventListener("click", async () => {
+    safeOn("scrapeUI", "click", async () => {
             if (createFeatureMode) return;
 
             // Strict Page Name Saved Check BEFORE scraping
@@ -7965,113 +8081,23 @@ function createAndAppendTable(dtControls) {
         dtControls = [];
     });
 
-    document.getElementById("closePreview").addEventListener("click", () => {
-        document.getElementById("split-div3").style.display = "none";
+    safeOn("closePreview", "click", () => {
+        const split3 = document.getElementById("split-div3");
+        if (split3) split3.style.display = "none";
 
         const ss = document.getElementById("ss");
-        if (ss) {
-            ss.remove();
-        }
+        if (ss) ss.remove();
 
-        document.getElementById("image-container_ss").innerHTML = "";
+        const imgSs = document.getElementById("image-container_ss");
+        if (imgSs) imgSs.innerHTML = "";
     });
 
-    const tokenInput = document.getElementById("tokenInput");
+    // Token already bound at top of file — re-bind is a no-op if dataset.tokenBound is set
+    if (typeof bindTokenConnectEarly === 'function') bindTokenConnectEarly();
 
-    tokenInput.addEventListener("keydown", function (e) {
-
-        if (e.key !== "Enter") return;
-
-        e.preventDefault();
-
-        const encryptedToken = tokenInput.value.trim();
-        const tokenStatus = document.getElementById("tokenStatus");
-
-        tokenInput.readOnly = true;
-
-        // Decrypt the pasted token
-        const decryptedToken = decryptData(encryptedToken);
-
-        let isValidJson = false;
-        let parsedData = null;
-
-        // Strict Evaluation: Prevent passed states on partial block corruption
-        if (decryptedToken) {
-            try {
-                parsedData = JSON.parse(decryptedToken);
-                // Verify structural object properties to guarantee total validity
-                if (parsedData && (parsedData.userID || parsedData.baseUrl)) {
-                    isValidJson = true;
-                }
-            } catch (e) {
-                isValidJson = false;
-            }
-        }
-
-        console.log("Validation Result:", isValidJson);
-
-        // Inside your tokenInput keydown listener:
-                if (isValidJson && parsedData) {
-                    // Hide token input, Show connected status & Change button
-                    tokenInput.style.setProperty("display", "none", "important");
-                    tokenStatus.style.setProperty("display", "block", "important");
-
-                    const changeTokenBtn = document.getElementById("changeTokenBtn");
-                    if (changeTokenBtn) changeTokenBtn.style.setProperty("display", "inline-block", "important");
-
-                    tokenStatus.innerHTML = "Connected";
-                    tokenStatus.style.backgroundColor = "rgba(22, 163, 74, 0.18)";
-                    tokenStatus.style.border = "1px solid rgba(74, 222, 128, 0.45)";
-                    tokenStatus.style.color = "#bbf7d0";
-
-                    localStorage.setItem("algoQAUser", JSON.stringify(parsedData));
-                    console.log("Saved Data:", localStorage.getItem("algoQAUser"));
-
-                    const runBtn = document.getElementById("Run");
-
-                    // Session Check: If app is already active, lock Launch but restore scraper controls
-                    if (driver) {
-                        runBtn.disabled = true;
-                        runBtn.style.backgroundColor = "#B6B6B4";
-
-                        const featureButtons = ["Scrape", "scrapeUI", "reset", "algoQA"];
-                        featureButtons.forEach(btnId => {
-                            const btn = document.getElementById(btnId);
-                            if (btn) {
-                                btn.disabled = false;
-                                btn.style.backgroundColor = "#2F8BCC";
-                            }
-                        });
-                    } else {
-                        setLaunchEnabled(true);
-                    }
-
-                } else {
-                    // Clear and fail immediately if token is invalid or tampered with
-                    tokenInput.style.setProperty("display", "none", "important");
-                    tokenStatus.style.setProperty("display", "block", "important");
-                    tokenStatus.innerHTML = "Invalid token";
-                    tokenStatus.style.backgroundColor = "rgba(239, 68, 68, 0.18)";
-                    tokenStatus.style.border = "1px solid rgba(252, 165, 165, 0.45)";
-                    tokenStatus.style.color = "#fecaca";
-
-                    // Hide change button on error
-                    const changeTokenBtn = document.getElementById("changeTokenBtn");
-                    if (changeTokenBtn) changeTokenBtn.style.setProperty("display", "none", "important");
-                    setLaunchEnabled(false);
-
-                    setTimeout(() => {
-                        tokenStatus.style.setProperty("display", "none", "important");
-                        tokenInput.style.setProperty("display", "inline-block", "important");
-                        tokenInput.value = "";
-                        tokenInput.readOnly = false;
-                        tokenInput.focus();
-                    }, 2000);
-                }
-    });
-
-    document.getElementById("algoQA").addEventListener("click", async () => {
-        const userData = JSON.parse(localStorage.getItem("algoQAUser"));
+    safeOn("algoQA", "click", async () => {
+        let userData = null;
+        try { userData = JSON.parse(localStorage.getItem("algoQAUser")); } catch (_) {}
         if (!userData) {
             showCustomAlert("Authentication Error", "Token data not found. Please paste your token.", "error");
             return;
@@ -8082,7 +8108,6 @@ function createAndAppendTable(dtControls) {
             return;
         }
 
-        // Always send full scraped dataset completely, regardless of column visibility
         await sendTableDataToAPI("myTable");
     });
 

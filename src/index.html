@@ -33,10 +33,11 @@
     <title>AlgoScraper</title>
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
     <link rel="stylesheet" href="./index.css">
-    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline';">
+    <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
 </head>
 
 <body>
+<div id="algoBootErrorBanner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:2147483647;padding:10px 14px;background:#7f1d1d;color:#fecaca;font:13px/1.4 Segoe UI,sans-serif;"></div>
 <div class="overlay" id="overlay"></div>
 <div id="sttus_bar_div" style="text-align: center;height: 22px;display: none;"></div>
 <div id="div_status_bar" style="text-align: center;height: 22px;display: none;">
