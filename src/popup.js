@@ -2205,6 +2205,358 @@
     }
     window.setNoDeviceConnectedState = setNoDeviceConnectedState;
 
+    // -------------------------------------------------------------------------
+    // Device disconnect → save Home to project repo, clear Home.
+    // Reconnect same UDID → restore that project to Home.
+    // Reconnect different UDID → fresh workspace, Launch enabled with device details.
+    // -------------------------------------------------------------------------
+    const LAST_SESSION_DEVICE_STORAGE_KEY = 'algoscraper_last_session_device_v1';
+
+    function readLastSessionDeviceMeta() {
+        try {
+            if (window._lastSessionDeviceMeta) return window._lastSessionDeviceMeta;
+            const raw = localStorage.getItem(LAST_SESSION_DEVICE_STORAGE_KEY);
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            window._lastSessionDeviceMeta = parsed;
+            return parsed;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function writeLastSessionDeviceMeta(meta) {
+        window._lastSessionDeviceMeta = meta || null;
+        try {
+            if (meta) localStorage.setItem(LAST_SESSION_DEVICE_STORAGE_KEY, JSON.stringify(meta));
+            else localStorage.removeItem(LAST_SESSION_DEVICE_STORAGE_KEY);
+        } catch (_) {}
+    }
+
+    function captureWorkingSessionDeviceMeta() {
+        const udid = (document.getElementById('udid')?.value || deviceId || '').trim();
+        const name = (deviceName
+            || document.getElementById('devicename')?.selectedOptions?.[0]?.text
+            || document.getElementById('devicename')?.value
+            || '').trim();
+        const platform = (typeof getSelectedPlatform === 'function'
+            ? getSelectedPlatform()
+            : (document.getElementById('platformname')?.value || 'Android'));
+        return {
+            udid,
+            name,
+            platform,
+            projectKey: window.activeResumedProjectKey || null,
+            appName: window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '') || null,
+            mode: window.activeProjectSessionMode || null,
+            parked: false,
+            updatedAt: Date.now()
+        };
+    }
+
+    /** Call on successful Launch so reconnect can match the last working device. */
+    function rememberWorkingSessionDevice() {
+        const meta = captureWorkingSessionDeviceMeta();
+        if (!meta.udid) return;
+        meta.parked = false;
+        writeLastSessionDeviceMeta(meta);
+    }
+    window.rememberWorkingSessionDevice = rememberWorkingSessionDevice;
+
+    function homeHasWorkToPark() {
+        if (window.activeResumedProjectKey
+            && (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed')) {
+            return true;
+        }
+        const tbody = document.getElementById('myTable');
+        if (tbody && tbody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)').length > 0) {
+            return true;
+        }
+        if (window.registeredPageNames && window.registeredPageNames.size > 0) return true;
+        if (window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0) return true;
+        if (Array.isArray(window.registeredFeatureAreas) && window.registeredFeatureAreas.length > 0) return true;
+        if (typeof registeredFeatureAreas !== 'undefined' && Array.isArray(registeredFeatureAreas) && registeredFeatureAreas.length > 0) {
+            return true;
+        }
+        return false;
+    }
+
+    function clearHomeScrapedWorkspaceKeepShell() {
+        window._resettingHome = true;
+        window._restoringProject = true;
+        try {
+            createFeatureMode = false;
+            pendingFeatureData = null;
+            window.createFeatureMode = false;
+
+            if (typeof window.clearAllPagesAndScrapedDataForNewScenario === 'function') {
+                window.clearAllPagesAndScrapedDataForNewScenario();
+            } else {
+                const tbody = document.getElementById('myTable');
+                if (tbody) {
+                    Array.from(tbody.querySelectorAll('tr')).forEach((row) => {
+                        if (!row.classList.contains('empty-excel-row')) row.remove();
+                    });
+                }
+                window.pageScenarioData = {};
+                window.registeredPageNames = new Set();
+            }
+
+            registeredFeatureAreas = [];
+            window.registeredFeatureAreas = registeredFeatureAreas;
+
+            const scenarioOutlineBar = document.getElementById('scenarioOutlineBar');
+            const scenarioOutlineText = document.getElementById('scenarioOutlineText');
+            if (scenarioOutlineBar) scenarioOutlineBar.style.display = 'none';
+            if (scenarioOutlineText) scenarioOutlineText.value = '';
+
+            const splitDiv3 = document.getElementById('split-div3');
+            if (splitDiv3) splitDiv3.style.display = 'none';
+            const previewContainer = document.getElementById('image-container_ss');
+            if (previewContainer) previewContainer.innerHTML = '';
+
+            const screenshotImg = document.getElementById('screenshot');
+            if (screenshotImg) screenshotImg.style.display = 'none';
+
+            window.activeProjectSessionMode = null;
+            window.activeResumedProjectKey = null;
+            window.activeResumedAppName = null;
+            window._resumedProjectSnapshot = null;
+            window.activeConfiguredProjectKey = null;
+
+            if (typeof renderDefaultExcelGrid === 'function') renderDefaultExcelGrid();
+            else if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
+            if (typeof updateRowNumbers === 'function') updateRowNumbers();
+            if (typeof applyPagination === 'function') {
+                currentPage = 1;
+                applyPagination();
+            }
+        } finally {
+            window._resettingHome = false;
+            window._restoringProject = false;
+        }
+    }
+
+    /**
+     * On disconnect: persist Home → active project in repo, then clear Home UI.
+     * Remembers last UDID/project so same-device reconnect can restore.
+     */
+    function parkHomeWorkOnDeviceDisconnect(reason) {
+        if (window._parkingHomeForDevice) return false;
+        if (!homeHasWorkToPark()) {
+            // Don't clear an already-parked snapshot waiting for reconnect
+            const existing = readLastSessionDeviceMeta();
+            if (existing && existing.parked) return false;
+            const meta = captureWorkingSessionDeviceMeta();
+            if (meta.udid) {
+                meta.parked = false;
+                writeLastSessionDeviceMeta(meta);
+            }
+            return false;
+        }
+
+        window._parkingHomeForDevice = true;
+        try {
+            const meta = captureWorkingSessionDeviceMeta();
+            console.log(`[Device Session] Parking Home work on disconnect (${reason || 'device'}):`, meta.udid, meta.projectKey);
+
+            // Ensure there is a project to receive scraped Home data
+            if (!window.activeResumedProjectKey) {
+                const appName = (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '')
+                    || (document.getElementById('appname')?.value || '').trim();
+                const cleanApp = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : appName) || '';
+                const plat = meta.platform || 'Android';
+                if (cleanApp && cleanApp.toLowerCase() !== 'select app' && typeof createFreshRepoProject === 'function') {
+                    try {
+                        const created = createFreshRepoProject(cleanApp, plat);
+                        meta.projectKey = created && created.key;
+                        meta.appName = created && created.appName;
+                        meta.mode = 'new';
+                    } catch (createErr) {
+                        console.warn('parkHome: createFreshRepoProject failed', createErr);
+                    }
+                }
+            }
+
+            if (typeof window.syncActiveProjectToRepo === 'function') {
+                try { window.syncActiveProjectToRepo(); } catch (e) {
+                    console.warn('parkHome: syncActiveProjectToRepo failed', e);
+                }
+            } else if (typeof archiveCurrentActiveSession === 'function') {
+                try { archiveCurrentActiveSession(); } catch (_) {}
+            }
+
+            // Prefer project key from live session; fall back to snapshot key
+            if (!meta.projectKey) {
+                meta.projectKey = window.activeResumedProjectKey || null;
+            }
+            if (!meta.projectKey && window._resumedProjectSnapshot && window._resumedProjectSnapshot.projectKey) {
+                meta.projectKey = window._resumedProjectSnapshot.projectKey;
+            }
+            if (!meta.appName) {
+                meta.appName = window.activeResumedAppName || meta.appName;
+            }
+
+            meta.parked = true;
+            meta.parkedAt = Date.now();
+            writeLastSessionDeviceMeta(meta);
+
+            clearHomeScrapedWorkspaceKeepShell();
+
+            ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn', 'addScenarioBtn'].forEach((id) => {
+                const btn = document.getElementById(id);
+                if (btn) {
+                    btn.disabled = true;
+                    btn.style.backgroundColor = '#B6B6B4';
+                }
+            });
+
+            return true;
+        } finally {
+            window._parkingHomeForDevice = false;
+        }
+    }
+    window.parkHomeWorkOnDeviceDisconnect = parkHomeWorkOnDeviceDisconnect;
+
+    function restoreParkedHomeForSameDevice(selectedDevice) {
+        const last = readLastSessionDeviceMeta();
+        if (!last || !last.parked || !last.projectKey) return false;
+
+        const snapshot = (typeof fetchRepoProjectSnapshot === 'function')
+            ? fetchRepoProjectSnapshot(last.projectKey)
+            : null;
+        if (!snapshot) {
+            console.warn('[Device Session] Same device reconnected but project snapshot missing:', last.projectKey);
+            last.parked = false;
+            writeLastSessionDeviceMeta(last);
+            return false;
+        }
+
+        console.log('[Device Session] Same device reconnected — restoring project', last.projectKey);
+        window.activeResumedProjectKey = last.projectKey;
+        window.activeResumedAppName = last.appName || snapshot.appName || null;
+        window.activeConfiguredProjectKey = last.projectKey;
+        window.activeProjectSessionMode = 'resumed';
+        window._resumedProjectSnapshot = snapshot;
+        window._resettingHome = false;
+
+        if (typeof window.restoreProjectDataToHomePage === 'function') {
+            window.restoreProjectDataToHomePage(snapshot);
+        }
+
+        last.parked = false;
+        last.udid = (selectedDevice && selectedDevice.id) || last.udid;
+        last.name = (selectedDevice && selectedDevice.name) || last.name;
+        last.updatedAt = Date.now();
+        writeLastSessionDeviceMeta(last);
+
+        if (typeof setPlatformAppDeviceEditable === 'function') setPlatformAppDeviceEditable(true);
+        if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
+            setLaunchEnabled(canEnableLaunch());
+        }
+        // Session not live yet — scrape stays off until Launch
+        ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn'].forEach((id) => {
+            const btn = document.getElementById(id);
+            if (btn && (id === 'reset' || id === 'download' || id === 'algoQA')) {
+                // Allow export of restored table before re-launch
+                btn.disabled = false;
+                btn.style.backgroundColor = '#2F8BCC';
+            }
+        });
+        if (typeof setPageNameBoxEnabled === 'function') setPageNameBoxEnabled(true);
+
+        if (typeof showDeviceScreenMessage === 'function') {
+            showDeviceScreenMessage('ready_to_launch', {
+                detail: 'Same device restored. Click Launch Application to continue.'
+            });
+        }
+        return true;
+    }
+
+    function prepareFreshWorkspaceForNewDevice(selectedDevice) {
+        const last = readLastSessionDeviceMeta();
+        console.log('[Device Session] New device connected — fresh workspace', selectedDevice && selectedDevice.id);
+
+        // Home should already be empty from park; ensure session keys are clear
+        if (homeHasWorkToPark()) {
+            clearHomeScrapedWorkspaceKeepShell();
+        } else {
+            window.activeProjectSessionMode = null;
+            window.activeResumedProjectKey = null;
+            window.activeResumedAppName = null;
+            window._resumedProjectSnapshot = null;
+            window.activeConfiguredProjectKey = null;
+        }
+
+        writeLastSessionDeviceMeta({
+            udid: (selectedDevice && selectedDevice.id) || '',
+            name: (selectedDevice && selectedDevice.name) || '',
+            platform: (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android'),
+            projectKey: null,
+            appName: null,
+            mode: null,
+            parked: false,
+            updatedAt: Date.now()
+        });
+
+        if (typeof setPlatformAppDeviceEditable === 'function') setPlatformAppDeviceEditable(true);
+        if (typeof unlockLaunchForm === 'function') {
+            try { unlockLaunchForm(); } catch (_) {}
+        }
+        if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
+            setLaunchEnabled(canEnableLaunch());
+        }
+
+        if (typeof showDeviceScreenMessage === 'function' && selectedDevice) {
+            const typeLabel = selectedDevice.type === 'emulator'
+                ? 'emulator'
+                : selectedDevice.type === 'simulator'
+                    ? 'simulator'
+                    : 'device';
+            showDeviceScreenMessage('connected', {
+                name: selectedDevice.name || selectedDevice.id || 'Device',
+                typeLabel,
+                id: selectedDevice.id
+            });
+        }
+
+        // Drop stale "disconnected" alert if still open
+        try {
+            const popup = document.getElementById('confirmationPopup');
+            const overlay = document.getElementById('overlay');
+            const popupTitle = (document.getElementById('popup_title')?.innerText || '').toLowerCase();
+            if (popup && popup.style.display === 'block' && popupTitle.includes('disconnected')) {
+                popup.style.display = 'none';
+                if (overlay) overlay.style.display = 'none';
+                window._customAlertOnOkay = null;
+            }
+        } catch (_) {}
+    }
+
+    /**
+     * After Device/App UI is filled from a live device list.
+     * Uses parked last-session UDID to restore or start fresh.
+     */
+    function handleDeviceReconnectWorkspace(selectedDevice) {
+        if (!selectedDevice || !selectedDevice.id) return;
+        if (driver) return; // live session owns Home
+        if (window._parkingHomeForDevice || window._restoringProject) return;
+
+        const last = readLastSessionDeviceMeta();
+        if (!last || !last.parked) return;
+
+        const newId = String(selectedDevice.id || '').trim();
+        const lastId = String(last.udid || '').trim();
+        const sameDevice = !!(lastId && newId && lastId === newId);
+
+        if (sameDevice) {
+            restoreParkedHomeForSameDevice(selectedDevice);
+        } else {
+            prepareFreshWorkspaceForNewDevice(selectedDevice);
+        }
+    }
+    window.handleDeviceReconnectWorkspace = handleDeviceReconnectWorkspace;
+
     let realtimeDeviceMonitorInterval = null;
     let lastKnownDeviceFingerprint = "";
 
@@ -2378,6 +2730,9 @@
             }
             if (typeof syncDevicePreviewConnectionMessage === 'function') {
                 syncDevicePreviewConnectionMessage(platformDevices, { force: !driver });
+            }
+            if (typeof handleDeviceReconnectWorkspace === 'function') {
+                handleDeviceReconnectWorkspace(selectedDevice);
             }
             if (isStartup && typeof window.switchAppTab === 'function') {
                 window.switchAppTab('home');
@@ -2584,8 +2939,14 @@
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
                         lastKnownDeviceFingerprint = '';
                         consecutiveEmptyDevicePolls = 0;
+                        if (typeof parkHomeWorkOnDeviceDisconnect === 'function') {
+                            parkHomeWorkOnDeviceDisconnect('active-session');
+                        }
                         if (typeof markSessionInterrupted === 'function') {
-                            markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`));
+                            markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`), {
+                                skipDisconnectAlert: true,
+                                skipDeviceUiHandling: true
+                            });
                         }
                         applyConnectedDevicesToUi(freshDevices, {
                             startup: false,
@@ -2593,11 +2954,7 @@
                             forceEmpty: freshDevices.length === 0
                         });
                         if (!freshDevices.length) {
-                            showCustomAlert(
-                                'Device Disconnected',
-                                `The device used for this session was disconnected.<br><br>Please reconnect an Android device${process.platform !== 'win32' ? ', emulator, iOS device, or simulator' : ' or emulator'} and Launch again.`,
-                                'warning'
-                            );
+                            showAppPopup('device_disconnected_session');
                         }
                         return;
                     }
@@ -2689,13 +3046,15 @@
                     }
                     const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !uiEmpty;
                     if (!uiEmpty || lastKnownDeviceFingerprint) {
+                        if (wasDeviceConnectedBefore && typeof parkHomeWorkOnDeviceDisconnect === 'function') {
+                            parkHomeWorkOnDeviceDisconnect('idle-disconnect');
+                        }
                         lastKnownDeviceFingerprint = '';
                         applyConnectedDevicesToUi([], { forceEmpty: true, startup: false });
                         if (wasDeviceConnectedBefore) {
-                            showCustomAlert(
-                                'Device Disconnected',
-                                `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ', emulator, iOS device, or simulator' : ' or emulator'}.`,
-                                'warning',
+                            showAppPopup(
+                                'device_disconnected',
+                                null,
                                 () => {
                                     setNoDeviceConnectedState();
                                 }
@@ -3104,7 +3463,7 @@
     window.launchConfiguredProject = async function() {
         if (typeof canEnableLaunch === 'function' && !canEnableLaunch()) {
             if (typeof showCustomAlert === 'function') {
-                showCustomAlert("Authentication Required", "Please paste and connect a valid token before launching the application.", "warning");
+                showAppPopup('auth_required');
             }
             return;
         }
@@ -3123,9 +3482,12 @@
         // 1. Windows platform guard
         if (process.platform === 'win32' && isIos) {
             if (typeof showCustomAlert === 'function') {
-                showCustomAlert(
+                showStructuredAlert(
                     "Platform Not Supported on Windows",
-                    "iOS automation requires macOS with Xcode and Apple developer tools.<br><br>Windows only supports Android devices and emulators. Please switch Platform to <b>Android</b>.",
+                    {
+                        lead: "iOS automation requires macOS with Xcode and Apple developer tools.",
+                        hint: "Windows only supports Android devices and emulators. Switch Platform to Android."
+                    },
                     "error"
                 );
             }
@@ -3171,49 +3533,80 @@
 
         // 3. Device connectivity validation
         if (!devName || devName === 'No device connected' || devName === 'Select Device' || !udidName) {
-            if (typeof showCustomAlert === 'function') {
-                showCustomAlert(
-                    "Device Required",
-                    "No connected device or simulator detected.<br><br>Please connect a physical device via USB or start an emulator/simulator before launching.",
-                    "warning"
-                );
+            if (typeof showAppPopup === 'function') {
+                showAppPopup('device_required');
             }
             return;
         }
 
         // 4. Application package / bundle validation
         if (!appName || appName === 'No device connected' || appName === 'Select App' || appName === 'Loading Apps...') {
-            if (typeof showCustomAlert === 'function') {
-                showCustomAlert("Application Required", "Please select an installed application from the App dropdown before launching.", "warning");
+            if (typeof showStructuredAlert === 'function') {
+                showStructuredAlert(
+                    "Application Required",
+                    {
+                        lead: "No application is selected.",
+                        hint: "Choose an installed app from the App dropdown before launching."
+                    },
+                    "warning"
+                );
             }
             return;
         }
 
         if (isIos && !bundleID) {
-            if (typeof showCustomAlert === 'function') {
-                showCustomAlert("Bundle Identifier Required", "Please specify a valid iOS Bundle ID in Configuration before launching.", "warning");
+            if (typeof showStructuredAlert === 'function') {
+                showStructuredAlert(
+                    "Bundle Identifier Required",
+                    {
+                        lead: "iOS Bundle ID is missing.",
+                        hint: "Enter a valid Bundle ID in Configuration before launching."
+                    },
+                    "warning"
+                );
             }
             return;
         }
 
         if (!isIos) {
             if (!appPackage) {
-                if (typeof showCustomAlert === 'function') {
-                    showCustomAlert("App Package Required", "Please specify a valid Android Package identifier before launching.", "warning");
+                if (typeof showStructuredAlert === 'function') {
+                    showStructuredAlert(
+                        "App Package Required",
+                        {
+                            lead: "Android package name is missing.",
+                            hint: "Enter a valid package identifier before launching."
+                        },
+                        "warning"
+                    );
                 }
                 return;
             }
             if (!appActivity || appActivity.toLowerCase() === 'loading activity...') {
-                if (typeof showCustomAlert === 'function') {
-                    showCustomAlert("App Activity Required", "Android Activity is still resolving. Please wait a moment or specify MainActivity before launching.", "warning");
+                if (typeof showStructuredAlert === 'function') {
+                    showStructuredAlert(
+                        "App Activity Required",
+                        {
+                            lead: "Android Activity is still resolving.",
+                            hint: "Wait a moment, or enter MainActivity manually before launching."
+                        },
+                        "warning"
+                    );
                 }
                 return;
             }
         }
 
         if (!appiumURL) {
-            if (typeof showCustomAlert === 'function') {
-                showCustomAlert("Appium Gateway Required", "Appium server URL is missing. Please ensure Appium is running on port 4723.", "warning");
+            if (typeof showStructuredAlert === 'function') {
+                showStructuredAlert(
+                    "Appium Gateway Required",
+                    {
+                        lead: "Appium server URL is missing.",
+                        hint: "Ensure Appium is running on port 4723, then try again."
+                    },
+                    "warning"
+                );
             }
             return;
         }
@@ -3898,7 +4291,7 @@
     if (runBtnEl) {
     runBtnEl.addEventListener('click', async () => {
             if (!canEnableLaunch()) {
-                showCustomAlert("Authentication Required", "Please paste and connect a valid token before launching the application.", "warning");
+                showAppPopup('auth_required');
                 return;
             }
             // Windows: #platformname is a readonly INPUT; macOS: SELECT — never use .options
@@ -3915,9 +4308,12 @@
 
             // Windows compatibility check: iOS automation is strictly macOS only
             if (process.platform === 'win32' && plateformOption === 'IOS') {
-                showCustomAlert(
+                showStructuredAlert(
                     "Platform Not Supported on Windows",
-                    "iOS automation requires macOS with Xcode and Apple developer tools.<br><br>Windows only supports Android devices and emulators. Please switch Platform to <b>Android</b>.",
+                    {
+                        lead: "iOS automation requires macOS with Xcode and Apple developer tools.",
+                        hint: "Windows only supports Android devices and emulators. Switch Platform to Android."
+                    },
                     "error"
                 );
                 return;
@@ -4004,9 +4400,13 @@
             }
 
             if (!isValid) {
-                showCustomAlert(
+                showStructuredAlert(
                     "Missing Required Fields",
-                    `Please fill in or select the required field(s) before launching:<br><br>• <b>${missingFields.join('</b><br>• <b>')}</b>`,
+                    {
+                        lead: "Please fill in or select the required fields before launching.",
+                        items: missingFields,
+                        hint: "Update the highlighted fields on Home, then try Launch Application again."
+                    },
                     "warning"
                 );
                 return;
@@ -4247,9 +4647,12 @@
                         `${isIos ? 'iOS' : 'Android'} device not connected: "${deviceName || udid}". Reconnect device and click Launch Application.`,
                         "error"
                     );
-                    showCustomAlert(
+                    showStructuredAlert(
                         "Device Not Connected",
-                        `The selected ${isIos ? 'iOS' : 'Android'} device (<b>${deviceName || udid}</b>) is not detected.<br><br>${hint}`,
+                        {
+                            lead: `The selected ${isIos ? 'iOS' : 'Android'} device (<b>${escapePopupPlain(deviceName || udid || 'Unknown')}</b>) is not detected.`,
+                            hint
+                        },
                         "warning"
                     );
                     return;
@@ -4478,6 +4881,12 @@
             if (addScenarioBtnAfterLaunch) {
                 addScenarioBtnAfterLaunch.disabled = false;
                 addScenarioBtnAfterLaunch.style.backgroundColor = '#2F8BCC';
+            }
+
+            if (typeof rememberWorkingSessionDevice === 'function') {
+                rememberWorkingSessionDevice();
+            } else if (typeof window.rememberWorkingSessionDevice === 'function') {
+                window.rememberWorkingSessionDevice();
             }
 
             // Set initial page name to the App Name as the first page
@@ -5073,7 +5482,7 @@
 
         document.getElementById("download") && document.getElementById("download").addEventListener('click', async () => {
             if (!tableCreated || !hasValidTableData('myTable')) {
-                showCustomAlert("Export Failed", "No scraped data found to download.", "error");
+            showAppPopup('export_failed', { message: 'No scraped data found to download.' });
                 return;
             }
 
@@ -5994,11 +6403,24 @@ async function ensureWindowsAndroidReadyForRefresh() {
     console.warn("Windows refresh: foreground state uncertain; continuing without killing session");
 }
 
-function markSessionInterrupted(err) {
+function markSessionInterrupted(err, opts) {
+    const options = opts || {};
     const rawMsg = err && err.message ? err.message : String(err || "");
     const readableError = rawMsg.split('\n')[0].substring(0, 150);
     const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection/i.test(rawMsg);
     const isAppBackground = /closed or running in the background|not running|background/i.test(rawMsg);
+
+    const platform = typeof getSelectedPlatform === 'function'
+        ? getSelectedPlatform()
+        : (document.getElementById('platformname')?.value || 'Android');
+    const isAndroid = typeof normalizePlatformName === 'function'
+        ? normalizePlatformName(platform) === 'Android'
+        : String(platform).toLowerCase().indexOf('ios') === -1;
+
+    // Save scraped Home → repo and clear Home before tearing down device UI
+    if (isDeviceDisconnected && typeof window.parkHomeWorkOnDeviceDisconnect === 'function') {
+        window.parkHomeWorkOnDeviceDisconnect('session-interrupted');
+    }
 
     const screenshotImg = document.getElementById("screenshot");
     if (screenshotImg) screenshotImg.style.display = "none";
@@ -6031,51 +6453,69 @@ function markSessionInterrupted(err) {
     driver = null;
     refreshShouldLaunchApp = true;
 
-    if (isDeviceDisconnected) {
-        const currentTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(platform) : platform;
-        const alternateTarget = currentTarget === 'Android' ? 'IOS' : 'Android';
-        const alternateDevices = Array.isArray(connectedDevices) ? devicesForPlatform(alternateTarget, connectedDevices) : [];
+    if (!isDeviceDisconnected || options.skipDeviceUiHandling) {
+        return;
+    }
 
-        if (alternateDevices.length > 0 && process.platform !== 'win32') {
-            const platformSelect = document.getElementById('platformname');
-            if (platformSelect) {
-                applyingPlatformFromDevice = true;
-                platformSelect.value = alternateTarget;
-                lastSelectedPlatform = alternateTarget;
-                if (typeof updatePlatformUI === 'function') updatePlatformUI();
-                if (typeof platformSelect._rebuildCustomSelect === 'function') platformSelect._rebuildCustomSelect();
-                applyingPlatformFromDevice = false;
-            }
-            const selectedAlt = populateDeviceDropdown(alternateDevices);
-            if (selectedAlt) {
-                if (alternateTarget === 'Android') {
-                    ipcRenderer.invoke("get-android-version", selectedAlt.id).then((ver) => {
-                        if (ver) {
-                            const pv = document.getElementById('platformversion');
-                            if (pv) {
-                                pv.value = ver;
-                                pv.dataset.userEdited = 'true';
-                            }
+    const currentTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(platform) : platform;
+    const alternateTarget = currentTarget === 'Android' ? 'IOS' : 'Android';
+    const alternateDevices = Array.isArray(connectedDevices) ? devicesForPlatform(alternateTarget, connectedDevices) : [];
+
+    if (alternateDevices.length > 0 && process.platform !== 'win32') {
+        const platformSelect = document.getElementById('platformname');
+        if (platformSelect) {
+            applyingPlatformFromDevice = true;
+            platformSelect.value = alternateTarget;
+            lastSelectedPlatform = alternateTarget;
+            if (typeof updatePlatformUI === 'function') updatePlatformUI();
+            if (typeof platformSelect._rebuildCustomSelect === 'function') platformSelect._rebuildCustomSelect();
+            applyingPlatformFromDevice = false;
+        }
+        const selectedAlt = populateDeviceDropdown(alternateDevices);
+        if (selectedAlt) {
+            if (alternateTarget === 'Android') {
+                ipcRenderer.invoke("get-android-version", selectedAlt.id).then((ver) => {
+                    if (ver) {
+                        const pv = document.getElementById('platformversion');
+                        if (pv) {
+                            pv.value = ver;
+                            pv.dataset.userEdited = 'true';
                         }
-                    }).catch(() => {});
-                }
-                ipcRenderer.send("get-installed-apps", selectedAlt);
+                    }
+                }).catch(() => {});
             }
-
-            showCustomAlert(
-                "Device Disconnected",
-                `The active <b>${currentTarget === 'Android' ? 'Android' : 'iOS'}</b> device was disconnected.<br><br>Automatically switched platform to available <b>${alternateTarget === 'Android' ? 'Android' : 'iOS'}</b> device: <b>${selectedAlt ? selectedAlt.name : ''}</b>.`,
-                "warning"
-            );
-            return;
+            ipcRenderer.send("get-installed-apps", selectedAlt);
+            if (typeof handleDeviceReconnectWorkspace === 'function') {
+                handleDeviceReconnectWorkspace(selectedAlt);
+            }
         }
 
-        // If no alternate device available
-        setNoDeviceConnectedState();
-        showCustomAlert(
-            "Device Disconnected",
-            `The connected <b>${isAndroid ? 'Android' : 'iOS'}</b> device was unplugged or disconnected, and no other device is available.<br><br>Please connect a device or start an emulator/simulator to continue.`,
-            "warning",
+        if (!options.skipDisconnectAlert) {
+            showStructuredAlert(
+                "Device Disconnected",
+                {
+                    lead: `The active <b>${currentTarget === 'Android' ? 'Android' : 'iOS'}</b> device was disconnected.`,
+                    hint: `Switched to available <b>${alternateTarget === 'Android' ? 'Android' : 'iOS'}</b> device: <b>${escapePopupPlain(selectedAlt ? selectedAlt.name : '')}</b>.`
+                },
+                "warning"
+            );
+        }
+        return;
+    }
+
+    // If no alternate device available
+    setNoDeviceConnectedState();
+    if (!options.skipDisconnectAlert) {
+        showAppPopup(
+            'device_disconnected',
+            {
+                message: buildStructuredPopupHtml({
+                    lead: `The connected <b>${isAndroid ? 'Android' : 'iOS'}</b> device was unplugged or disconnected, and no other device is available.`,
+                    hint: process.platform === 'win32'
+                        ? 'Connect an Android device or emulator to continue.'
+                        : 'Connect a device or start an emulator/simulator to continue.'
+                })
+            },
             () => {
                 setNoDeviceConnectedState();
             }
@@ -6098,7 +6538,7 @@ function handleDeviceCommandError(err, label) {
     // If driver is still active and app is open, do not kill the session
     if (driver && !isDeadSessionError(err) && !isAppClosedOrBackgroundError(err)) {
         const msg = rawMsg.split('\n')[0].substring(0, 180);
-        showCustomAlert("Device action failed", msg, "warning");
+        showCustomAlert("Device Action Failed", msg, "warning");
         return;
     }
     markSessionInterrupted(err);
@@ -6684,7 +7124,14 @@ async function performSwipe(startX, startY, endX, endY) {
         const pageName = document.getElementById("pagename_searchbox").value.trim();
         if (pageName === "") {
             document.getElementById("pagename_searchbox").style.borderColor = "red";
-            showCustomAlert("Missing Information", "Please enter Page Name before attempting to scroll.", "warning");
+            showStructuredAlert(
+                "Missing Information",
+                {
+                    lead: "Page Name is required for scroll.",
+                    hint: "Enter a Page Name, then try scrolling again."
+                },
+                "warning"
+            );
             flashPageNameError();
             return;
         }
@@ -6804,9 +7251,12 @@ async function performSwipe(startX, startY, endX, endY) {
 
         // Check if content genuinely scrolled
         if (!hasScreenContentScrolled(preXmlDoc, window.xmlDoc, preImage, image)) {
-            showCustomAlert(
+            showStructuredAlert(
                 "Scroll Complete",
-                "No more content to scroll on this page (end of page reached). Swipe was not added to the table.",
+                {
+                    lead: "No more content to scroll on this page.",
+                    hint: "End of page reached. Swipe was not added to the table."
+                },
                 "info"
             );
             return;
@@ -8202,7 +8652,7 @@ function createAndAppendTable(dtControls) {
         }
 
         if (!window.xmlDoc) {
-            showCustomAlert("Scrape Failed", "No page source available. Launch the app and try again.", "warning");
+            showAppPopup('scrape_failed');
             return;
         }
 
@@ -8305,12 +8755,12 @@ function createAndAppendTable(dtControls) {
         let userData = null;
         try { userData = JSON.parse(localStorage.getItem("algoQAUser")); } catch (_) {}
         if (!userData) {
-            showCustomAlert("Authentication Error", "Token data not found. Please paste your token.", "error");
+            showAppPopup('auth_error');
             return;
         }
 
         if (!tableCreated || !hasValidTableData('myTable')) {
-            showCustomAlert("Export Failed", "No scraped data found to send.", "error");
+            showAppPopup('export_failed', { message: 'No scraped data found to send.' });
             return;
         }
 
@@ -8320,7 +8770,7 @@ function createAndAppendTable(dtControls) {
     async function sendTableDataToAPI(tableId) {
         const userData = JSON.parse(localStorage.getItem("algoQAUser"));
         if (!userData) {
-            showCustomAlert("Authentication Error", "Token data not found.", "error");
+            showAppPopup('auth_error', { message: 'Token data not found. Please paste your token and press Enter.' });
             return;
         }
 
@@ -8330,7 +8780,7 @@ function createAndAppendTable(dtControls) {
             : rawTableData.map(r => { const { rect, DELETE, ...rest } = r; rest["APP URL"] = ""; return rest; });
 
         if (tableData.length === 0) {
-            showCustomAlert("Export Failed", "No scraped data found.", "error");
+            showAppPopup('export_failed');
             return;
         }
 
@@ -8412,7 +8862,7 @@ function createAndAppendTable(dtControls) {
             const result = await response.json();
             if (!response.ok) throw new Error("API request failed");
 
-            showCustomAlert("Success!", "Scraped data shared successfully to AlgoQA.", "success");
+            showAppPopup('export_success');
 
             const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
             const udid = (document.getElementById('udid')?.value || '').trim();
@@ -8503,7 +8953,7 @@ function createAndAppendTable(dtControls) {
                     if (runBtn && !runBtn.disabled) {
                         runBtn.click();
                     } else {
-                        showCustomAlert("Cannot Launch", "Please make sure you are authenticated and all application details are filled.", "warning");
+                        showAppPopup('cannot_launch');
                     }
                     return;
                 }
@@ -8632,7 +9082,7 @@ function createAndAppendTable(dtControls) {
                 if (isWindowsAndroid() && driver && !isDeadSessionError(err)) {
                     console.error("Refresh Error:", err);
                     const msg = err && err.message ? err.message.split('\n')[0].substring(0, 180) : String(err).substring(0, 180);
-                    showCustomAlert("Refresh failed", msg, "warning");
+                    showCustomAlert("Refresh Failed", msg, "warning");
                 } else {
                     handleDeviceCommandError(err, "Refresh Error:");
                 }
@@ -10191,7 +10641,19 @@ function handleInvalidPageNameAttempt() {
     if (typeof flashPageNameError === "function") flashPageNameError(); // Flashes the badge red
 
     // NEW: Updated alert text to mention "All" is reserved
-    showCustomAlert("Invalid Page Name", "Please enter a valid Page Name. It must be at least 3 characters, can accept alphanumeric characters, a single space between words, and must start with an alphabet.", "warning");
+    showStructuredAlert(
+        "Invalid Page Name",
+        {
+            lead: "Enter a valid Page Name before continuing.",
+            items: [
+                "At least 3 characters",
+                "Starts with a letter",
+                "Letters, numbers, and a single space between words only"
+            ],
+            hint: "The name \"All\" is reserved and cannot be used."
+        },
+        "warning"
+    );
 }
 
 function verifyPageNameSavedBeforeScraping(actionLabel) {
@@ -10206,21 +10668,30 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
             if (typeof flashPageNameError === "function") flashPageNameError();
 
             if (check.reason === "unsaved") {
-                showCustomAlert(
+                showStructuredAlert(
                     "Save Page Name",
-                    `Please save the Page Name first (click the green checkmark ✓) before ${action}.`,
+                    {
+                        lead: "Page Name is not saved yet.",
+                        hint: `Click the green checkmark ✓ before ${action}.`
+                    },
                     "warning"
                 );
             } else if (check.reason === "empty") {
-                showCustomAlert(
+                showStructuredAlert(
                     "Page Name Required",
-                    `Please enter and save a Page Name before ${action}.`,
+                    {
+                        lead: "Page Name is missing.",
+                        hint: `Enter and save a Page Name before ${action}.`
+                    },
                     "warning"
                 );
             } else if (check.reason === "all_reserved") {
-                showCustomAlert(
+                showStructuredAlert(
                     "Action Restricted",
-                    `Cannot perform action while viewing 'All' pages. Please select or create a specific Page Name first.`,
+                    {
+                        lead: "You are viewing \"All\" pages.",
+                        hint: `Select or create a specific Page Name before ${action}.`
+                    },
                     "warning"
                 );
             } else {
@@ -10241,9 +10712,12 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
     const confirmIcon = document.querySelector('.confirm-edit-icon');
     const isConfirmVisible = confirmIcon && confirmIcon.style.display !== 'none' && window.getComputedStyle(confirmIcon).display !== 'none';
     if (isConfirmVisible) {
-        showCustomAlert(
+        showStructuredAlert(
             "Save Page Name",
-            `Please save the Page Name first (click the green checkmark ✓) before ${action}.`,
+            {
+                lead: "Page Name is not saved yet.",
+                hint: `Click the green checkmark ✓ before ${action}.`
+            },
             "warning"
         );
         return false;
@@ -10472,9 +10946,12 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                 drawFeatureAreaHighlight(existingOnScreen, { active: true });
             }
             const existingName = String(existingOnScreen.name || '').trim() || 'this feature';
-            showCustomAlert(
+            showStructuredAlert(
                 "Feature Already Created",
-                `“<b>${existingName}</b>” is already created for this area. Please select a different area.`,
+                {
+                    lead: `“<b>${escapePopupPlain(existingName)}</b>” is already created for this area.`,
+                    hint: "Select a different area on the screen."
+                },
                 "warning"
             );
             return;
@@ -11804,7 +12281,14 @@ function updateRowEyeButtonState() {
                     if (live) {
                         pendingRepoDelete = null;
                         if (typeof showCustomAlert === 'function') {
-                            showCustomAlert('Active Project', 'This project is currently open and cannot be deleted.', 'warning');
+                            showStructuredAlert(
+                                'Active Project',
+                                {
+                                    lead: 'This project is currently open.',
+                                    hint: 'It cannot be deleted while it is active.'
+                                },
+                                'warning'
+                            );
                         }
                     } else {
                         delete store[deletedKey];
@@ -13020,9 +13504,12 @@ function initPageNameLogic() {
                 // NEW: Check if the user is in Record Scenario mode
                 var isRecordMode = window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0;
                 if (isRecordMode) {
-                    showCustomAlert(
+                    showStructuredAlert(
                         "Action Restricted",
-                        "You cannot create a new page manually while in Record Scenario mode. Please use the 'Add Scenario' button to create new scenarios and pages.",
+                        {
+                            lead: "Manual page creation is blocked during Record Scenario mode.",
+                            hint: "Use Add Scenario to create new scenarios and pages."
+                        },
                         "warning"
                     );
                     return; // Stop execution so the input doesn't switch to edit mode
@@ -13081,9 +13568,23 @@ function initPageNameLogic() {
                     flashPageNameError();
                     const trimmed = pageNameInput.value.trim();
                     if (typeof isPageNameInRepo === 'function' && isPageNameInRepo(trimmed)) {
-                        showCustomAlert("Page Exists in Repository", `The page "${trimmed}" already exists in the repository for this application. Please choose a different page name.`, "warning");
+                        showStructuredAlert(
+                            "Page Exists in Repository",
+                            {
+                                lead: `The page “${escapePopupPlain(trimmed)}” already exists for this application.`,
+                                hint: "Choose a different page name."
+                            },
+                            "warning"
+                        );
                     } else {
-                        showCustomAlert("Invalid Format", "Please provide a valid, unique Page Name without special characters.", "warning");
+                        showStructuredAlert(
+                            "Invalid Format",
+                            {
+                                lead: "Page Name format is invalid.",
+                                hint: "Use a unique name without special characters."
+                            },
+                            "warning"
+                        );
                     }
                     return;
                 }
@@ -13640,20 +14141,345 @@ onDomReady(() => {
 // [MODALS] Custom #confirmationPopup themes + helpers
 // Types: success (green) | info (blue) | warning (amber) | error (red) | confirm
 // showCustomAlert → Okay only (alertOnly). showConfirmDialog → Cancel+Confirm.
+// All app popups go through these helpers so title/theme/body stay consistent
+// on Windows + Mac.
 // ===========================================================================
-function normalizeModalType(type, title) {
+function normalizeModalType(type, title, message) {
     const allowed = new Set(["success", "info", "warning", "error", "confirm"]);
     const t = String(type || "").toLowerCase().trim();
     if (allowed.has(t)) return t;
 
-    const titleL = String(title || "").toLowerCase();
-    if (/success|shared successfully|saved successfully/.test(titleL)) return "success";
-    if (/error|failed|cannot launch|authentication/.test(titleL)) return "error";
-    if (/confirm|delete|reset|bulk deletion|page deletion/.test(titleL)) return "confirm";
-    if (/scroll complete|connected successfully/.test(titleL)) return "info";
-    if (/missing|invalid|warning|restricted|not available|no device|no data|no rows/.test(titleL)) return "warning";
+    const blob = `${title || ''} ${message || ''}`.toLowerCase();
+    if (/success|shared successfully|saved successfully|imported successfully|refresh done|scroll complete|connected successfully/.test(blob)) return "success";
+    if (/error|failed|cannot launch|authentication error|session interrupted|import failed|scrape failed|export failed/.test(blob)) return "error";
+    if (/confirm|delete|reset|bulk deletion|page deletion|overwrite|continue with old/.test(blob)) return "confirm";
+    if (/device disconnected|device required|no device|missing|invalid|warning|restricted|not available|no data|no rows|authentication required|platform not supported|cannot/.test(blob)) return "warning";
+    if (/connected|ready|info|scroll complete/.test(blob)) return "info";
     return "warning";
 }
+
+function formatPopupTitle(title) {
+    let t = String(title == null ? '' : title).trim();
+    if (!t) t = 'Notice';
+    t = t.replace(/!+$/g, '').replace(/\s+/g, ' ').trim();
+
+    const canonical = {
+        'success': 'Success',
+        'device action failed': 'Device Action Failed',
+        'refresh failed': 'Refresh Failed',
+        'refresh done': 'Refresh Done',
+        'device disconnected': 'Device Disconnected',
+        'device not connected': 'Device Not Connected',
+        'device required': 'Device Required',
+        'authentication required': 'Authentication Required',
+        'authentication error': 'Authentication Error',
+        'export failed': 'Export Failed',
+        'scrape failed': 'Scrape Failed',
+        'cannot launch': 'Cannot Launch',
+        'import failed': 'Import Failed',
+        'import complete': 'Import Complete',
+        'active project': 'Active Project',
+        'no data found': 'No Data Found',
+        'no rows selected': 'No Rows Selected',
+        'missing information': 'Missing Information',
+        'missing required fields': 'Missing Required Fields',
+        'invalid feature name': 'Invalid Feature Name',
+        'invalid page name': 'Invalid Page Name',
+        'control name required': 'Control Name Required',
+        'feature mode active': 'Feature Mode Active',
+        'platform not supported on windows': 'Platform Not Supported on Windows',
+        'application required': 'Application Required',
+        'app package required': 'App Package Required',
+        'app activity required': 'App Activity Required',
+        'bundle identifier required': 'Bundle Identifier Required',
+        'appium gateway required': 'Appium Gateway Required'
+    };
+    const mapped = canonical[t.toLowerCase()];
+    if (mapped) return mapped;
+
+    // Title-case short plain titles that were written in lowercase
+    if (t === t.toLowerCase() && t.length < 48 && !/[<>]/.test(t)) {
+        return t.replace(/\b([a-z])/g, (m) => m.toUpperCase());
+    }
+    return t;
+}
+
+function escapePopupPlain(text) {
+    if (typeof escapeDummyHtml === 'function') return escapeDummyHtml(text);
+    return String(text == null ? '' : text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
+/** Build lead + optional list + optional hint with shared modal structure. */
+function buildStructuredPopupHtml(parts) {
+    const p = parts || {};
+    const lead = (p.lead || p.message || '').trim();
+    const items = Array.isArray(p.items) ? p.items.filter((x) => String(x || '').trim()) : [];
+    const hint = (p.hint || p.detail || '').trim();
+    const extra = (p.extraHtml || '').trim();
+
+    let html = '<div class="modal-msg">';
+    if (lead) {
+        const leadHtml = /<[a-z][\s\S]*>/i.test(lead) ? lead : escapePopupPlain(lead);
+        html += `<p class="modal-msg-lead">${leadHtml}</p>`;
+    }
+    if (items.length) {
+        html += '<ul class="modal-msg-list">';
+        items.forEach((item) => {
+            const itemHtml = /<[a-z][\s\S]*>/i.test(String(item))
+                ? String(item)
+                : escapePopupPlain(String(item).trim());
+            html += `<li>${itemHtml}</li>`;
+        });
+        html += '</ul>';
+    }
+    if (hint) {
+        const hintHtml = /<[a-z][\s\S]*>/i.test(hint) ? hint : escapePopupPlain(hint);
+        html += `<p class="modal-msg-hint">${hintHtml}</p>`;
+    }
+    if (extra) html += extra;
+    html += '</div>';
+    return html;
+}
+
+/**
+ * Normalize any popup body into structured HTML:
+ * lead paragraph, bullet list (when present), optional hint after blank line / 2nd sentence.
+ */
+function formatPopupMessage(message) {
+    let m = message == null ? '' : String(message);
+    m = m.trim();
+    if (!m) return '';
+
+    // Already structured
+    if (/class\s*=\s*["']modal-msg["']/.test(m)) return m;
+
+    m = m.replace(/^\u00a0+|\u00a0+$/g, '').trim();
+
+    // Normalize plain newlines to breaks for consistent splitting
+    if (!/<br\s*\/?>/i.test(m) && /[\r\n]/.test(m)) {
+        m = m.replace(/\r\n|\r|\n/g, '<br>');
+    }
+
+    // Split on double breaks into sections
+    const sections = m
+        .split(/<br\s*\/?>\s*<br\s*\/?>/i)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+    let lead = sections[0] || m;
+    let rest = sections.slice(1).join('<br><br>');
+
+    // Extract bullet lines from lead or rest (•, -, *, or <li>)
+    const bulletRe = /(?:^|<br\s*\/?>)\s*(?:•|·|\-|\*|\d+[.)])\s*(?:\*\*|__|<b>)?\s*([^<\n*]+?)\s*(?:\*\*|__|<\/b>)?\s*(?=$|<br\s*\/?>)/gi;
+    const items = [];
+    const collectBullets = (text) => {
+        let t = String(text || '');
+        const found = [];
+        const re = new RegExp(bulletRe.source, 'gi');
+        let match;
+        while ((match = re.exec(t)) !== null) {
+            const val = String(match[1] || '').replace(/<\/?b>/gi, '').trim();
+            if (val) found.push(val);
+        }
+        if (found.length) {
+            t = t.replace(re, '').replace(/(?:^|<br\s*\/?>)\s*$/g, '').trim();
+            t = t.replace(/(<br\s*\/?>\s*)+$/gi, '').trim();
+        }
+        return { text: t, found };
+    };
+
+    let fromLead = collectBullets(lead);
+    lead = fromLead.text;
+    items.push(...fromLead.found);
+
+    let fromRest = collectBullets(rest);
+    rest = fromRest.text;
+    items.push(...fromRest.found);
+
+    // Explicit <ul><li>
+    const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+    let liMatch;
+    while ((liMatch = liRe.exec(m)) !== null) {
+        const val = String(liMatch[1] || '').replace(/<[^>]+>/g, '').trim();
+        if (val && !items.includes(val)) items.push(val);
+    }
+
+    if (/^\s*<ul[\s\S]*<\/ul>\s*$/i.test(m) && items.length) {
+        lead = '';
+        rest = '';
+    }
+
+    // Flatten single breaks inside lead / rest
+    const flattenBreaks = (s) => String(s || '')
+        .replace(/(<br\s*\/?>\s*)+/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    lead = flattenBreaks(lead);
+    rest = flattenBreaks(rest);
+
+    // Two-sentence plain (or light HTML) messages → lead + hint
+    if (!items.length && !rest) {
+        const plainLead = lead.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        const sentenceParts = plainLead.match(/[^.!?]+[.!?]+(?:\s+|$)|[^.!?]+$/g);
+        if (sentenceParts && sentenceParts.length >= 2) {
+            const first = sentenceParts[0].trim();
+            const second = sentenceParts.slice(1).join(' ').trim();
+            // Only auto-split when both parts are meaningful (avoid "e.g." style splits)
+            if (first.length >= 18 && second.length >= 18 && !/\b(e\.g|i\.e|etc)\b/i.test(first)) {
+                // Prefer keeping original HTML lead for first sentence if simple
+                const cutAt = lead.search(/[.!?](?:\s|$)/);
+                if (cutAt > 0) {
+                    const leadPart = lead.slice(0, cutAt + 1).trim();
+                    const hintPart = lead.slice(cutAt + 1).trim();
+                    if (leadPart && hintPart) {
+                        lead = leadPart;
+                        rest = hintPart;
+                    }
+                }
+            }
+        }
+    }
+
+    let hint = rest || '';
+
+    if (!items.length && !hint) {
+        return buildStructuredPopupHtml({ lead: lead || flattenBreaks(m) });
+    }
+
+    return buildStructuredPopupHtml({ lead, items, hint });
+}
+
+function showStructuredAlert(title, structure, type, onOkay) {
+    const html = buildStructuredPopupHtml(structure || {});
+    showCustomAlert(title, html, type, onOkay);
+}
+window.showStructuredAlert = showStructuredAlert;
+window.buildStructuredPopupHtml = buildStructuredPopupHtml;
+
+function getPopupCopy(kind, extras) {
+    const x = extras || {};
+    const win = typeof process !== 'undefined' && process.platform === 'win32';
+    const deviceHint = win
+        ? 'Connect an Android device or emulator to continue.'
+        : 'Connect an Android/iOS device, emulator, or simulator to continue.';
+
+    switch (kind) {
+        case 'device_disconnected':
+            return {
+                title: 'Device Disconnected',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'The connected device was disconnected and no other device is available.',
+                        hint: deviceHint
+                    }),
+                type: 'warning'
+            };
+        case 'device_disconnected_session':
+            return {
+                title: 'Device Disconnected',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'The device used for this session was disconnected.',
+                        hint: `${deviceHint} Then click Launch Application.`
+                    }),
+                type: 'warning'
+            };
+        case 'device_required':
+            return {
+                title: 'Device Required',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'No connected device detected.',
+                        hint: deviceHint
+                    }),
+                type: 'warning'
+            };
+        case 'auth_required':
+            return {
+                title: 'Authentication Required',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'A valid token is required before launching.',
+                        hint: 'Paste your token in the top bar and press Enter to connect.'
+                    }),
+                type: 'warning'
+            };
+        case 'auth_error':
+            return {
+                title: 'Authentication Error',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'Token data not found.',
+                        hint: 'Paste your token and press Enter to connect again.'
+                    }),
+                type: 'error'
+            };
+        case 'export_failed':
+            return {
+                title: 'Export Failed',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'No scraped data found to export.',
+                        hint: 'Scrape controls on Home, then try again.'
+                    }),
+                type: 'error'
+            };
+        case 'export_success':
+            return {
+                title: 'Success',
+                message: buildStructuredPopupHtml({
+                    lead: x.message || 'Scraped data shared successfully to AlgoQA.'
+                }),
+                type: 'success'
+            };
+        case 'scrape_failed':
+            return {
+                title: 'Scrape Failed',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'No page source available.',
+                        hint: 'Launch the app, wait for the screen to load, then try Scrape UI again.'
+                    }),
+                type: 'warning'
+            };
+        case 'cannot_launch':
+            return {
+                title: 'Cannot Launch',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'Launch could not start.',
+                        hint: 'Make sure you are authenticated and all application details are filled.'
+                    }),
+                type: 'warning'
+            };
+        default:
+            return {
+                title: formatPopupTitle(x.title || 'Notice'),
+                message: formatPopupMessage(x.message || ''),
+                type: normalizeModalType(x.type, x.title, x.message)
+            };
+    }
+}
+
+function showAppPopup(kind, extras, onOkay) {
+    const copy = getPopupCopy(kind, extras);
+    showCustomAlert(copy.title, copy.message, copy.type, onOkay);
+    return copy;
+}
+window.showAppPopup = showAppPopup;
+window.getPopupCopy = getPopupCopy;
 
 /// HELPER: Swaps the colors and icon of the modal header
 function setModalTheme(type) {
@@ -13681,95 +14507,158 @@ function setModalTheme(type) {
 
 /// HELPER: Alert-only modal (Okay, no Cancel) with correct icon/color indication
 function showCustomAlert(title, message, type, onOkay) {
-    const theme = normalizeModalType(type, title);
-    setModalTheme(theme);
+    try {
+        const popup = document.getElementById('confirmationPopup');
+        const overlay = document.getElementById('overlay');
+        const titleEl = document.getElementById('popup_title');
+        const mainEl = document.getElementById('popup_main_text');
+        const subEl = document.getElementById('popup_sub_text');
+        const backBtn = document.getElementById('back_btn');
+        const extraBtn = document.getElementById('extra_btn');
+        const okayBtn = document.getElementById('okay_btn');
 
-    document.getElementById('popup_title').innerText = title;
-    document.getElementById('popup_main_text').innerHTML = message;
-    document.getElementById('popup_sub_text').innerText = "";
+        if (!popup || !titleEl || !mainEl || !okayBtn) {
+            console.warn('showCustomAlert: modal DOM missing', title, message);
+            return;
+        }
 
-    document.getElementById('back_btn').style.display = 'none';
-    document.getElementById('extra_btn').style.display = 'none';
-    document.getElementById('okay_btn').innerText = 'Okay';
+        const cleanTitle = formatPopupTitle(title);
+        const cleanMessage = formatPopupMessage(message);
+        const theme = normalizeModalType(type, cleanTitle, cleanMessage);
+        setModalTheme(theme);
 
-    pendingExportAction = "alertOnly";
-    window._customAlertOnOkay = (typeof onOkay === 'function') ? onOkay : null;
+        titleEl.textContent = cleanTitle;
+        mainEl.innerHTML = cleanMessage;
+        if (subEl) {
+            subEl.innerHTML = '';
+            subEl.style.display = 'none';
+        }
 
-    document.getElementById('confirmationPopup').style.display = 'block';
-    document.getElementById('overlay').style.display = 'block';
+        if (backBtn) backBtn.style.display = 'none';
+        if (extraBtn) {
+            extraBtn.style.display = 'none';
+            extraBtn.onclick = null;
+        }
+        okayBtn.innerText = 'Okay';
+        okayBtn.onclick = null;
+
+        pendingExportAction = "alertOnly";
+        window.pendingExportAction = "alertOnly";
+        window._customAlertOnOkay = (typeof onOkay === 'function') ? onOkay : null;
+
+        popup.style.display = 'block';
+        if (overlay) overlay.style.display = 'block';
+    } catch (err) {
+        console.error('showCustomAlert failed:', err, title, message);
+    }
 }
+window.showCustomAlert = showCustomAlert;
 
 /// HELPER: Confirm modal (Cancel + Confirm) for destructive / export actions
 function showConfirmDialog({ title, mainText, subText, action, theme, okayBtnText, extraBtnText, onOkay, onExtra, onCancel }) {
-    setModalTheme(theme || "confirm");
+    try {
+        const popup = document.getElementById('confirmationPopup');
+        const overlay = document.getElementById('overlay');
+        const titleEl = document.getElementById('popup_title');
+        const mainEl = document.getElementById('popup_main_text');
+        const subEl = document.getElementById('popup_sub_text');
+        const backBtn = document.getElementById('back_btn');
+        const okayBtn = document.getElementById('okay_btn');
+        const extraBtn = document.getElementById('extra_btn');
 
-    const backBtn = document.getElementById('back_btn');
-    backBtn.style.display = 'inline-block';
+        if (!popup || !titleEl || !mainEl || !okayBtn || !backBtn) {
+            console.warn('showConfirmDialog: modal DOM missing', title);
+            return;
+        }
 
-    const okayBtn = document.getElementById('okay_btn');
-    okayBtn.innerText = okayBtnText || 'Confirm';
+        const cleanTitle = formatPopupTitle(title || 'Confirm Action');
+        let cleanMain = String(mainText || '').trim();
+        if (cleanMain && !/class\s*=\s*["']modal-msg["']/.test(cleanMain)) {
+            cleanMain = formatPopupMessage(cleanMain);
+        }
+        let cleanSub = String(subText || '').trim();
+        if (cleanSub && !/class\s*=\s*["']modal-msg["']/.test(cleanSub)) {
+            if (!/<[a-z][\s\S]*>/i.test(cleanSub)) {
+                cleanSub = `<p class="modal-msg-hint">${escapePopupPlain(cleanSub)}</p>`;
+            } else if (!/modal-msg-hint/.test(cleanSub)) {
+                cleanSub = `<p class="modal-msg-hint">${cleanSub}</p>`;
+            }
+        }
+        const resolvedTheme = normalizeModalType(theme || 'confirm', cleanTitle, cleanMain);
+        setModalTheme(resolvedTheme);
 
-    const extraBtn = document.getElementById('extra_btn');
-    if (extraBtnText) {
-        extraBtn.innerText = extraBtnText;
-        extraBtn.style.display = 'inline-block';
-    } else {
-        extraBtn.style.display = 'none';
-    }
+        titleEl.textContent = cleanTitle;
+        mainEl.innerHTML = cleanMain;
+        if (subEl) {
+            subEl.innerHTML = cleanSub;
+            subEl.style.display = cleanSub ? 'block' : 'none';
+        }
 
-    document.getElementById('popup_title').innerText = title || "Confirm Action";
-    document.getElementById('popup_main_text').innerHTML = mainText || "";
-    document.getElementById('popup_sub_text').innerHTML = subText || "";
+        backBtn.style.display = 'inline-block';
+        okayBtn.innerText = okayBtnText || 'Confirm';
 
-    if (action) {
-        pendingExportAction = action;
-        window.pendingExportAction = action;
-    }
+        if (extraBtn) {
+            if (extraBtnText) {
+                extraBtn.innerText = extraBtnText;
+                extraBtn.style.display = 'inline-block';
+            } else {
+                extraBtn.style.display = 'none';
+            }
+        }
 
-    if (typeof onExtra === 'function') {
-        extraBtn.onclick = async (e) => {
-            if (e) { e.preventDefault(); e.stopPropagation(); }
-            document.getElementById('confirmationPopup').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-            extraBtn.style.display = 'none';
-            extraBtn.onclick = null;
-            await onExtra();
-        };
-    } else {
-        extraBtn.onclick = null;
-    }
+        if (action) {
+            pendingExportAction = action;
+            window.pendingExportAction = action;
+        }
 
-    if (typeof onOkay === 'function') {
-        okayBtn.onclick = async (e) => {
-            if (e) { e.preventDefault(); e.stopPropagation(); }
-            document.getElementById('confirmationPopup').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-            const extraBtnEl = document.getElementById('extra_btn');
-            if (extraBtnEl) extraBtnEl.style.display = 'none';
+        if (extraBtn) {
+            if (typeof onExtra === 'function') {
+                extraBtn.onclick = async (e) => {
+                    if (e) { e.preventDefault(); e.stopPropagation(); }
+                    popup.style.display = 'none';
+                    if (overlay) overlay.style.display = 'none';
+                    extraBtn.style.display = 'none';
+                    extraBtn.onclick = null;
+                    await onExtra();
+                };
+            } else {
+                extraBtn.onclick = null;
+            }
+        }
+
+        if (typeof onOkay === 'function') {
+            okayBtn.onclick = async (e) => {
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                popup.style.display = 'none';
+                if (overlay) overlay.style.display = 'none';
+                if (extraBtn) extraBtn.style.display = 'none';
+                okayBtn.onclick = null;
+                await onOkay();
+            };
+        } else {
             okayBtn.onclick = null;
-            await onOkay();
-        };
-    } else {
-        okayBtn.onclick = null;
-    }
+        }
 
-    if (typeof onCancel === 'function') {
-        backBtn.onclick = (e) => {
-            if (e) { e.preventDefault(); e.stopPropagation(); }
-            document.getElementById('confirmationPopup').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
-            const extraBtnEl = document.getElementById('extra_btn');
-            if (extraBtnEl) extraBtnEl.style.display = 'none';
+        if (typeof onCancel === 'function') {
+            backBtn.onclick = (e) => {
+                if (e) { e.preventDefault(); e.stopPropagation(); }
+                popup.style.display = 'none';
+                if (overlay) overlay.style.display = 'none';
+                if (extraBtn) extraBtn.style.display = 'none';
+                backBtn.onclick = null;
+                onCancel();
+            };
+        } else {
             backBtn.onclick = null;
-            onCancel();
-        };
-    } else {
-        backBtn.onclick = null;
-    }
+        }
 
-    document.getElementById('confirmationPopup').style.display = 'block';
-    document.getElementById('overlay').style.display = 'block';
+        popup.style.display = 'block';
+        if (overlay) overlay.style.display = 'block';
+    } catch (err) {
+        console.error('showConfirmDialog failed:', err, title);
+    }
 }
+window.showConfirmDialog = showConfirmDialog;
 
 
 // ===========================================================================
@@ -14138,8 +15027,11 @@ onDomReady(() => {
                 if (hasScrapedTableData()) {
                     showConfirmDialog({
                         title: "Record Scenario",
-                        mainText: "Starting a new Scenario recording will clear all previously created pages and their scraped data.",
-                        subText: "If any of this data is important, please <b>Download</b> it before proceeding.<br><br>Do you want to clear all existing pages and start a new scenario?",
+                        mainText: buildStructuredPopupHtml({
+                            lead: "Starting a new Scenario recording will clear all previously created pages and their scraped data.",
+                            hint: "If any of this data is important, download it before continuing."
+                        }),
+                        subText: "Do you want to clear all existing pages and start a new scenario?",
                         action: "confirmRecordScenarioClear",
                         theme: "warning",
                         okayBtnText: "Continue & Record"
@@ -15543,9 +16435,12 @@ function getDeviceDimensions() {
     // Windows packages have no XCUITest — block iOS platform selection
     if (process.platform === 'win32' && normalizePlatformName(nextPlatform) === 'IOS') {
         platformSelect.value = previousPlatform;
-        showCustomAlert(
+        showStructuredAlert(
             "iOS Not Available",
-            "This Windows build scrapes Android only. Use the macOS app for iOS Simulator / iPhone.",
+            {
+                lead: "This Windows build scrapes Android only.",
+                hint: "Use the macOS app for iOS Simulator or iPhone."
+            },
             "warning"
         );
         return;
@@ -15579,9 +16474,12 @@ function getDeviceDimensions() {
                 : 'Please launch an Android emulator or connect a physical device, then try again.';
 
             hidePlatformSwitchLoader();
-            showCustomAlert(
+            showStructuredAlert(
                 "No Device Connected",
-                `No active <b>${toLabel}</b> emulator or device was detected.<br><br>${deviceHint}`,
+                {
+                    lead: `No active <b>${toLabel}</b> emulator or device was detected.`,
+                    hint: deviceHint
+                },
                 "warning"
             );
             return;
@@ -15620,9 +16518,12 @@ function getDeviceDimensions() {
         platformSelect.value = previousPlatform;
         lastSelectedPlatform = previousPlatform;
         updatePlatformUI();
-        showCustomAlert(
+        showStructuredAlert(
             "Device Check Failed",
-            "Could not verify connected devices. Staying on the previous platform.",
+            {
+                lead: "Could not verify connected devices.",
+                hint: "Staying on the previous platform. Try again in a moment."
+            },
             "warning"
         );
     } finally {
@@ -17533,7 +18434,14 @@ if (platformVersionField) {
             const visibleKeys = visibleRepoProjectKeys();
             const selectable = selectableProjectKeys(visibleKeys);
             if (!selectable.length) {
-                showCustomAlert('Active Project', 'The opened Active project cannot be deleted. There are no other projects to select.', 'warning');
+                showStructuredAlert(
+                    'Active Project',
+                    {
+                        lead: 'The opened Active project cannot be deleted.',
+                        hint: 'There are no other projects to select.'
+                    },
+                    'warning'
+                );
                 return;
             }
             setRepoMultiDeleteMode(true);
@@ -17632,7 +18540,14 @@ if (platformVersionField) {
             if (!repoMultiDeleteMode) return;
             const keys = selectableProjectKeys(Array.from(repoSelectedProjectKeys));
             if (!keys.length) {
-                showCustomAlert('Multi Delete', 'Select one or more projects to delete. The opened Active project cannot be deleted.', 'warning');
+                showStructuredAlert(
+                    'Multi Delete',
+                    {
+                        lead: 'Select one or more projects to delete.',
+                        hint: 'The opened Active project cannot be deleted.'
+                    },
+                    'warning'
+                );
                 return;
             }
             pendingRepoDelete = { projectKeys: keys };
@@ -17668,7 +18583,14 @@ if (platformVersionField) {
         }
 
         if (e.target.closest('[data-action="blocked-live-delete"]')) {
-            showCustomAlert('Active Project', 'This project is currently open. Close or Reset the Home session before deleting it.', 'warning');
+            showStructuredAlert(
+                'Active Project',
+                {
+                    lead: 'This project is currently open.',
+                    hint: 'Close or Reset the Home session before deleting it.'
+                },
+                'warning'
+            );
             return;
         }
 
@@ -17677,7 +18599,14 @@ if (platformVersionField) {
         if (delProjCardBtn) {
             const pKey = delProjCardBtn.getAttribute('data-p-key') || currentSelectedProjectKey;
             if (isProtectedLiveProject(pKey)) {
-                showCustomAlert('Active Project', 'This project is currently open. Close or Reset the Home session before deleting it.', 'warning');
+                showStructuredAlert(
+                'Active Project',
+                {
+                    lead: 'This project is currently open.',
+                    hint: 'Close or Reset the Home session before deleting it.'
+                },
+                'warning'
+            );
                 return;
             }
             const store = getProjectStore();
@@ -18013,8 +18942,13 @@ if (platformVersionField) {
                     showCustomAlert(
                         'Import Complete',
                         parts.length
-                            ? `Imported projects successfully.<br><br>${parts.join('<br>')}`
-                            : 'No projects were imported.',
+                            ? buildStructuredPopupHtml({
+                                lead: 'Imported projects successfully.',
+                                items: parts.map((p) => p.replace(/<\/?b>/gi, ''))
+                            })
+                            : buildStructuredPopupHtml({
+                                lead: 'No projects were imported.'
+                            }),
                         result.added || result.updated ? 'success' : 'info'
                     );
                 } catch (err) {
