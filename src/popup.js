@@ -5284,10 +5284,17 @@
                     var controlIdentificationType = "";
                     var controlId = "";
                     var xpath = "";
+                    var multiXPathsForRow = [];
 
                     try {
-                        const locatorCandidates = buildLocatorCandidates(node);
-                        controlId = locatorCandidates[0];
+                        // Always collect FULL multi-xpath set (Android + iOS, real/emulator/simulator)
+                        let allXPaths = (typeof getAllPossibleXPaths === 'function')
+                            ? getAllPossibleXPaths(node)
+                            : (typeof buildLocatorCandidates === 'function' ? buildLocatorCandidates(node) : []);
+                        if (!Array.isArray(allXPaths) || allXPaths.length === 0) {
+                            allXPaths = [`//${node.nodeName}`];
+                        }
+                        controlId = allXPaths[0];
                         controlIdentificationType = inferIdentificationType(controlId);
 
                         if (isAndroidPlatform() || node.nodeName.startsWith('android.')) {
@@ -5316,15 +5323,18 @@
                                 if (CN_ID === controlIdList[k]) CNcount++;
                             }
                             xpath = "(" + controlId + ")[" + CNcount + "]";
+                            multiXPathsForRow = [xpath].concat(allXPaths.filter((xp) => xp && xp !== controlId && xp !== xpath));
                         } else {
                             controlIdList.push(controlId);
                             xpath = controlId;
+                            multiXPathsForRow = allXPaths.slice();
                         }
                     } catch (err) {
                         console.log("Error :", err);
                         controlId = "//" + node.nodeName;
                         controlName = node.nodeName;
                         xpath = controlId;
+                        multiXPathsForRow = [xpath];
                     }
 
                     if (controlName === "") {
@@ -5365,13 +5375,16 @@
                         }
 
                         let controlValue = getInputControlValue(node, controlName);
+                        if (!multiXPathsForRow.length) {
+                            multiXPathsForRow = [xpath || controlId || `//${node.nodeName}`];
+                        }
 
                         dtControls.push({
                             ControlName: controlName,
                             ControlType: controlType,
-                            ControlId: xpath,
+                            ControlId: multiXPathsForRow,
                             ControlValue: controlValue,
-                            IdentificationType: controlIdentificationType || inferIdentificationType(xpath),
+                            IdentificationType: controlIdentificationType || inferIdentificationType(multiXPathsForRow[0]),
                             Fingerprint: generateNodeFingerprint(node)
                         });
                     }
@@ -9534,51 +9547,96 @@ window.resolveHoverRectForLocator = resolveHoverRectForLocator;
 function getAllPossibleXPaths(node) {
     if (!node || node.nodeType !== 1) return [];
 
-    let candidates = [];
+    const candidates = [];
     const tagName = node.nodeName;
 
     if (tagName === "AppiumAUT" || tagName === "XCUIElementTypeApplication" || tagName === "XCUIElementTypeWindow" || tagName === "hierarchy") {
         return [`//${tagName}`];
     }
 
-    const isGeneric = (tagName === "XCUIElementTypeOther" || tagName === "Other" || tagName === "android.view.View" || tagName === "XCUIElementTypeCell" || tagName === "android.view.ViewGroup");
+    const isGeneric = (
+        tagName === "XCUIElementTypeOther"
+        || tagName === "Other"
+        || tagName === "android.view.View"
+        || tagName === "XCUIElementTypeCell"
+        || tagName === "android.view.ViewGroup"
+        || tagName === "android.widget.FrameLayout"
+        || tagName === "android.widget.LinearLayout"
+        || tagName === "android.widget.RelativeLayout"
+    );
 
-    // Prefer strongest / most specific locators first
     const isAndroidNode = (typeof isAndroidPlatform === "function" && isAndroidPlatform())
         || tagName.startsWith("android.")
         || !!(node.getAttribute && (node.getAttribute('resource-id') || node.getAttribute('content-desc') || node.getAttribute('bounds')));
+
     const attributes = isAndroidNode
         ? ["resource-id", "id", "text", "content-desc", "hint", "class"]
         : ["name", "label", "value", "id"];
 
+    const cleanAttr = (val) => String(val == null ? '' : val).trim().replace(/"/g, '');
     const pushUnique = (xpath) => {
-        if (xpath && !candidates.includes(xpath)) candidates.push(xpath);
+        const xp = String(xpath || '').trim();
+        if (xp && !candidates.includes(xp)) candidates.push(xp);
     };
 
-    for (let attr of attributes) {
-        let val = node.getAttribute(attr);
-        if (val && String(val).trim() !== "") {
-            let cleanVal = String(val).trim().replace(/"/g, '');
-            // Skip noisy class-only if we already have stronger ids (still add if alone)
-            if (attr === 'class' && candidates.length > 0) continue;
-            pushUnique(`//${tagName}[@${attr}="${cleanVal}"]`);
-            // Also add tag-agnostic resource-id / name locators (useful alternates)
-            if (attr === 'resource-id' || attr === 'content-desc' || attr === 'name' || attr === 'label') {
-                pushUnique(`//*[@${attr}="${cleanVal}"]`);
-            }
+    const attrVals = {};
+    attributes.forEach((attr) => {
+        const raw = node.getAttribute && node.getAttribute(attr);
+        const clean = cleanAttr(raw);
+        if (clean) attrVals[attr] = clean;
+    });
+
+    // 1) Strong attribute locators (tagged + wildcard for key attrs)
+    attributes.forEach((attr) => {
+        if (!attrVals[attr]) return;
+        if (attr === 'class' && Object.keys(attrVals).some((k) => k !== 'class')) {
+            // still useful as an alternate — add after stronger ones below
+            return;
+        }
+        const cleanVal = attrVals[attr];
+        pushUnique(`//${tagName}[@${attr}="${cleanVal}"]`);
+        if (attr === 'resource-id' || attr === 'content-desc' || attr === 'name' || attr === 'label' || attr === 'text' || attr === 'id') {
+            pushUnique(`//*[@${attr}="${cleanVal}"]`);
+        }
+    });
+
+    // 1b) Class-only / class alternate (Android)
+    if (attrVals.class) {
+        pushUnique(`//${tagName}[@class="${attrVals.class}"]`);
+    }
+
+    // 1c) Combined attribute locators (more stable on real devices)
+    if (isAndroidNode) {
+        if (attrVals['resource-id'] && attrVals.text) {
+            pushUnique(`//${tagName}[@resource-id="${attrVals['resource-id']}" and @text="${attrVals.text}"]`);
+        }
+        if (attrVals['resource-id'] && attrVals['content-desc']) {
+            pushUnique(`//${tagName}[@resource-id="${attrVals['resource-id']}" and @content-desc="${attrVals['content-desc']}"]`);
+        }
+        if (attrVals.text && attrVals['content-desc']) {
+            pushUnique(`//${tagName}[@text="${attrVals.text}" and @content-desc="${attrVals['content-desc']}"]`);
+        }
+    } else {
+        if (attrVals.name && attrVals.label) {
+            pushUnique(`//${tagName}[@name="${attrVals.name}" and @label="${attrVals.label}"]`);
+        }
+        if (attrVals.name && attrVals.value) {
+            pushUnique(`//${tagName}[@name="${attrVals.name}" and @value="${attrVals.value}"]`);
+        }
+        if (attrVals.label && attrVals.value) {
+            pushUnique(`//${tagName}[@label="${attrVals.label}" and @value="${attrVals.value}"]`);
         }
     }
 
-    // 2b. If generic tag has NO direct attributes, resolve via nearest labeled Parent Context
-    if (candidates.length === 0 && isGeneric && window.xmlDoc) {
+    // 2) Parent-context relative paths (always useful alternate — not only when empty)
+    if (window.xmlDoc) {
         let ancestor = node.parentNode;
         let ancestorXpath = "";
-
-        while (ancestor && ancestor.nodeType === 1 && !["XCUIElementTypeApplication", "hierarchy", "AppiumAUT"].includes(ancestor.nodeName)) {
+        while (ancestor && ancestor.nodeType === 1 && !["XCUIElementTypeApplication", "hierarchy", "AppiumAUT", "XCUIElementTypeWindow"].includes(ancestor.nodeName)) {
             for (let attr of attributes) {
-                let parentVal = ancestor.getAttribute(attr);
-                if (parentVal && String(parentVal).trim() !== "") {
-                    let cleanParentVal = String(parentVal).trim().replace(/"/g, '');
+                let parentVal = ancestor.getAttribute && ancestor.getAttribute(attr);
+                const cleanParentVal = cleanAttr(parentVal);
+                if (cleanParentVal && attr !== 'class') {
                     ancestorXpath = `//${ancestor.nodeName}[@${attr}="${cleanParentVal}"]`;
                     break;
                 }
@@ -9589,23 +9647,32 @@ function getAllPossibleXPaths(node) {
 
         if (ancestorXpath) {
             try {
-                let relativePath = `${ancestorXpath}//${tagName}`;
-                let scopedResults = window.xmlDoc.evaluate(relativePath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                const relativePath = `${ancestorXpath}//${tagName}`;
+                const scopedResults = window.xmlDoc.evaluate(relativePath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
                 for (let i = 0; i < scopedResults.snapshotLength; i++) {
                     if (scopedResults.snapshotItem(i) === node) {
                         pushUnique(`(${relativePath})[${i + 1}]`);
+                        // Also keep unindexed if unique in scope
+                        if (scopedResults.snapshotLength === 1) pushUnique(relativePath);
                         break;
                     }
+                }
+                // If node has a strong attr, also parent+attr relative
+                const strongAttr = isAndroidNode
+                    ? (attrVals['resource-id'] ? 'resource-id' : (attrVals['content-desc'] ? 'content-desc' : (attrVals.text ? 'text' : '')))
+                    : (attrVals.name ? 'name' : (attrVals.label ? 'label' : (attrVals.value ? 'value' : '')));
+                if (strongAttr && attrVals[strongAttr]) {
+                    pushUnique(`${ancestorXpath}//${tagName}[@${strongAttr}="${attrVals[strongAttr]}"]`);
                 }
             } catch (_) {}
         }
     }
 
-    // 3. Indexed tag fallback
-    if ((!isGeneric || candidates.length === 0) && window.xmlDoc) {
+    // 3) Indexed tag path — always include as alternate (Win/Mac, real/emulator/simulator)
+    if (window.xmlDoc) {
         try {
-            let fallbackXpath = `//${tagName}`;
-            let globalResults = window.xmlDoc.evaluate(fallbackXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            const fallbackXpath = `//${tagName}`;
+            const globalResults = window.xmlDoc.evaluate(fallbackXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
             for (let i = 0; i < globalResults.snapshotLength; i++) {
                 if (globalResults.snapshotItem(i) === node) {
                     pushUnique(`(${fallbackXpath})[${i + 1}]`);
@@ -9615,8 +9682,22 @@ function getAllPossibleXPaths(node) {
         } catch (_) {}
     }
 
+    // 4) Structural unique path (when available)
+    try {
+        if (typeof generateUniqueXPath === 'function') {
+            const uniqueXp = generateUniqueXPath(node);
+            if (uniqueXp) pushUnique(uniqueXp);
+        }
+    } catch (_) {}
+
+    // 5) Generic with no attrs: ensure at least parent or tag fallback already covered
+    if (candidates.length === 0 && isGeneric) {
+        pushUnique(`//${tagName}`);
+    }
+
     return candidates.length > 0 ? candidates : [`//${tagName}`];
 }
+window.getAllPossibleXPaths = getAllPossibleXPaths;
 
 
 
@@ -16191,25 +16272,12 @@ function getLoadPageTags() {
 }
 
 function buildLocatorCandidates(node) {
-    const tagName = node.nodeName;
-    const candidates = [];
-    const attrs = isAndroidPlatform() || tagName.startsWith('android.')
-        ? ['resource-id', 'id', 'text', 'content-desc', 'hint']
-        : ['name', 'label', 'value', 'id'];
-
-    for (const attr of attrs) {
-        const val = node.getAttribute(attr);
-        if (val && val.trim() !== '') {
-            const cleanVal = val.trim().replace(/"/g, '');
-            const xpath = `//${tagName}[@${attr}="${cleanVal}"]`;
-            if (!candidates.includes(xpath)) candidates.push(xpath);
-        }
+    if (typeof getAllPossibleXPaths === 'function') {
+        const list = getAllPossibleXPaths(node);
+        if (Array.isArray(list) && list.length) return list;
     }
-
-    if (candidates.length === 0) {
-        candidates.push(`//${tagName}`);
-    }
-    return candidates;
+    const tagName = node && node.nodeName ? node.nodeName : 'unknown';
+    return [`//${tagName}`];
 }
 
 // Show/hide Android fields (package/activity) vs iOS field (bundle ID) + set automationName.
