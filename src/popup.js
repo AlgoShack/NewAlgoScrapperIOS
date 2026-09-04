@@ -1120,10 +1120,6 @@
        // ALWAYS clear past session on a fresh app launch so it never auto-connects
        localStorage.removeItem("algoQAUser");
 
-       // Windows: keep same dropdown chrome, Android-only option list
-       if (process.platform === 'win32') {
-           lockPlatformToAndroidOnWindows();
-       }
        showDummyDeviceMessage({ theme: 'info', title: getIdleDummyTitle() });
        // Fill table empty rows after shared layout settles (Windows + macOS)
        requestAnimationFrame(() => {
@@ -1618,22 +1614,6 @@
         });
     }
 
-    // ===========================================================================
-    // [WIN-ANDROID] Windows platform lock
-    // ---------------------------------------------------------------------------
-    // Windows packages omit XCUITest. Keep the same <select> + custom-select chrome
-    // as macOS; only remove the IOS option so Android scrapes look/feel identical.
-    // ===========================================================================
-    function lockPlatformToAndroidOnWindows() {
-        if (process.platform !== 'win32') return;
-        const platformEl = document.getElementById('platformname');
-        if (!platformEl || platformEl.tagName !== 'SELECT') return;
-
-        platformEl.innerHTML = '<option value="Android" selected>Android</option>';
-        platformEl.value = 'Android';
-    }
-
-    lockPlatformToAndroidOnWindows();
     initAllCustomSelects();
     document.addEventListener('click', () => closeAllCustomSelects());
     document.addEventListener('keydown', (e) => {
@@ -1751,7 +1731,13 @@
         const platformSelect = document.getElementById('platformname');
         const activePlatform = platformSelect?.value || lastSelectedPlatform || 'Android';
         const targetPlatform = normalizePlatformName(activePlatform);
-        const filtered = devicesForPlatform(targetPlatform, devices);
+        let filtered = devicesForPlatform(targetPlatform, devices);
+        if ((!filtered || filtered.length === 0) && Array.isArray(devices) && devices.length > 0) {
+            const platformMatches = devices.filter(d => normalizePlatformName(d.platform) === targetPlatform);
+            if (platformMatches.length > 0) {
+                filtered = platformMatches;
+            }
+        }
 
         deviceSelect.innerHTML = '';
 

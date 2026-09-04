@@ -1901,7 +1901,7 @@
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
     async function getConnectedAndroidDevices() {
         return new Promise((resolve) => {
-            exec("adb devices -l", { timeout: 3500 }, (error, stdout) => {
+            exec("adb devices -l", { timeout: 4000 }, (error, stdout) => {
                 const devices = [];
                 if (!error && stdout) {
                     const lines = stdout.split('\n');
@@ -1910,22 +1910,28 @@
                         if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
 
                         // Match any authorized device/emulator line from `adb devices -l`
-                        const deviceMatch = trimmed.match(/^([a-zA-Z0-9._:-]+)\s+device\b/);
+                        const deviceMatch = trimmed.match(/^([^\s]+)\s+device\b/);
                         if (deviceMatch) {
                             const id = deviceMatch[1];
-                            if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb')) return;
+                            if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb') || id.toLowerCase().includes('error')) return;
                             let name = id;
 
-                            // Try to extract a friendly model name
                             const modelMatch = trimmed.match(/model:([^\s]+)/);
                             if (modelMatch) {
                                 name = modelMatch[1].replace(/_/g, ' ');
+                            } else {
+                                const prodMatch = trimmed.match(/product:([^\s]+)/);
+                                if (prodMatch) {
+                                    name = prodMatch[1].replace(/_/g, ' ');
+                                }
                             }
+
+                            const isEmulator = id.toLowerCase().startsWith('emulator-') || id.toLowerCase().includes('127.0.0.1') || id.toLowerCase().includes('localhost');
 
                             devices.push({
                                 id: id,
                                 name: name,
-                                type: id.startsWith('emulator') ? 'emulator' : 'physical',
+                                type: isEmulator ? 'emulator' : 'physical',
                                 platform: 'Android'
                             });
                         }
@@ -1944,34 +1950,66 @@
         }
 
         const simPromise = new Promise((resolve) => {
-            exec("xcrun simctl list devices booted", { timeout: 3500 }, (simError, simStdout) => {
+            exec("xcrun simctl list devices -j", { timeout: 4000 }, (simError, simStdout) => {
                 const simDevices = [];
                 if (!simError && simStdout) {
-                    const lines = simStdout.split("\n");
-                    let currentOSVersion = "";
-                    lines.forEach(line => {
-                        const osMatch = line.match(/--\s*(?:iOS|watchOS|tvOS|visionOS)?\s*([\d\.]+)\s*--/i);
-                        if (osMatch) {
-                            currentOSVersion = osMatch[1];
+                    try {
+                        const parsed = JSON.parse(simStdout);
+                        const devMap = parsed.devices || {};
+                        for (const runtimeKey of Object.keys(devMap)) {
+                            let osVersion = "";
+                            const osMatch = runtimeKey.match(/(?:iOS|watchOS|tvOS|visionOS)[-\. ]+([\d\.]+)/i);
+                            if (osMatch) {
+                                osVersion = osMatch[1].replace(/-/g, '.');
+                            }
+                            const list = devMap[runtimeKey] || [];
+                            for (const dev of list) {
+                                if (dev && dev.state === "Booted") {
+                                    simDevices.push({
+                                        id: dev.udid,
+                                        name: dev.name,
+                                        type: "simulator",
+                                        platform: 'IOS',
+                                        version: osVersion || ""
+                                    });
+                                }
+                            }
                         }
-                        const match = line.match(/(.*?)\s+\(([A-F0-9-]+)\)\s+\(Booted\)/i);
-                        if (match) {
-                            simDevices.push({
-                                id: match[2],
-                                name: match[1].trim(),
-                                type: "simulator",
-                                platform: 'IOS',
-                                version: currentOSVersion || ""
+                    } catch (_) {}
+                }
+
+                if (simDevices.length === 0) {
+                    exec("xcrun simctl list devices booted", { timeout: 3500 }, (tErr, tStdout) => {
+                        if (!tErr && tStdout) {
+                            const lines = tStdout.split("\n");
+                            let currentOSVersion = "";
+                            lines.forEach(line => {
+                                const osMatch = line.match(/--\s*(?:iOS|watchOS|tvOS|visionOS)?\s*([\d\.]+)\s*--/i);
+                                if (osMatch) {
+                                    currentOSVersion = osMatch[1];
+                                }
+                                const match = line.match(/(.*?)\s+\(([A-F0-9-]+)\)\s+\(Booted\)/i);
+                                if (match) {
+                                    simDevices.push({
+                                        id: match[2],
+                                        name: match[1].trim(),
+                                        type: "simulator",
+                                        platform: 'IOS',
+                                        version: currentOSVersion || ""
+                                    });
+                                }
                             });
                         }
+                        resolve(simDevices);
                     });
+                } else {
+                    resolve(simDevices);
                 }
-                resolve(simDevices);
             });
         });
 
         const phyPromise = new Promise((resolve) => {
-            exec("xcrun xcdevice list", { timeout: 3500 }, (phyError, phyStdout) => {
+            exec("xcrun xcdevice list", { timeout: 4000 }, (phyError, phyStdout) => {
                 const phyDevices = [];
                 if (!phyError && phyStdout) {
                     try {
