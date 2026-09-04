@@ -615,8 +615,9 @@ html.platform-win .home-field .custom-select-wrap select.native-select-hidden {
   padding: 5px !important;
   box-sizing: border-box;
   z-index: 999999 !important;
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
+  /* Keep scroll (wheel/trackpad), hide scrollbar chrome — App + Device + Platform, Win + Mac */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* legacy Edge/IE */
 }
 
 .custom-select-menu.is-visible,
@@ -625,21 +626,10 @@ html.platform-win .home-field .custom-select-wrap select.native-select-hidden {
 }
 
 .custom-select-menu::-webkit-scrollbar {
-  width: 5px;
-}
-
-.custom-select-menu::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-
-.custom-select-menu::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 6px;
-}
-
-.custom-select-menu::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+  background: transparent !important;
 }
 
 html.platform-win .custom-select-menu {
@@ -649,6 +639,14 @@ html.platform-win .custom-select-menu {
   border-radius: 10px !important;
   box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08) !important;
   padding: 5px !important;
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+html.platform-win .custom-select-menu::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
 }
 
 html.platform-win .custom-select-menu.is-visible {
