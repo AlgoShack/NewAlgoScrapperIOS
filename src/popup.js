@@ -4343,8 +4343,10 @@ document.getElementById("Scrape").addEventListener('click', async () => {
                 emptyStateEl.style.display = 'flex';
                 // Hide any remaining placeholder rows
                 tableBody.querySelectorAll('.empty-excel-row').forEach(r => r.style.display = 'none');
+                if (typeof updateTableEmptyState === 'function') updateTableEmptyState();
             } else {
                 emptyStateEl.style.display = 'none';
+                if (typeof updateTableEmptyState === 'function') updateTableEmptyState();
                 if (searchText === "" && typeof adjustEmptyRows === 'function') {
                     adjustEmptyRows();
                 }
@@ -9697,6 +9699,7 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
             var allHeaders = Array.from(document.querySelectorAll('#mainTable thead tr > *'));
             var rowHtml = "";
 
+            /* Default placeholder row HTML commented out as per requirement
             allHeaders.forEach((th) => {
                 var thText = (th.textContent || th.innerText || '').replace('Delete Column', '').replace('Add Column', '').trim().toUpperCase();
                 var isHidden = window.getComputedStyle(th).display === 'none';
@@ -9723,10 +9726,35 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                     rowHtml += `<td class="cn pt-3-half" contenteditable="true" style="${displayStyle}">&nbsp;</td>`;
                 }
             });
+            */
             return rowHtml;
         }
 
+        function updateTableEmptyState() {
+            const tableBody = document.getElementById('myTable');
+            const emptyScrapeState = document.getElementById('tableScrapeEmptyState');
+            const searchEmptyState = document.getElementById('tableSearchEmptyState');
+            if (!emptyScrapeState) return;
+
+            if (!tableBody) {
+                emptyScrapeState.style.display = 'flex';
+                return;
+            }
+
+            const dataRows = Array.from(tableBody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)')).filter(row => !row.classList.contains('page-hidden'));
+            const isSearchEmptyVisible = searchEmptyState && searchEmptyState.style.display !== 'none';
+
+            if (dataRows.length === 0 && !isSearchEmptyVisible) {
+                emptyScrapeState.style.display = 'flex';
+            } else {
+                emptyScrapeState.style.display = 'none';
+            }
+        }
+        window.updateTableEmptyState = updateTableEmptyState;
+
         function adjustEmptyRows() {
+            // Default placeholder rows commented out - replaced by modern centered empty state card (#tableScrapeEmptyState)
+            /*
             const container = document.getElementById('table-container');
             const tbody = document.getElementById('myTable');
 
@@ -9785,14 +9813,19 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                 updateRowNumbers();
             }
             if (typeof applyColumnVisibility === 'function') applyColumnVisibility();
+            */
+            if (typeof updateTableEmptyState === 'function') {
+                updateTableEmptyState();
+            }
         }
 
         function renderDefaultExcelGrid() {
             const tbody = document.getElementById('myTable');
             if (tbody) tbody.innerHTML = ''; // Wipe existing rows
 
-            // Automatically inject the precise number of rows needed
-            adjustEmptyRows();
+            if (typeof updateTableEmptyState === 'function') {
+                updateTableEmptyState();
+            }
         }
 
         // Initialize and track window resizing automatically
@@ -9803,6 +9836,7 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
             applyPagination();
             initCustomizeColumnsDropdown();
             applyColumnVisibility();
+            if (typeof updateTableEmptyState === 'function') updateTableEmptyState();
         });
 
         window.addEventListener('resize', () => {
@@ -11435,7 +11469,8 @@ function applyPagination() {
     if (typeof updateRowNumbers === 'function') updateRowNumbers();
     renderPaginationControls(totalPages);
 
-    // Recalculate empty rows if table is empty
+    // Recalculate empty rows and toggle modern empty state if table is empty
+    if (typeof updateTableEmptyState === 'function') updateTableEmptyState();
     if (typeof adjustEmptyRows === 'function') requestAnimationFrame(adjustEmptyRows);
 }
 

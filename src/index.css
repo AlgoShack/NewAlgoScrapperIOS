@@ -2987,11 +2987,11 @@ th .resizer:hover {
 }
 
 /* =============================================================================
- * MODERN CENTERED TABLE SEARCH EMPTY STATE
+ * CLEAN & SEAMLESS TABLE SCRAPE EMPTY STATE (BORDERLESS)
  * ============================================================================= */
-.table-search-empty-state {
+.table-scrape-empty-state {
     position: absolute;
-    top: calc(50% - 16px);
+    top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
     display: flex;
@@ -2999,48 +2999,97 @@ th .resizer:hover {
     align-items: center;
     justify-content: center;
     text-align: center;
-    padding: 24px 32px;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    box-shadow: 0 12px 30px -5px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(15, 23, 42, 0.06);
-    z-index: 1000 !important;
-    pointer-events: auto;
-    width: min(380px, 90%);
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    z-index: 999 !important;
+    pointer-events: none;
+    width: min(440px, 90%);
     box-sizing: border-box;
+    transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-.table-search-empty-state .empty-state-icon {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: #eff6ff;
-    border: 1px solid #dbeafe;
+.table-scrape-empty-state .scrape-empty-art {
+    margin-bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
-    margin-bottom: 10px;
 }
 
-.table-search-empty-state .empty-state-icon svg {
-    width: 22px;
-    height: 22px;
-    stroke: #2F8BCC;
+.table-scrape-empty-state .scrape-empty-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 5px;
+    letter-spacing: -0.1px;
+}
+
+.table-scrape-empty-state .scrape-empty-text {
+    font-size: 12px;
+    font-weight: 400;
+    color: #64748b;
+    line-height: 1.5;
+    max-width: 360px;
+}
+
+.table-scrape-empty-state .scrape-highlight-btn {
+    display: inline-block;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #2F8BCC;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+}
+
+/* =============================================================================
+ * CLEAN & SEAMLESS TABLE SEARCH EMPTY STATE (BORDERLESS)
+ * ============================================================================= */
+.table-search-empty-state {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 10px 20px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    z-index: 1000 !important;
+    pointer-events: auto;
+    width: min(440px, 90%);
+    box-sizing: border-box;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.table-search-empty-state .scrape-empty-art {
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .table-search-empty-state .empty-state-title {
-    font-size: 13px;
-    font-weight: 700;
+    font-size: 14px;
+    font-weight: 600;
     color: #1e293b;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
+    letter-spacing: -0.1px;
 }
 
 .table-search-empty-state .empty-state-subtitle {
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 12px;
+    font-weight: 400;
     color: #64748b;
-    line-height: 1.45;
+    line-height: 1.5;
     margin-bottom: 12px;
+    max-width: 360px;
 }
 
 .table-search-empty-state .clear-search-pill-btn {
