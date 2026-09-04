@@ -1947,104 +1947,112 @@
                     const activePlatformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
                     const matchingActiveDevices = devicesForPlatform(activePlatformTarget, freshDevices);
 
-                    const activeUdid = document.getElementById('udid')?.value || deviceId;
-                    const isDeviceStillConnected = matchingActiveDevices.some(d => d.id === activeUdid || d.name === deviceName);
+                    const activeUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
+                    const isDeviceStillConnected = matchingActiveDevices.some(d => (activeUdid && d.id === activeUdid) || (deviceName && d.name === deviceName));
 
                     if (!isDeviceStillConnected) {
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
                         lastKnownDeviceFingerprint = "";
                         markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`));
+                        setNoDeviceConnectedState();
                         return;
                     }
                 }
 
                 // --- 2. IDLE / FORM REAL-TIME UPDATE ---
+                const platformSelect = document.getElementById('platformname');
+                const activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
+                const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
+                let matching = devicesForPlatform(platformTarget, freshDevices);
+
+                // If current platform has no devices, but alternate platform has devices on macOS, auto-switch platform
+                if (matching.length === 0 && freshDevices.length > 0 && process.platform !== 'win32') {
+                    const alternateTarget = platformTarget === 'Android' ? 'IOS' : 'Android';
+                    const alternateMatching = devicesForPlatform(alternateTarget, freshDevices);
+                    if (alternateMatching.length > 0) {
+                        matching = alternateMatching;
+                        applyingPlatformFromDevice = true;
+                        if (platformSelect) {
+                            platformSelect.value = alternateTarget;
+                            lastSelectedPlatform = alternateTarget;
+                            if (typeof updatePlatformUI === 'function') updatePlatformUI();
+                            if (typeof platformSelect._rebuildCustomSelect === 'function') {
+                                platformSelect._rebuildCustomSelect();
+                            }
+                        }
+                        applyingPlatformFromDevice = false;
+                    }
+                }
+
                 const deviceSelect = document.getElementById('devicename');
                 const appSelect = document.getElementById('appname');
-                const isUiShowingNoDevice = !deviceSelect || !deviceSelect.value || deviceSelect.value === 'No device connected' || (appSelect && appSelect.value === 'No device connected');
-                const deviceStateChanged = (freshFingerprint !== lastKnownDeviceFingerprint) || (freshDevices.length > 0 && isUiShowingNoDevice) || (freshDevices.length === 0 && !isUiShowingNoDevice);
+                const currentDeviceVal = deviceSelect ? (deviceSelect.value || '') : '';
+                const currentAppVal = appSelect ? (appSelect.value || '') : '';
+                const isUiShowingNoDevice = !currentDeviceVal || currentDeviceVal === 'No device connected' || currentDeviceVal === 'Select Device' || !currentAppVal || currentAppVal === 'No device connected' || currentAppVal === 'Select App';
 
-                if (!driver && deviceStateChanged) {
-                    const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !isUiShowingNoDevice;
-                    lastKnownDeviceFingerprint = freshFingerprint;
-
-                    const closeDeviceDisconnectedAlertIfOpen = () => {
-                        const popup = document.getElementById('confirmationPopup');
-                        const overlay = document.getElementById('overlay');
-                        const popupTitle = document.getElementById('popup_title')?.innerText || '';
-                        if (popup && popup.style.display === 'block' && popupTitle.toLowerCase().includes('disconnected')) {
-                            popup.style.display = 'none';
-                            if (overlay) overlay.style.display = 'none';
-                            window._customAlertOnOkay = null;
-                        }
-                    };
-
-                    const platformSelect = document.getElementById('platformname');
-                    const activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
-                    const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
-                    let matching = devicesForPlatform(platformTarget, freshDevices);
-
-                    // If current platform has no devices, but alternate platform has devices, auto-switch platform
-                    let activeTarget = platformTarget;
-                    if (matching.length === 0 && freshDevices.length > 0 && process.platform !== 'win32') {
-                        const alternateTarget = platformTarget === 'Android' ? 'IOS' : 'Android';
-                        const alternateMatching = devicesForPlatform(alternateTarget, freshDevices);
-                        if (alternateMatching.length > 0) {
-                            activeTarget = alternateTarget;
-                            matching = alternateMatching;
-                            applyingPlatformFromDevice = true;
-                            if (platformSelect) {
-                                platformSelect.value = alternateTarget;
-                                lastSelectedPlatform = alternateTarget;
-                                if (typeof updatePlatformUI === 'function') updatePlatformUI();
-                                if (typeof platformSelect._rebuildCustomSelect === 'function') {
-                                    platformSelect._rebuildCustomSelect();
-                                }
-                            }
-                            applyingPlatformFromDevice = false;
-                        }
+                const closeDeviceDisconnectedAlertIfOpen = () => {
+                    const popup = document.getElementById('confirmationPopup');
+                    const overlay = document.getElementById('overlay');
+                    const popupTitle = document.getElementById('popup_title')?.innerText || '';
+                    if (popup && popup.style.display === 'block' && popupTitle.toLowerCase().includes('disconnected')) {
+                        popup.style.display = 'none';
+                        if (overlay) overlay.style.display = 'none';
+                        window._customAlertOnOkay = null;
                     }
+                };
 
-                    const currentUdid = document.getElementById('udid')?.value || deviceId;
-                    const currentDeviceOption = document.getElementById('devicename')?.value;
-                    const isCurrentSelectedStillConnected = !!(currentUdid && matching.some(d => d.id === currentUdid || d.name === currentDeviceOption));
-
+                if (!driver) {
                     if (matching.length > 0) {
-                        closeDeviceDisconnectedAlertIfOpen();
+                        const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
+                        const isCurrentDeviceStillPresent = currentUdid && matching.some(d => d.id === currentUdid || d.name === currentDeviceVal);
 
-                        const selected = populateDeviceDropdown(matching);
-                        if (selected) {
-                            if (normalizePlatformName(selected.platform) === 'Android') {
-                                ipcRenderer.invoke("get-android-version", selected.id).then((ver) => {
-                                    if (ver) {
-                                        const pv = document.getElementById('platformversion');
-                                        if (pv) {
-                                            pv.value = ver;
-                                            pv.dataset.userEdited = 'true';
+                        if (!isCurrentDeviceStillPresent || isUiShowingNoDevice || (freshFingerprint !== lastKnownDeviceFingerprint)) {
+                            lastKnownDeviceFingerprint = freshFingerprint;
+                            closeDeviceDisconnectedAlertIfOpen();
+
+                            const selected = populateDeviceDropdown(matching);
+                            if (selected) {
+                                if (normalizePlatformName(selected.platform) === 'Android') {
+                                    ipcRenderer.invoke("get-android-version", selected.id).then((ver) => {
+                                        if (ver) {
+                                            const pv = document.getElementById('platformversion');
+                                            if (pv) {
+                                                pv.value = ver;
+                                                pv.dataset.userEdited = 'true';
+                                            }
                                         }
-                                    }
-                                }).catch(() => {});
-                            }
-                            ipcRenderer.send("get-installed-apps", selected);
-                        }
-
-                        if (typeof setPlatformAppDeviceEditable === 'function') {
-                            setPlatformAppDeviceEditable(true);
-                        }
-                        setLaunchEnabled(canEnableLaunch());
-                    } else {
-                        // NO devices connected on ANY platform!
-                        setNoDeviceConnectedState();
-
-                        if (wasDeviceConnectedBefore) {
-                            showCustomAlert(
-                                "Device Disconnected",
-                                `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
-                                "warning",
-                                () => {
-                                    setNoDeviceConnectedState();
+                                    }).catch(() => {});
                                 }
-                            );
+                                ipcRenderer.send("get-installed-apps", selected);
+                            }
+
+                            if (typeof setPlatformAppDeviceEditable === 'function') {
+                                setPlatformAppDeviceEditable(true);
+                            }
+                            setLaunchEnabled(canEnableLaunch());
+                        }
+                    } else {
+                        // NO matching devices connected for this platform
+                        if (!isUiShowingNoDevice || lastKnownDeviceFingerprint) {
+                            const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !isUiShowingNoDevice;
+                            lastKnownDeviceFingerprint = "";
+                            setNoDeviceConnectedState();
+
+                            if (wasDeviceConnectedBefore) {
+                                showCustomAlert(
+                                    "Device Disconnected",
+                                    `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
+                                    "warning",
+                                    () => {
+                                        setNoDeviceConnectedState();
+                                    }
+                                );
+                            }
+                        } else {
+                            const udidInput = document.getElementById('udid');
+                            if (udidInput && udidInput.value) {
+                                setNoDeviceConnectedState();
+                            }
                         }
                     }
                 }
@@ -2109,6 +2117,24 @@
             const previousValue = dropdown.value;
             dropdown.innerHTML = "";
 
+            if (!apps || !apps.length) {
+                dropdown.innerHTML = '<option value="">No device connected</option>';
+                dropdown.value = '';
+                if (typeof dropdown._rebuildCustomSelect === 'function') {
+                    dropdown._rebuildCustomSelect();
+                }
+                const bndlInput = document.getElementById('bundleID');
+                if (bndlInput) bndlInput.value = '';
+                const pkgInput = document.getElementById('apppackage');
+                if (pkgInput) pkgInput.value = '';
+                const actInput = document.getElementById('appactivity');
+                if (actInput) actInput.value = '';
+                if (typeof updateConfigDashboard === 'function') {
+                    updateConfigDashboard();
+                }
+                return;
+            }
+
             (apps || []).forEach(app => {
                 const option = document.createElement("option");
                 option.text = app.name;
@@ -2120,8 +2146,6 @@
             if (typeof dropdown._rebuildCustomSelect === 'function') {
                 dropdown._rebuildCustomSelect();
             }
-
-            if (!apps || !apps.length) return;
 
             // Retrieve saved last selected app for this platform
             let savedAppBundle = null;
@@ -11634,7 +11658,7 @@ function displayScreenshotError(err) {
     if (screenshotImg) screenshotImg.style.display = "none";
 
     const isAppBackground = /closed or running in the background|not running|background/i.test(readableError);
-    const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection/i.test(readableError);
+    const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection|session [a-f0-9-]+ not found|invalid session id|a session is either terminated or not started/i.test(readableError);
 
     if (isDeviceDisconnected) {
         showDummyDeviceMessage({
@@ -11642,6 +11666,7 @@ function displayScreenshotError(err) {
             title: 'Device Disconnected',
             detail: 'Please reconnect your device and click Launch Application.'
         });
+        setNoDeviceConnectedState();
     } else if (isAppBackground) {
         showDummyDeviceMessage({
             theme: 'warning',
@@ -11672,6 +11697,10 @@ function displayScreenshotError(err) {
     driver = null;
     refreshShouldLaunchApp = true;
     unlockLaunchForm();
+
+    if (isDeviceDisconnected) {
+        setNoDeviceConnectedState();
+    }
 
     document.getElementById('overlay').style.display = 'none';
     hideLocalDeviceLoader();
@@ -14695,20 +14724,12 @@ function updateConfigDashboard() {
     var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || "";
     var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
 
-    if (isIos && !bndlVal) {
-        try {
-            bndlVal = localStorage.getItem('algo_last_selected_app_IOS') || localStorage.getItem('algo_last_selected_app_iOS') || '';
-            if (bndlVal && document.getElementById("bundleID") && !document.getElementById("bundleID").value) {
-                document.getElementById("bundleID").value = bndlVal;
-            }
-        } catch (_) {}
-    } else if (!isIos && !pkgVal) {
-        try {
-            pkgVal = localStorage.getItem('algo_last_selected_app_Android') || '';
-            if (pkgVal && document.getElementById("apppackage") && !document.getElementById("apppackage").value) {
-                document.getElementById("apppackage").value = pkgVal;
-            }
-        } catch (_) {}
+    var devSelect = document.getElementById('devicename');
+    var isDeviceConnectedNow = !!(udidVal && devSelect && devSelect.value && devSelect.value !== 'No device connected' && devSelect.value !== 'Select Device');
+
+    if (!isDeviceConnectedNow) {
+        bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
+        pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
     }
 
     var mPlatform = document.getElementById("configMetricPlatform");
