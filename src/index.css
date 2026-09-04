@@ -478,15 +478,49 @@ input[type=text], select, textarea {
 
 .native-select-hidden {
   position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
   opacity: 0 !important;
   pointer-events: none !important;
-  width: 1px !important;
-  height: 1px !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
-  clip: rect(0 0 0 0);
-  overflow: hidden;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  font-size: 0 !important;
+  z-index: -1 !important;
+  visibility: hidden !important;
+}
+
+/* Must beat `.home-field select { width: 100% }` — that was letting Windows open the native OS dropdown */
+.home-field select.native-select-hidden,
+.home-field .custom-select-wrap select.native-select-hidden,
+html.platform-win .home-field select.native-select-hidden,
+html.platform-win .home-field .custom-select-wrap select.native-select-hidden {
+  position: absolute !important;
+  left: 0 !important;
+  top: 0 !important;
+  width: 0 !important;
+  max-width: 0 !important;
+  height: 0 !important;
+  max-height: 0 !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  z-index: -1 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-size: 0 !important;
 }
 
 .custom-select-trigger {
@@ -608,40 +642,17 @@ input[type=text], select, textarea {
   background: #94a3b8;
 }
 
-/* Placeholder-only (No device connected / Loading apps) — static chip, no menu caret */
-.custom-select-wrap.no-dropdown .custom-select-trigger,
-.custom-select-wrap.is-static .custom-select-trigger {
-  cursor: default;
-}
-
-.custom-select-wrap.no-dropdown .custom-select-caret,
-.custom-select-wrap.is-static .custom-select-caret {
-  display: none !important;
-}
-
-.home-field:has(.custom-select-wrap.no-dropdown) label,
-.home-field:has(.custom-select-wrap.is-static) label {
-  cursor: default !important;
-}
-
-.home-field .custom-select-wrap.no-dropdown,
-.home-field .custom-select-wrap.is-static {
-  pointer-events: none;
-}
-
-.home-field .custom-select-wrap.no-dropdown .custom-select-trigger,
-.home-field .custom-select-wrap.is-static .custom-select-trigger {
-  pointer-events: none;
-  cursor: default;
-}
-
 html.platform-win .custom-select-menu {
   z-index: 999999 !important;
+  background: #ffffff !important;
+  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08) !important;
+  padding: 5px !important;
 }
 
-html.platform-win .home-field .custom-select-wrap.no-dropdown,
-html.platform-win .home-field .custom-select-wrap.is-static {
-  pointer-events: none;
+html.platform-win .custom-select-menu.is-visible {
+  display: block !important;
 }
 
 .custom-select-option {
@@ -5617,7 +5628,7 @@ pre#configJsonPreview.vscode-code {
   display: none;
 }
 
-.home-field select,
+.home-field select:not(.native-select-hidden),
 .home-field input {
   width: 100% !important;
   margin: 0 !important;

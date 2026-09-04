@@ -1427,8 +1427,7 @@
     prestart();
 
     // ---- Custom dropdown enhancer (keeps native <select> API working) ----
-    // Same chrome on Windows + macOS. Placeholder-only states (No device connected)
-    // show as static text — no caret / no menu.
+    // Same custom white menu + checkmark on Windows and macOS (never native OS select).
     function closeAllCustomSelects(exceptWrap) {
         document.querySelectorAll('.custom-select-wrap.is-open').forEach((wrap) => {
             if (exceptWrap && wrap === exceptWrap) return;
@@ -1442,33 +1441,29 @@
         });
     }
 
-    function isCustomSelectPlaceholderOnly(selectEl) {
-        if (!selectEl || !selectEl.options || selectEl.options.length === 0) return true;
-        if (selectEl.options.length > 1) return false;
-        const opt = selectEl.options[0];
-        const text = String((opt && (opt.textContent || opt.value)) || '').trim().toLowerCase();
-        const val = String((opt && opt.value) || '').trim();
-        if (!text) return true;
-        // Single non-selectable status row — not a real app/device list
-        const placeholders = [
-            'no device connected',
-            'no apps found',
-            'loading apps...',
-            'loading apps',
-            'select app',
-            'select device',
-            'select...'
-        ];
-        return !val || placeholders.includes(text);
-    }
-
     // Custom dropdown chrome over native <select> (Platform / App / Device)
     function enhanceCustomSelect(selectEl) {
         if (!selectEl || selectEl.dataset.customized === '1') return;
+        try {
         selectEl.dataset.customized = '1';
         selectEl.classList.add('native-select-hidden', 'js-custom-select');
         selectEl.setAttribute('tabindex', '-1');
         selectEl.setAttribute('aria-hidden', 'true');
+        // Hide native hit-target via CSS class + safe inline styles.
+        // Do NOT use setProperty('-webkit-appearance') — it can throw on Windows Electron and abort popup.js.
+        try {
+            selectEl.style.position = 'absolute';
+            selectEl.style.width = '0';
+            selectEl.style.height = '0';
+            selectEl.style.opacity = '0';
+            selectEl.style.pointerEvents = 'none';
+            selectEl.style.visibility = 'hidden';
+            selectEl.style.margin = '0';
+            selectEl.style.padding = '0';
+            selectEl.style.border = '0';
+            selectEl.style.zIndex = '-1';
+            selectEl.style.appearance = 'none';
+        } catch (_) {}
 
         const wrap = document.createElement('div');
         wrap.className = 'custom-select-wrap';
@@ -1478,6 +1473,7 @@
         const trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'custom-select-trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
         trigger.innerHTML = `
             <span class="custom-select-label is-placeholder">Select...</span>
             <svg class="custom-select-caret" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
@@ -1488,7 +1484,7 @@
         menu.className = 'custom-select-menu';
         menu.setAttribute('role', 'listbox');
         menu.style.display = 'none';
-        // Body-fixed menu so Windows overflow:hidden parents cannot clip it (same as Mac look)
+        // Body-fixed menu so overflow:hidden parents cannot clip it (Mac + Windows)
         document.body.appendChild(menu);
 
         wrap.appendChild(trigger);
@@ -1498,29 +1494,22 @@
             e.stopPropagation();
         });
 
+        selectEl.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+        selectEl.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+        }, true);
+
         const labelEl = trigger.querySelector('.custom-select-label');
-        const caretEl = trigger.querySelector('.custom-select-caret');
 
         function syncDisabledAndError() {
             const disabled = !!selectEl.disabled;
-            const placeholderOnly = isCustomSelectPlaceholderOnly(selectEl);
             trigger.disabled = disabled;
             wrap.classList.toggle('is-disabled', disabled);
-            wrap.classList.toggle('is-static', placeholderOnly);
-            wrap.classList.toggle('no-dropdown', placeholderOnly);
-            if (caretEl) {
-                caretEl.style.display = placeholderOnly ? 'none' : '';
-                caretEl.setAttribute('aria-hidden', placeholderOnly ? 'true' : 'false');
-            }
-            trigger.setAttribute('aria-haspopup', placeholderOnly ? 'false' : 'listbox');
-            trigger.title = placeholderOnly ? '' : 'Open dropdown';
-
-            const fieldLabel = wrap.closest('.home-field') && wrap.closest('.home-field').querySelector('label');
-            if (fieldLabel) {
-                fieldLabel.style.cursor = placeholderOnly ? 'default' : 'pointer';
-            }
-
-            if (disabled || placeholderOnly) {
+            if (disabled) {
                 wrap.classList.remove('is-open');
                 menu.style.display = 'none';
                 menu.classList.remove('is-visible');
@@ -1549,59 +1538,55 @@
                 selectedOpt = options[0];
             }
 
-            const placeholderOnly = isCustomSelectPlaceholderOnly(selectEl);
+            options.forEach((opt, index) => {
+                const item = document.createElement('div');
+                item.className = 'custom-select-option';
+                item.setAttribute('role', 'option');
+                item.dataset.index = String(index);
 
-            if (!placeholderOnly) {
-                options.forEach((opt, index) => {
-                    const item = document.createElement('div');
-                    item.className = 'custom-select-option';
-                    item.setAttribute('role', 'option');
-                    item.dataset.index = String(index);
+                const isSelected = (index === selectEl.selectedIndex);
+                if (opt.disabled) item.classList.add('is-disabled');
+                if (isSelected) item.classList.add('is-selected');
 
-                    const isSelected = (index === selectEl.selectedIndex);
-                    if (opt.disabled) item.classList.add('is-disabled');
-                    if (isSelected) item.classList.add('is-selected');
+                const textSpan = document.createElement('span');
+                textSpan.className = 'custom-select-option-text';
+                textSpan.textContent = opt.textContent || opt.value || '';
+                item.appendChild(textSpan);
 
-                    const textSpan = document.createElement('span');
-                    textSpan.className = 'custom-select-option-text';
-                    textSpan.textContent = opt.textContent || opt.value || '';
-                    item.appendChild(textSpan);
+                if (isSelected) {
+                    const checkSpan = document.createElement('span');
+                    checkSpan.className = 'custom-select-check';
+                    checkSpan.style.display = 'inline-flex';
+                    checkSpan.style.alignItems = 'center';
+                    checkSpan.style.marginLeft = '8px';
+                    checkSpan.style.flexShrink = '0';
+                    checkSpan.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" style="width: 14px; height: 14px; color: #2F8BCC;"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`;
+                    item.appendChild(checkSpan);
+                }
 
-                    if (isSelected) {
-                        const checkSpan = document.createElement('span');
-                        checkSpan.className = 'custom-select-check';
-                        checkSpan.style.display = 'inline-flex';
-                        checkSpan.style.alignItems = 'center';
-                        checkSpan.style.marginLeft = '8px';
-                        checkSpan.style.flexShrink = '0';
-                        checkSpan.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" style="width: 14px; height: 14px; color: #2F8BCC;"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`;
-                        item.appendChild(checkSpan);
-                    }
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (opt.disabled) return;
 
-                    item.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (opt.disabled) return;
-
-                        selectEl.selectedIndex = index;
-                        selectEl.value = opt.value;
-                        selectEl.style.borderColor = '';
-                        rebuildMenu();
-                        menu.style.display = 'none';
-                        menu.classList.remove('is-visible');
-                        wrap.classList.remove('is-open');
-                        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
-                    });
-
-                    menu.appendChild(item);
+                    selectEl.selectedIndex = index;
+                    selectEl.value = opt.value;
+                    selectEl.style.borderColor = '';
+                    rebuildMenu();
+                    menu.style.display = 'none';
+                    menu.classList.remove('is-visible');
+                    wrap.classList.remove('is-open');
+                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
                 });
-            }
+
+                menu.appendChild(item);
+            });
 
             if (selectedOpt) {
                 const text = (selectedOpt.textContent || selectedOpt.value || '').trim();
                 labelEl.textContent = text || 'Select...';
                 const softPlaceholder = !text
-                    || text === 'Loading Apps...'
+                    || /^loading apps/i.test(text)
                     || text === 'No device connected'
                     || text === 'No apps found';
                 labelEl.classList.toggle('is-placeholder', softPlaceholder);
@@ -1611,12 +1596,6 @@
 
         function toggleMenu() {
             if (selectEl.disabled) return;
-            if (isCustomSelectPlaceholderOnly(selectEl)) {
-                wrap.classList.remove('is-open');
-                menu.style.display = 'none';
-                menu.classList.remove('is-visible');
-                return;
-            }
             selectEl.style.borderColor = '';
             syncDisabledAndError();
             const willOpen = !wrap.classList.contains('is-open');
@@ -1627,7 +1606,6 @@
                 const fieldWrap = wrap.closest('.home-field');
                 const fieldRect = fieldWrap ? fieldWrap.getBoundingClientRect() : rect;
 
-                // Anchor menu under the full chip (Mac + Windows identical)
                 const menuLeft = Math.round(fieldWrap ? fieldRect.left : rect.left);
                 const minW = Math.round(fieldWrap ? fieldRect.width : rect.width);
 
@@ -1674,33 +1652,29 @@
             const label = fieldWrap.querySelector('label');
             if (label) {
                 label.removeAttribute('for');
+                label.style.cursor = 'pointer';
                 label.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    if (isCustomSelectPlaceholderOnly(selectEl)) return;
                     toggleMenu();
                 });
             }
             fieldWrap.addEventListener('click', (e) => {
-                if (isCustomSelectPlaceholderOnly(selectEl)) return;
-                if (e.target !== trigger && !trigger.contains(e.target) && !menu.contains(e.target)) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    toggleMenu();
-                }
+                if (e.target === trigger || trigger.contains(e.target) || menu.contains(e.target)) return;
+                e.preventDefault();
+                e.stopPropagation();
+                toggleMenu();
             });
         }
 
-        // Keep UI in sync when options / disabled / style change programmatically
         const mo = new MutationObserver(() => rebuildMenu());
         mo.observe(selectEl, {
             childList: true,
             subtree: true,
             attributes: true,
-            attributeFilter: ['disabled', 'style', 'value']
+            attributeFilter: ['disabled', 'value']
         });
 
-        // selectedIndex / value changes without mutation (e.g. .value = x)
         const proto = Object.getPrototypeOf(selectEl);
         const valueDesc = Object.getOwnPropertyDescriptor(proto, 'value');
         const indexDesc = Object.getOwnPropertyDescriptor(proto, 'selectedIndex');
@@ -1729,16 +1703,28 @@
 
         rebuildMenu();
         selectEl._rebuildCustomSelect = rebuildMenu;
+        } catch (err) {
+            console.error('enhanceCustomSelect failed:', selectEl && selectEl.id, err);
+            try { selectEl.dataset.customized = ''; } catch (_) {}
+        }
     }
 
     function initAllCustomSelects() {
         document.querySelectorAll('select.js-custom-select, #platformname, #appname, #devicename').forEach((el) => {
             if (el.tagName !== 'SELECT') return;
-            enhanceCustomSelect(el);
+            try {
+                enhanceCustomSelect(el);
+            } catch (err) {
+                console.error('init custom select failed:', el && el.id, err);
+            }
         });
     }
 
-    initAllCustomSelects();
+    try {
+        initAllCustomSelects();
+    } catch (err) {
+        console.error('initAllCustomSelects failed:', err);
+    }
     document.addEventListener('click', () => closeAllCustomSelects());
     window.addEventListener('resize', () => closeAllCustomSelects());
     document.addEventListener('keydown', (e) => {

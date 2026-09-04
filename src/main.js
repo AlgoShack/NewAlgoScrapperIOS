@@ -2037,6 +2037,13 @@
         };
 
         const runAdbDevices = (args) => new Promise((resolve) => {
+            const finish = (stdout, error, stderr) => {
+                if (error) {
+                    console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
+                }
+                resolve(parseDevicesFromStdout(stdout));
+            };
+
             try {
                 execFile(
                     adbPath,
@@ -2047,16 +2054,22 @@
                         windowsHide: true,
                         maxBuffer: 10 * 1024 * 1024
                     },
-                    (error, stdout, stderr) => {
-                        if (error) {
-                            console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
-                        }
-                        resolve(parseDevicesFromStdout(stdout));
-                    }
+                    (error, stdout, stderr) => finish(stdout, error, stderr)
                 );
             } catch (err) {
-                console.warn('[Android Discovery] execFile threw:', err);
-                resolve([]);
+                // Fallback for odd Windows path/shell cases
+                try {
+                    const quoted = adbPath.includes(' ') ? `"${adbPath}"` : adbPath;
+                    exec(`${quoted} ${args.join(' ')}`, {
+                        timeout: 12000,
+                        env: process.env,
+                        windowsHide: true,
+                        maxBuffer: 10 * 1024 * 1024
+                    }, (error2, stdout2, stderr2) => finish(stdout2, error2 || err, stderr2));
+                } catch (err2) {
+                    console.warn('[Android Discovery] adb exec fallback threw:', err2);
+                    resolve([]);
+                }
             }
         });
 
@@ -2075,6 +2088,37 @@
         }
 
         console.log(`[Android Discovery] adb=${adbPath} found=${devices.length}`, devices.map((d) => d.id).join(', '));
+
+        // Last-resort shell fallback if execFile path never yielded devices on Windows
+        if (!devices.length && process.platform === 'win32') {
+            try {
+                const adbCmd = getAdbCommandPrefix();
+                const { stdout } = await new Promise((resolve) => {
+                    exec(`${adbCmd} devices -l`, {
+                        timeout: 12000,
+                        env: process.env,
+                        windowsHide: true,
+                        maxBuffer: 10 * 1024 * 1024
+                    }, (error, out, err) => resolve({ stdout: out || '', error, err }));
+                });
+                devices = parseDevicesFromStdout(stdout);
+                if (!devices.length) {
+                    const second = await new Promise((resolve) => {
+                        exec(`${adbCmd} devices`, {
+                            timeout: 10000,
+                            env: process.env,
+                            windowsHide: true,
+                            maxBuffer: 10 * 1024 * 1024
+                        }, (error, out) => resolve(out || ''));
+                    });
+                    devices = parseDevicesFromStdout(second);
+                }
+                console.log(`[Android Discovery] shell fallback found=${devices.length}`, devices.map((d) => d.id).join(', '));
+            } catch (fallbackErr) {
+                console.warn('[Android Discovery] shell fallback failed:', fallbackErr);
+            }
+        }
+
         return devices;
     }
 
