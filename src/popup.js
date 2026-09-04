@@ -63,13 +63,22 @@
         if (document.body) document.body.classList.add('platform-win');
     }
 
-    /** Safe DOM-ready helper that runs immediately if DOM is already parsed/interactive */
+    /**
+     * Safe DOM-ready helper.
+     * IMPORTANT (Windows): when the script loads at end of <body>, readyState is often
+     * already "interactive"/"complete". Running the callback synchronously would execute
+     * mid-file — before later `let`s / listeners exist — and abort Home/Launch/scrape setup.
+     * Always defer with setTimeout(0) so the full popup.js finishes first.
+     */
     function onDomReady(fn) {
         if (!fn) return;
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', fn);
-        } else {
+        const run = () => {
             try { fn(); } catch (err) { console.error('onDomReady error:', err); }
+        };
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', run, { once: true });
+        } else {
+            setTimeout(run, 0);
         }
     }
     window.onDomReady = onDomReady;
@@ -95,6 +104,10 @@
     var deviceName;
     var connectedDevices = [];  // Full list from main; dropdown shows platform-filtered subset
     let launchedViaProtocol = false;
+    // Declared early (var) so deferred onDomReady never hits TDZ on Windows fast loads
+    var applyingPlatformFromDevice = false;
+    var lastSelectedPlatform = 'Android';
+    var deviceUiSyncGeneration = 0;
     let rotation = 0;
     let zoomLevel = 1;
     let isDragging = false;
@@ -1122,51 +1135,68 @@
     });
 
    onDomReady(() => {
-       document.getElementById("split-div3").style.display = "none";
-       document.getElementById("tapBtn").style.background = "#2F8BCC";
-       document.getElementById("tapBtn").style.color = "#fff";
-       document.getElementById("touchBtn").style.background = "transparent";
-       document.getElementById("touchBtn").style.color = "#333";
+       try {
+           const split3 = document.getElementById("split-div3");
+           if (split3) split3.style.display = "none";
+           const tapBtn = document.getElementById("tapBtn");
+           if (tapBtn) {
+               tapBtn.style.background = "#2F8BCC";
+               tapBtn.style.color = "#fff";
+           }
+           const touchBtn = document.getElementById("touchBtn");
+           if (touchBtn) {
+               touchBtn.style.background = "transparent";
+               touchBtn.style.color = "#333";
+           }
 
-       // ALWAYS clear past session on a fresh app launch so it never auto-connects
-       localStorage.removeItem("algoQAUser");
+           // Windows: keep Platform Android-only
+           if (typeof lockPlatformToAndroidOnWindows === 'function') {
+               lockPlatformToAndroidOnWindows();
+           }
 
-       showDummyDeviceMessage({ theme: 'info', title: getIdleDummyTitle() });
-       // Fill table empty rows after shared layout settles (Windows + macOS)
-       requestAnimationFrame(() => {
-           if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
-           setTimeout(() => {
+           // Token clear happens once in the launch-mode onDomReady below (protocol-safe)
+
+           if (typeof showDummyDeviceMessage === 'function') {
+               showDummyDeviceMessage({ theme: 'info', title: typeof getIdleDummyTitle === 'function' ? getIdleDummyTitle() : 'Connect a device' });
+           }
+           // Fill table empty rows after shared layout settles (Windows + macOS)
+           requestAnimationFrame(() => {
                if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
-           }, 250);
-       });
+               setTimeout(() => {
+                   if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
+               }, 250);
+           });
 
-       // Apply the correct state (this fixes the cold boot race condition)
-       applyLaunchModeState();
+           // Apply the correct state (this fixes the cold boot race condition)
+           if (typeof applyLaunchModeState === 'function') applyLaunchModeState();
 
-       // Trigger platform UI (Android fields / iOS fields) on load
-       const platformSelect = document.getElementById('platformname');
-       if (platformSelect && platformSelect.tagName === 'SELECT') {
-           if (typeof applyingPlatformFromDevice !== 'undefined') applyingPlatformFromDevice = true;
-           platformSelect.dispatchEvent(new Event('change'));
-           if (typeof applyingPlatformFromDevice !== 'undefined') applyingPlatformFromDevice = false;
-       } else if (typeof updatePlatformUI === 'function') {
-           updatePlatformUI();
+           // Trigger platform UI (Android fields / iOS fields) on load
+           const platformSelect = document.getElementById('platformname');
+           if (platformSelect && platformSelect.tagName === 'SELECT') {
+               try { applyingPlatformFromDevice = true; } catch (_) {}
+               platformSelect.dispatchEvent(new Event('change'));
+               try { applyingPlatformFromDevice = false; } catch (_) {}
+           } else if (typeof updatePlatformUI === 'function') {
+               updatePlatformUI();
+           }
+
+           // Re-pull devices after Home UI is ready (Windows + Mac parity)
+           if (typeof requestInitialConnectedDevices === 'function') {
+               requestInitialConnectedDevices();
+           }
+           if (typeof refreshConnectedDevicesList === 'function' && typeof applyConnectedDevicesToUi === 'function') {
+               refreshConnectedDevicesList().then((list) => {
+                   if (typeof isDeviceDropdownEmpty === 'function' && isDeviceDropdownEmpty()) {
+                       applyConnectedDevicesToUi(list || [], { startup: true });
+                   }
+               }).catch(() => {});
+           }
+
+           // Initialize animated typewriter placeholder on token input
+           if (typeof initTokenPlaceholderAnimation === 'function') initTokenPlaceholderAnimation();
+       } catch (bootErr) {
+           console.error('Home boot onDomReady failed:', bootErr);
        }
-
-       // Re-pull devices after Home UI is ready (Windows + Mac parity)
-       if (typeof requestInitialConnectedDevices === 'function') {
-           requestInitialConnectedDevices();
-       }
-       if (typeof refreshConnectedDevicesList === 'function' && typeof applyConnectedDevicesToUi === 'function') {
-           refreshConnectedDevicesList().then((list) => {
-               if (typeof isDeviceDropdownEmpty === 'function' && isDeviceDropdownEmpty()) {
-                   applyConnectedDevicesToUi(list || [], { startup: true });
-               }
-           }).catch(() => {});
-       }
-
-       // Initialize animated typewriter placeholder on token input
-       initTokenPlaceholderAnimation();
    });
 
     function initTokenPlaceholderAnimation() {
@@ -1323,21 +1353,32 @@
 
     // Fresh window: clear prior token session, then lock Launch for double-click mode
     onDomReady(() => {
-        document.getElementById("split-div3").style.display = "none";
+        try {
+            const split3 = document.getElementById("split-div3");
+            if (split3) split3.style.display = "none";
 
-        document.getElementById("tapBtn").style.background = "#2F8BCC";
-        document.getElementById("tapBtn").style.color = "#fff";
+            const tapBtn = document.getElementById("tapBtn");
+            if (tapBtn) {
+                tapBtn.style.background = "#2F8BCC";
+                tapBtn.style.color = "#fff";
+            }
 
-        document.getElementById("touchBtn").style.background = "transparent";
-        document.getElementById("touchBtn").style.color = "#333";
+            const touchBtn = document.getElementById("touchBtn");
+            if (touchBtn) {
+                touchBtn.style.background = "transparent";
+                touchBtn.style.color = "#333";
+            }
 
-        // Do not restore a previous token across normal desktop restarts.
-        // Protocol / API launches may already have user-data — keep that session.
-        if (!launchedViaProtocol) {
-            localStorage.removeItem("algoQAUser");
+            // Do not restore a previous token across normal desktop restarts.
+            // Protocol / API launches may already have user-data — keep that session.
+            if (!launchedViaProtocol) {
+                localStorage.removeItem("algoQAUser");
+            }
+
+            if (typeof applyLaunchModeState === 'function') applyLaunchModeState();
+        } catch (err) {
+            console.error('launch-mode boot failed:', err);
         }
-
-        applyLaunchModeState();
     });
 
     const CryptoJS = require("crypto-js");
@@ -1442,6 +1483,32 @@
     // Custom dropdown chrome over native <select> (Platform / App / Device)
     function enhanceCustomSelect(selectEl) {
         if (!selectEl || selectEl.dataset.customized === '1') return;
+        // Snapshot so a mid-init failure can fully restore the native <select>
+        const prevClassName = selectEl.className;
+        const prevStyleCss = selectEl.getAttribute('style') || '';
+        const prevTabIndex = selectEl.getAttribute('tabindex');
+        const prevAriaHidden = selectEl.getAttribute('aria-hidden');
+
+        const restoreNativeSelect = () => {
+            try {
+                selectEl.dataset.customized = '';
+                selectEl.classList.remove('native-select-hidden');
+                selectEl.className = prevClassName;
+                if (prevStyleCss) selectEl.setAttribute('style', prevStyleCss);
+                else selectEl.removeAttribute('style');
+                if (prevTabIndex == null) selectEl.removeAttribute('tabindex');
+                else selectEl.setAttribute('tabindex', prevTabIndex);
+                if (prevAriaHidden == null) selectEl.removeAttribute('aria-hidden');
+                else selectEl.setAttribute('aria-hidden', prevAriaHidden);
+                selectEl.style.pointerEvents = '';
+                selectEl.style.opacity = '';
+                selectEl.style.visibility = '';
+                selectEl.style.width = '';
+                selectEl.style.height = '';
+                selectEl.style.position = '';
+            } catch (_) {}
+        };
+
         try {
         selectEl.dataset.customized = '1';
         selectEl.classList.add('native-select-hidden', 'js-custom-select');
@@ -1462,6 +1529,11 @@
             selectEl.style.zIndex = '-1';
             selectEl.style.appearance = 'none';
         } catch (_) {}
+
+        if (!selectEl.parentNode) {
+            restoreNativeSelect();
+            return;
+        }
 
         const wrap = document.createElement('div');
         wrap.className = 'custom-select-wrap';
@@ -1688,7 +1760,29 @@
         selectEl._rebuildCustomSelect = rebuildMenu;
         } catch (err) {
             console.error('enhanceCustomSelect failed:', selectEl && selectEl.id, err);
-            try { selectEl.dataset.customized = ''; } catch (_) {}
+            try {
+                // Pull select back out of a half-built wrap if needed
+                const wrap = selectEl.closest && selectEl.closest('.custom-select-wrap');
+                if (wrap && wrap.parentNode) {
+                    wrap.parentNode.insertBefore(selectEl, wrap);
+                    const orphanMenu = wrap._customSelectMenu;
+                    if (orphanMenu && orphanMenu.parentNode) orphanMenu.parentNode.removeChild(orphanMenu);
+                    wrap.parentNode.removeChild(wrap);
+                }
+            } catch (_) {}
+            try {
+                selectEl.dataset.customized = '';
+                selectEl.classList.remove('native-select-hidden');
+                selectEl.style.pointerEvents = '';
+                selectEl.style.opacity = '';
+                selectEl.style.visibility = '';
+                selectEl.style.width = '';
+                selectEl.style.height = '';
+                selectEl.style.position = '';
+                selectEl.style.appearance = '';
+                selectEl.removeAttribute('aria-hidden');
+                selectEl.removeAttribute('tabindex');
+            } catch (_) {}
         }
     }
 
@@ -1702,9 +1796,7 @@
             }
         });
     }
-    onDomReady(() => {
-        initAllCustomSelects();
-    });
+    // Do NOT init custom selects here — wait until after IPC / Launch handlers (see deferred setTimeout below).
 
     // Delay custom-select chrome until after core IPC/handlers below are registered.
     // Windows was dying when select.value was monkey-patched during early init.
@@ -1729,11 +1821,10 @@
     // ===========================================================================
 
     // --- AUTO-SWITCH PLATFORM ON LOAD ---
-    let lastSelectedPlatform = document.getElementById('platformname')
+    lastSelectedPlatform = document.getElementById('platformname')
         ? document.getElementById('platformname').value
         : 'Android';
-    let applyingPlatformFromDevice = false;
-    let deviceUiSyncGeneration = 0;
+    // applyingPlatformFromDevice / deviceUiSyncGeneration declared near top (Windows TDZ-safe)
 
     function normalizePlatformName(platform) {
         const p = String(platform || '').toUpperCase();
@@ -1764,10 +1855,19 @@
         return `${device.name} (${typeLabel})`;
     }
 
-    /** Platform helper — keeps custom dropdown behavior consistent across Windows and macOS. */
+    /** Windows builds are Android-only — keep Platform dropdown consistent. */
     function lockPlatformToAndroidOnWindows() {
-        // Safe no-op: maintains full Platform options (Android & IOS) so custom dropdown looks & behaves identically on Windows and macOS
+        if (process.platform !== 'win32') return;
+        const platformEl = document.getElementById('platformname');
+        if (!platformEl || platformEl.tagName !== 'SELECT') return;
+        platformEl.innerHTML = '<option value="Android" selected>Android</option>';
+        platformEl.value = 'Android';
+        lastSelectedPlatform = 'Android';
+        if (typeof platformEl._rebuildCustomSelect === 'function') {
+            platformEl._rebuildCustomSelect();
+        }
     }
+    lockPlatformToAndroidOnWindows();
 
     function setAppDropdownPlaceholder(label) {
         const appSelect = document.getElementById('appname');
@@ -2155,10 +2255,14 @@
                     el._rebuildCustomSelect();
                 }
             });
+            window.__algoCustomSelectsReady = true;
         } catch (err) {
             console.error('deferred custom select init failed:', err);
+            window.__algoCustomSelectsReady = false;
         }
     }, 0);
+
+    window.__algoDeviceListenersReady = true;
 
     function startRealtimeDeviceMonitoring() {
         if (realtimeDeviceMonitorInterval) clearInterval(realtimeDeviceMonitorInterval);
@@ -3460,7 +3564,9 @@
         document.getElementById('overlay').style.display = 'block';
     }
 
-    document.getElementById("Run").addEventListener('click', async () => {
+    const runBtnEl = document.getElementById("Run");
+    if (runBtnEl) {
+    runBtnEl.addEventListener('click', async () => {
             if (!canEnableLaunch()) {
                 showCustomAlert("Authentication Required", "Please paste and connect a valid token before launching the application.", "warning");
                 return;
@@ -3662,6 +3768,7 @@
             if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
             launchApp(initialData);
     });
+    }
 
     function formatLaunchFailure(error, platform, deviceName, udid, details = {}) {
         const rawMsg = String((error && error.message) || error || "");
@@ -4297,7 +4404,13 @@
 // getLoadPageTags() (Android widgets vs XCUI types) → createAndAppendTable.
 // Prefer Scrape UI + tap-to-select for day-to-day scraping.
 // ===========================================================================
-document.getElementById("Scrape").addEventListener('click', async () => {
+(function bindScrapeClick() {
+    const scrapeBtn = document.getElementById("Scrape");
+    if (!scrapeBtn) {
+        console.error('Scrape button missing — scrape click not bound');
+        return;
+    }
+    scrapeBtn.addEventListener('click', async () => {
     if (createFeatureMode) return;
     document.getElementById('searchbox').value = '';
     document.getElementById('brokenText').style.display = 'none';
@@ -4592,6 +4705,7 @@ document.getElementById("Scrape").addEventListener('click', async () => {
         showErrorPopup("Error occurred while scraping", error);
     }
 });
+})();
 
 
 
@@ -6739,30 +6853,14 @@ async function performSwipe(startX, startY, endX, endY) {
 
 
 
-    document.getElementById("appname").addEventListener('click', async () => {
-      document.getElementById("appname").style.borderColor = ''
-    })
-    document.getElementById("devicename").addEventListener('click', async () => {
-      document.getElementById("devicename").style.borderColor = ''
-    })
-    document.getElementById("udid").addEventListener('click', async () => {
-      document.getElementById("udid").style.borderColor = ''
-    })
-    document.getElementById("platformversion").addEventListener('click', async () => {
-      document.getElementById("platformversion").style.borderColor = ''
-    })
-    document.getElementById("automationName").addEventListener('click', async () => {
-      document.getElementById("automationName").style.borderColor = ''
-    })
-    document.getElementById("bundleID").addEventListener('click', async () => {
-      document.getElementById("bundleID").style.borderColor = ''
-    })
-    document.getElementById("appiumurl").addEventListener('click', async () => {
-      document.getElementById("appiumurl").style.borderColor = ''
-    })
-    document.getElementById("pagename_searchbox").addEventListener('click', async () => {
-      document.getElementById("pagename_searchbox").style.borderColor = ''
-    })
+    // Soft border-clear on field focus — never throw if an element is missing (Windows)
+    ['appname', 'devicename', 'udid', 'platformversion', 'automationName', 'bundleID', 'appiumurl', 'pagename_searchbox'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', () => {
+            try { el.style.borderColor = ''; } catch (_) {}
+        });
+    });
 
 
     function checkForSingleQuote(statement) {
