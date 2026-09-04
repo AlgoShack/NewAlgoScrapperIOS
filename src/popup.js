@@ -2137,6 +2137,91 @@
         }
     }
 
+    function isAppDropdownNeedingFetch() {
+        const appSelect = document.getElementById('appname');
+        if (!appSelect) return true;
+        const val = String(appSelect.value || '').trim().toLowerCase();
+        const text = (appSelect.options && appSelect.selectedIndex >= 0)
+            ? String(appSelect.options[appSelect.selectedIndex].text || '').trim().toLowerCase()
+            : '';
+        const placeholders = new Set([
+            '',
+            'no device connected',
+            'loading apps...',
+            'loading apps…',
+            'select app',
+            'no apps found'
+        ]);
+        if (placeholders.has(val) || placeholders.has(text)) return true;
+        // Only a placeholder option present
+        if (!appSelect.options || appSelect.options.length <= 1) {
+            const only = String(appSelect.options?.[0]?.text || '').trim().toLowerCase();
+            if (!only || placeholders.has(only)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Fetch installed apps (+ platform version) for the selected device.
+     * Used on Mac + Windows whenever a device is auto-detected or selected.
+     */
+    function requestInstalledAppsForDevice(selectedDevice, opts) {
+        const options = opts || {};
+        if (!selectedDevice || !(selectedDevice.id || selectedDevice.name)) return false;
+
+        const devicePayload = {
+            id: selectedDevice.id || selectedDevice.name,
+            name: selectedDevice.name || selectedDevice.id,
+            platform: selectedDevice.platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android'),
+            type: selectedDevice.type || '',
+            version: selectedDevice.version || ''
+        };
+
+        window._pendingInstalledAppsDeviceId = String(devicePayload.id);
+        window._installedAppsRequestSeq = (window._installedAppsRequestSeq || 0) + 1;
+        const seq = window._installedAppsRequestSeq;
+
+        if (!options.silent) {
+            setAppDropdownPlaceholder('Loading apps...');
+        }
+
+        // Platform version for Configuration panel
+        if (normalizePlatformName(devicePayload.platform) === 'Android') {
+            ipcRenderer.invoke('get-android-version', devicePayload.id).then((ver) => {
+                if (seq !== window._installedAppsRequestSeq) return;
+                if (ver) {
+                    const pv = document.getElementById('platformversion');
+                    if (pv) {
+                        pv.value = ver;
+                        pv.dataset.userEdited = 'true';
+                    }
+                }
+            }).catch(() => {});
+        } else if (!devicePayload.version) {
+            ipcRenderer.invoke('get-ios-version', devicePayload.id).then((ver) => {
+                if (seq !== window._installedAppsRequestSeq) return;
+                if (ver) {
+                    const pv = document.getElementById('platformversion');
+                    if (pv) {
+                        pv.value = ver;
+                        pv.dataset.userEdited = 'true';
+                    }
+                }
+            }).catch(() => {});
+        } else {
+            const pv = document.getElementById('platformversion');
+            if (pv && devicePayload.version) {
+                pv.value = devicePayload.version;
+                pv.dataset.userEdited = 'true';
+            }
+        }
+
+        console.log('[Devices] Fetching installed apps for', devicePayload.id, devicePayload.platform, devicePayload.type || '');
+        ipcRenderer.send('get-installed-apps', devicePayload);
+        return true;
+    }
+    window.requestInstalledAppsForDevice = requestInstalledAppsForDevice;
+
     function isDeviceDropdownEmpty() {
         const deviceSelect = document.getElementById('devicename');
         if (!deviceSelect) return true;
@@ -2454,10 +2539,18 @@
         }
 
         if (platformDevices.length > 0) {
-            const selectedDevice = populateDeviceDropdown(platformDevices);
-            if (selectedDevice && requestApps) {
-                setAppDropdownPlaceholder('Loading apps...');
-                ipcRenderer.send('get-installed-apps', selectedDevice);
+            window._applyingDevicesFromMonitor = true;
+            let selectedDevice = null;
+            try {
+                selectedDevice = populateDeviceDropdown(platformDevices);
+                if (selectedDevice && requestApps) {
+                    requestInstalledAppsForDevice(selectedDevice);
+                } else if (selectedDevice && isAppDropdownNeedingFetch()) {
+                    // Device UI already filled but App list still empty — always fetch
+                    requestInstalledAppsForDevice(selectedDevice);
+                }
+            } finally {
+                window._applyingDevicesFromMonitor = false;
             }
             if (typeof setPlatformAppDeviceEditable === 'function') {
                 setPlatformAppDeviceEditable(true);
@@ -2557,8 +2650,14 @@
         }
         const isFirstFill = !initialDeviceUiApplied;
         const fp = computeDeviceFingerprint(list);
-        // Ignore duplicate pushes with identical fingerprint
+        // Ignore duplicate pushes with identical fingerprint — unless App list still needs fetch
         if (!isFirstFill && fp && fp === lastKnownDeviceFingerprint && !isDeviceDropdownEmpty()) {
+            if (isAppDropdownNeedingFetch()) {
+                const udid = (document.getElementById('udid')?.value || deviceId || '').trim();
+                const selected = (udid && list.find((d) => d.id === udid || d.name === udid))
+                    || list[0];
+                if (selected) requestInstalledAppsForDevice(selected);
+            }
             if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
             return;
         }
@@ -2671,13 +2770,14 @@
 
                     if (!isDeviceStillConnected) {
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
+                        const previousName = deviceName || activeUdid || 'device';
                         lastKnownDeviceFingerprint = '';
                         consecutiveEmptyDevicePolls = 0;
                         if (typeof resetHomeToStartingStateOnDisconnect === 'function') {
                             resetHomeToStartingStateOnDisconnect();
                         }
                         if (typeof markSessionInterrupted === 'function') {
-                            markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`), {
+                            markSessionInterrupted(new Error(`device disconnected: ${previousName}`), {
                                 skipDisconnectAlert: true,
                                 skipDeviceUiHandling: true
                             });
@@ -2689,6 +2789,20 @@
                         });
                         if (!freshDevices.length) {
                             showAppPopup('device_disconnected_session');
+                        } else {
+                            const next = (document.getElementById('devicename')?.selectedOptions?.[0]?.text
+                                || document.getElementById('udid')?.value
+                                || 'another device');
+                            if (typeof showStructuredAlert === 'function') {
+                                showStructuredAlert(
+                                    'Device Disconnected',
+                                    {
+                                        lead: `“${String(previousName)}” disconnected. Home was reset to a fresh start.`,
+                                        hint: `Now using “${String(next)}”. Select an app and click Launch Application.`
+                                    },
+                                    'warning'
+                                );
+                            }
                         }
                         return;
                     }
@@ -2761,15 +2875,45 @@
                         || (freshFingerprint !== lastKnownDeviceFingerprint);
                     if (needsUiRefresh) {
                         const wasEmpty = uiEmpty;
+                        // Working device gone but others remain → Home fresh start on the new device
+                        const switchedToOtherDevice = !wasEmpty && !isCurrentDeviceStillPresent;
+                        const previousName = deviceName
+                            || currentDeviceVal
+                            || currentUdid
+                            || 'previous device';
                         closeDeviceDisconnectedAlertIfOpen();
+                        if (switchedToOtherDevice && typeof resetHomeToStartingStateOnDisconnect === 'function') {
+                            resetHomeToStartingStateOnDisconnect();
+                        }
                         applyConnectedDevicesToUi(freshDevices, { startup: false, requestApps: true });
                         initialDeviceUiApplied = true;
                         if (wasEmpty && typeof window.switchAppTab === 'function') {
                             window.switchAppTab('home');
                         }
-                        // Preview message is synced inside applyConnectedDevicesToUi / setNoDeviceConnectedState
+                        if (switchedToOtherDevice) {
+                            const next = (document.getElementById('devicename')?.selectedOptions?.[0]?.text
+                                || document.getElementById('udid')?.value
+                                || 'another device');
+                            if (typeof showStructuredAlert === 'function') {
+                                showStructuredAlert(
+                                    'Device Disconnected',
+                                    {
+                                        lead: `“${String(previousName)}” disconnected. Home was reset to a fresh start.`,
+                                        hint: `Now using “${String(next)}”. Select an app and click Launch Application.`
+                                    },
+                                    'warning'
+                                );
+                            }
+                        }
                     } else {
                         lastKnownDeviceFingerprint = freshFingerprint;
+                        // Device list unchanged — still fetch apps if dropdown never filled
+                        if (isAppDropdownNeedingFetch()) {
+                            const udid = (document.getElementById('udid')?.value || deviceId || '').trim();
+                            const selected = matching.find((d) => d.id === udid || d.name === udid || d.id === currentDeviceVal)
+                                || matching[0];
+                            if (selected) requestInstalledAppsForDevice(selected);
+                        }
                     }
                 } else {
                     consecutiveEmptyDevicePolls += 1;
@@ -2822,6 +2966,23 @@
             || connectedDevices.find(device => device.id === selectedId || device.name === selectedId);
 
         if (selectedDevice) {
+            const previousUdid = String(deviceId || document.getElementById('udid')?.value || '').trim();
+            const nextUdid = String(selectedDevice.id || '').trim();
+            const deviceChanged = !!(previousUdid && nextUdid && previousUdid !== nextUdid);
+
+            // Manual switch to another device → Home fresh start (same as disconnect switch)
+            if (deviceChanged && !window._applyingDevicesFromMonitor) {
+                const hasHomeWork = !!(driver
+                    || window.activeResumedProjectKey
+                    || (window.registeredPageNames && window.registeredPageNames.size > 0)
+                    || (window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0)
+                    || (document.getElementById('myTable')
+                        && document.getElementById('myTable').querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)').length > 0));
+                if (hasHomeWork && typeof resetHomeToStartingStateOnDisconnect === 'function') {
+                    resetHomeToStartingStateOnDisconnect();
+                }
+            }
+
             deviceId = selectedDevice.id;
             deviceName = selectedDevice.name;
             const udidEl = document.getElementById('udid');
@@ -2854,8 +3015,13 @@
                 } catch (_) {}
             }
 
-            setAppDropdownPlaceholder('Loading apps...');
-            ipcRenderer.send("get-installed-apps", selectedDevice);
+            requestInstalledAppsForDevice(selectedDevice);
+            if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
+                setLaunchEnabled(canEnableLaunch());
+            }
+            if (typeof setPlatformAppDeviceEditable === 'function') {
+                setPlatformAppDeviceEditable(true);
+            }
         }
     });
     }
@@ -2871,6 +3037,14 @@
             // Device was disconnected while apps were loading
             if (isDeviceDropdownEmpty()) {
                 setAppDropdownPlaceholder('No device connected');
+                return;
+            }
+
+            // Ignore stale replies from a previous device
+            const pendingId = String(window._pendingInstalledAppsDeviceId || '').trim();
+            const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
+            if (pendingId && currentUdid && pendingId !== currentUdid) {
+                console.warn('[Devices] Ignoring stale installed-apps for', pendingId, '(current', currentUdid + ')');
                 return;
             }
 
@@ -2935,7 +3109,15 @@
                 dropdown.selectedIndex = 0;
             }
 
+            if (typeof dropdown._rebuildCustomSelect === 'function') {
+                dropdown._rebuildCustomSelect();
+            }
+
+            // Fill Package / Activity / Bundle ID for the selected app
             dropdown.dispatchEvent(new Event('change'));
+            if (typeof updateConfigDashboard === 'function') {
+                updateConfigDashboard();
+            }
         });
 
         const appNameEl = document.getElementById("appname");
@@ -3498,11 +3680,9 @@
                     ? (el['XPATH'] || el.ControlId)
                     : [(el['XPATH'] || el.ControlId || '')];
 
-                let selectOptionsHtml = xpaths.map(xp =>
-                    `<option value="${String(xp).replace(/"/g, '&quot;')}" onmousemove="onOptionHover('${String(xp).replace(/'/g, "\\'")}')">${xp}</option>`
-                ).join('');
-
-                let controlIdCellHtml = `<select class="xpath-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${selectOptionsHtml}</select>`;
+                let controlIdCellHtml = (typeof buildControlIdSelectHtml === 'function')
+                    ? buildControlIdSelectHtml(xpaths)
+                    : `<select class="xpath-dropdown control-id-dropdown"><option value="">${String(xpaths[0] || '')}</option></select>`;
 
                 let currentControlType = el['CONTROL TYPE'] || el.ControlType || "";
                 let optionsList = [...new Set([currentControlType, ...allControlTypes])].filter(Boolean);
@@ -5861,10 +6041,9 @@
             lastXPath = xpath;
             clearTimeout(hoverTimer);
 
-            hoverRequestId++; // Invalidate previous requests
+            hoverRequestId++;
             const currentRequestId = hoverRequestId;
 
-            // IMMEDIATELY clear overlay to prevent confusion between rows
             clearOverlay();
 
             if (xpath.startsWith("SWIPE(")) {
@@ -5878,54 +6057,76 @@
             if (xpath.startsWith("COORDINATE(")) {
                 const match = xpath.match(/COORDINATE\((\d+),(\d+)\)/);
                 if (match) {
-                    const x = parseInt(match[1], 10);
-                    const y = parseInt(match[2], 10);
-                    drawCoordinateHoverMarker(x, y);
+                    drawCoordinateHoverMarker(parseInt(match[1], 10), parseInt(match[2], 10));
                 }
                 return;
             }
+
+            // Prefer row-stored rect (instant) before XML/Appium lookup
+            try {
+                const row = xpathCell.closest('tr');
+                if (row && row.dataset && row.dataset.rect) {
+                    const stored = JSON.parse(row.dataset.rect);
+                    if (stored && stored.width > 0 && stored.height > 0) {
+                        drawShowElementMarker(stored);
+                    }
+                }
+            } catch (_) {}
 
             hoverTimer = setTimeout(async () => {
                 if (currentRequestId !== hoverRequestId) return;
 
                 showElementHover = true;
                 try {
-                    const element = await driver.findElement(By.xpath(xpath));
-                    const rect = await element.getRect();
+                    const resolved = (typeof resolveHoverRectForLocator === 'function')
+                        ? await resolveHoverRectForLocator(xpath)
+                        : null;
 
-                    if (currentRequestId === hoverRequestId) {
-                        drawShowElementMarker(rect);
+                    if (currentRequestId !== hoverRequestId) return;
 
-                        // Check if this coordinate belongs to a feature area on the current page and show it
-                        const centerX = rect.x + rect.width / 2;
-                        const centerY = rect.y + rect.height / 2;
-                        const activeHoverPage = ((typeof getActiveHomePageName === 'function' ? getActiveHomePageName() : '') || '').trim();
-                        let matchedArea = null;
-                        let minArea = Number.MAX_VALUE;
-                        for (const area of registeredFeatureAreas) {
-                            if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, centerX, centerY)) continue;
-                            const { x, y, width, height } = area.rect;
-                            if (centerX >= x && centerX <= (x + width) && centerY >= y && centerY <= (y + height)) {
-                                const a = width * height;
-                                if (a < minArea) {
-                                    minArea = a;
-                                    matchedArea = area;
-                                }
+                    if (!resolved) {
+                        clearOverlay();
+                        return;
+                    }
+
+                    if (resolved.kind === 'swipe') {
+                        drawSwipeHoverMarker(resolved.x1, resolved.y1, resolved.x2, resolved.y2);
+                        return;
+                    }
+                    if (resolved.kind === 'coordinate') {
+                        drawCoordinateHoverMarker(resolved.x, resolved.y);
+                        return;
+                    }
+
+                    drawShowElementMarker(resolved);
+
+                    const centerX = resolved.x + resolved.width / 2;
+                    const centerY = resolved.y + resolved.height / 2;
+                    let matchedArea = null;
+                    let minArea = Number.MAX_VALUE;
+                    for (const area of registeredFeatureAreas) {
+                        if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, centerX, centerY)) continue;
+                        const { x, y, width, height } = area.rect;
+                        if (centerX >= x && centerX <= (x + width) && centerY >= y && centerY <= (y + height)) {
+                            const a = width * height;
+                            if (a < minArea) {
+                                minArea = a;
+                                matchedArea = area;
                             }
                         }
-                        if (matchedArea) {
-                            drawFeatureAreaHighlight(matchedArea);
-                        }
+                    }
+                    if (matchedArea) {
+                        drawFeatureAreaHighlight(matchedArea);
                     }
                 } catch {
                     if (currentRequestId === hoverRequestId) {
                         clearOverlay();
                     }
                 }
-            }, 80);
+            }, 60);
         }
 
-        // Dedicated handler for option hover events
+        // Dedicated handler for option hover events (also exposed on window for legacy callers)
         async function onOptionHover(xpath) {
             if (!xpath || xpath === lastXPath) return;
 
@@ -5935,7 +6136,6 @@
             hoverRequestId++;
             const currentRequestId = hoverRequestId;
 
-            // IMMEDIATELY clear overlay
             clearOverlay();
 
             if (xpath.startsWith("SWIPE(")) {
@@ -5949,9 +6149,7 @@
             if (xpath.startsWith("COORDINATE(")) {
                 const match = xpath.match(/COORDINATE\((\d+),(\d+)\)/);
                 if (match) {
-                    const x = parseInt(match[1], 10);
-                    const y = parseInt(match[2], 10);
-                    drawCoordinateHoverMarker(x, y);
+                    drawCoordinateHoverMarker(parseInt(match[1], 10), parseInt(match[2], 10));
                 }
                 return;
             }
@@ -5962,33 +6160,35 @@
                 showElementHover = true;
 
                 try {
-                    const element = await driver.findElement(By.xpath(xpath));
-                    const rect = await element.getRect();
+                    const resolved = (typeof resolveHoverRectForLocator === 'function')
+                        ? await resolveHoverRectForLocator(xpath)
+                        : null;
 
-                    // CRITICAL FIX: Only draw if this is STILL the active hover session
-                    if (currentRequestId === hoverRequestId) {
-                        drawShowElementMarker(rect);
+                    if (currentRequestId !== hoverRequestId) return;
+                    if (!resolved || resolved.kind !== 'rect') {
+                        clearOverlay();
+                        return;
+                    }
 
-                        // Check if this coordinate belongs to a feature area on the current page and show it
-                        const centerX = rect.x + rect.width / 2;
-                        const centerY = rect.y + rect.height / 2;
-                        const activeHoverPage = ((typeof getActiveHomePageName === 'function' ? getActiveHomePageName() : '') || '').trim();
-                        let matchedArea = null;
-                        let minArea = Number.MAX_VALUE;
-                        for (const area of registeredFeatureAreas) {
-                            if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, centerX, centerY)) continue;
-                            const { x, y, width, height } = area.rect;
-                            if (centerX >= x && centerX <= (x + width) && centerY >= y && centerY <= (y + height)) {
-                                const a = width * height;
-                                if (a < minArea) {
-                                    minArea = a;
-                                    matchedArea = area;
-                                }
+                    drawShowElementMarker(resolved);
+
+                    const centerX = resolved.x + resolved.width / 2;
+                    const centerY = resolved.y + resolved.height / 2;
+                    let matchedArea = null;
+                    let minArea = Number.MAX_VALUE;
+                    for (const area of registeredFeatureAreas) {
+                        if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, centerX, centerY)) continue;
+                        const { x, y, width, height } = area.rect;
+                        if (centerX >= x && centerX <= (x + width) && centerY >= y && centerY <= (y + height)) {
+                            const a = width * height;
+                            if (a < minArea) {
+                                minArea = a;
+                                matchedArea = area;
                             }
                         }
-                        if (matchedArea) {
-                            drawFeatureAreaHighlight(matchedArea);
-                        }
+                    }
+                    if (matchedArea) {
+                        drawFeatureAreaHighlight(matchedArea);
                     }
                 } catch (err) {
                     if (currentRequestId === hoverRequestId) {
@@ -5997,6 +6197,7 @@
                 }
             }, 60);
         }
+        window.onOptionHover = onOptionHover;
 
         // Handler for when user selects a different option in the dropdown
         async function onDropdownChange(selectElement) {
@@ -6034,21 +6235,27 @@
             if (xpath.startsWith("COORDINATE(")) {
                 const match = xpath.match(/COORDINATE\((\d+),(\d+)\)/);
                 if (match) {
-                    const x = parseInt(match[1], 10);
-                    const y = parseInt(match[2], 10);
-                    drawCoordinateHoverMarker(x, y);
+                    drawCoordinateHoverMarker(parseInt(match[1], 10), parseInt(match[2], 10));
                 }
                 return;
             }
 
             try {
-                const element = await driver.findElement(By.xpath(xpath));
-                const rect = await element.getRect();
-                drawShowElementMarker(rect);
+                const resolved = (typeof resolveHoverRectForLocator === 'function')
+                    ? await resolveHoverRectForLocator(xpath)
+                    : null;
+                if (resolved && resolved.kind === 'rect') {
+                    drawShowElementMarker(resolved);
+                } else if (resolved && resolved.kind === 'coordinate') {
+                    drawCoordinateHoverMarker(resolved.x, resolved.y);
+                } else {
+                    clearOverlay();
+                }
             } catch {
                 clearOverlay();
             }
         }
+        window.onDropdownChange = onDropdownChange;
 
     function onShowElementLeave(e) {
             showElementHover = false;
@@ -6057,6 +6264,8 @@
             clearTimeout(hoverTimer);
             clearOverlay();
         }
+        window.onShowElementLeave = onShowElementLeave;
+        window.onShowElementHover = onShowElementHover;
 
 
 
@@ -6201,26 +6410,22 @@ function markSessionInterrupted(err, opts) {
         }
         const selectedAlt = populateDeviceDropdown(alternateDevices);
         if (selectedAlt) {
-            if (alternateTarget === 'Android') {
-                ipcRenderer.invoke("get-android-version", selectedAlt.id).then((ver) => {
-                    if (ver) {
-                        const pv = document.getElementById('platformversion');
-                        if (pv) {
-                            pv.value = ver;
-                            pv.dataset.userEdited = 'true';
-                        }
-                    }
-                }).catch(() => {});
+            if (typeof requestInstalledAppsForDevice === 'function') {
+                requestInstalledAppsForDevice(selectedAlt);
+            } else {
+                ipcRenderer.send("get-installed-apps", selectedAlt);
             }
-            ipcRenderer.send("get-installed-apps", selectedAlt);
+            if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
+                setLaunchEnabled(canEnableLaunch());
+            }
         }
 
         if (!options.skipDisconnectAlert) {
             showStructuredAlert(
                 "Device Disconnected",
                 {
-                    lead: `The active <b>${currentTarget === 'Android' ? 'Android' : 'iOS'}</b> device was disconnected.`,
-                    hint: `Switched to available <b>${alternateTarget === 'Android' ? 'Android' : 'iOS'}</b> device: <b>${escapePopupPlain(selectedAlt ? selectedAlt.name : '')}</b>.`
+                    lead: `The active <b>${currentTarget === 'Android' ? 'Android' : 'iOS'}</b> device was disconnected. Home was reset to a fresh start.`,
+                    hint: `Now using <b>${escapePopupPlain(selectedAlt ? selectedAlt.name : 'another device')}</b>. Select an app and click Launch Application.`
                 },
                 "warning"
             );
@@ -7395,11 +7600,16 @@ function createAndAppendTable(dtControls) {
             ? dtControls[i].ControlId
             : [dtControls[i].ControlId];
 
-        let selectOptionsHtml = xpaths.map(xp =>
-            `<option value="${xp.replace(/"/g, '&quot;')}" onmousemove="onOptionHover('${xp.replace(/'/g, "\\'")}')">${xp}</option>`
-        ).join('');
-
-        let controlIdCellHtml = `<select class="xpath-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${selectOptionsHtml}</select>`;
+        let controlIdCellHtml = (typeof buildControlIdSelectHtml === 'function')
+            ? buildControlIdSelectHtml(xpaths)
+            : (() => {
+                const list = (Array.isArray(xpaths) ? xpaths : [xpaths]).map((xp) => String(xp || '').trim()).filter(Boolean);
+                const opts = list.map((xp) => {
+                    const safe = String(xp).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+                    return `<option value="${safe}">${safe}</option>`;
+                }).join('');
+                return `<select class="xpath-dropdown control-id-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${opts}</select>`;
+            })();
 
         let tr = tbody.insertRow(0);
         tr.dataset.rect = JSON.stringify(dtControls[i].rect || null);
@@ -7810,6 +8020,12 @@ function createAndAppendTable(dtControls) {
         if(!overlay || !img)
             return;
 
+        // Keep dashed hover above screenshot on Windows + Mac
+        try {
+            overlay.style.zIndex = '2000';
+            overlay.style.pointerEvents = 'none';
+        } catch (_) {}
+
         const { invScaleX: scaleX, invScaleY: scaleY } = getScreenshotScale(img);
 
         const imgRect =
@@ -7834,18 +8050,20 @@ function createAndAppendTable(dtControls) {
         const height =
             rect.height * scaleY;
 
-        // Red Border
+        // Dashed border highlight
         const box =
             document.createElement("div");
 
+        box.className = "show-element-hover-box";
         box.style.position = "absolute";
         box.style.left = left + "px";
         box.style.top = top + "px";
-        box.style.width = width + "px";
-        box.style.height = height + "px";
-        box.style.border = "2px dashed blue";
+        box.style.width = Math.max(2, width) + "px";
+        box.style.height = Math.max(2, height) + "px";
+        box.style.border = "2px dashed #2F8BCC";
         box.style.boxSizing = "border-box";
         box.style.pointerEvents = "none";
+        box.style.zIndex = "2001";
 
         overlay.appendChild(box);
 
@@ -9109,6 +9327,104 @@ function createAndAppendTable(dtControls) {
 
 
 // Get All Possible XPaths
+function escapeHtmlAttr(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+/** Build Control ID <select> with ALL xpaths — safe on Windows + Mac (no broken inline JS). */
+function buildControlIdSelectHtml(xpaths) {
+    const list = (Array.isArray(xpaths) ? xpaths : [xpaths])
+        .map((xp) => String(xp == null ? '' : xp).trim())
+        .filter(Boolean);
+    const unique = [];
+    list.forEach((xp) => {
+        if (!unique.includes(xp)) unique.push(xp);
+    });
+    if (!unique.length) unique.push('(unknown)[1]');
+
+    const optionsHtml = unique.map((xp) => {
+        const safe = escapeHtmlAttr(xp);
+        return `<option value="${safe}">${safe}</option>`;
+    }).join('');
+
+    return `<select class="xpath-dropdown control-id-dropdown" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${optionsHtml}</select>`;
+}
+window.buildControlIdSelectHtml = buildControlIdSelectHtml;
+window.escapeHtmlAttr = escapeHtmlAttr;
+
+/**
+ * Resolve element rect for hover highlight.
+ * Prefer page-source XML (fast, works Win+Mac even if Appium hover is slow).
+ * Fall back to live driver.findElement when needed.
+ */
+async function resolveHoverRectForLocator(xpath) {
+    const loc = String(xpath || '').trim();
+    if (!loc) return null;
+
+    if (loc.startsWith('SWIPE(')) {
+        const match = loc.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
+        if (!match) return null;
+        return {
+            kind: 'swipe',
+            x1: parseInt(match[1], 10),
+            y1: parseInt(match[2], 10),
+            x2: parseInt(match[3], 10),
+            y2: parseInt(match[4], 10)
+        };
+    }
+
+    if (loc.startsWith('COORDINATE(')) {
+        const match = loc.match(/COORDINATE\((\d+),(\d+)\)/);
+        if (!match) return null;
+        return {
+            kind: 'coordinate',
+            x: parseInt(match[1], 10),
+            y: parseInt(match[2], 10),
+            width: 1,
+            height: 1
+        };
+    }
+
+    // 1) XML page source (preferred)
+    try {
+        if (window.xmlDoc && typeof window.xmlDoc.evaluate === 'function') {
+            const result = window.xmlDoc.evaluate(
+                loc,
+                window.xmlDoc,
+                null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE,
+                null
+            );
+            const node = result && result.singleNodeValue;
+            if (node && typeof parseNodeRect === 'function') {
+                const rect = parseNodeRect(node);
+                if (rect && rect.width > 0 && rect.height > 0) {
+                    return { kind: 'rect', ...rect };
+                }
+            }
+        }
+    } catch (_) {}
+
+    // 2) Live Appium session
+    try {
+        if (typeof driver !== 'undefined' && driver && typeof By !== 'undefined') {
+            const element = await driver.findElement(By.xpath(loc));
+            const rect = await element.getRect();
+            if (rect && rect.width > 0 && rect.height > 0) {
+                return { kind: 'rect', x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+            }
+        }
+    } catch (_) {}
+
+    return null;
+}
+window.resolveHoverRectForLocator = resolveHoverRectForLocator;
+
 function getAllPossibleXPaths(node) {
     if (!node || node.nodeType !== 1) return [];
 
@@ -9119,50 +9435,44 @@ function getAllPossibleXPaths(node) {
         return [`//${tagName}`];
     }
 
-    // 1. Calculate Coordinate (COMMENTED OUT)
-    /*
-    let x = parseFloat(node.getAttribute("x"));
-    let y = parseFloat(node.getAttribute("y"));
-    let width = parseFloat(node.getAttribute("width"));
-    let height = parseFloat(node.getAttribute("height"));
+    const isGeneric = (tagName === "XCUIElementTypeOther" || tagName === "Other" || tagName === "android.view.View" || tagName === "XCUIElementTypeCell" || tagName === "android.view.ViewGroup");
 
-    let coordXPath = null;
-    if (!isNaN(x) && !isNaN(y) && !isNaN(width) && !isNaN(height) && width > 0 && height > 0) {
-        let centerX = Math.round(x + (width / 2));
-        let centerY = Math.round(y + (height / 2));
-        coordXPath = `COORDINATE(${centerX},${centerY})`;
-    }
-    */
-
-    const isGeneric = (tagName === "XCUIElementTypeOther" || tagName === "Other" || tagName === "android.view.View" || tagName === "XCUIElementTypeCell");
-
-    // Prefer strongest / most specific locators first so Identification Type is not always AccessibilityId
-    const isAndroidNode = (typeof isAndroidPlatform === "function" && isAndroidPlatform()) || tagName.startsWith("android.");
+    // Prefer strongest / most specific locators first
+    const isAndroidNode = (typeof isAndroidPlatform === "function" && isAndroidPlatform())
+        || tagName.startsWith("android.")
+        || !!(node.getAttribute && (node.getAttribute('resource-id') || node.getAttribute('content-desc') || node.getAttribute('bounds')));
     const attributes = isAndroidNode
-        ? ["resource-id", "id", "text", "content-desc", "hint"]
+        ? ["resource-id", "id", "text", "content-desc", "hint", "class"]
         : ["name", "label", "value", "id"];
+
+    const pushUnique = (xpath) => {
+        if (xpath && !candidates.includes(xpath)) candidates.push(xpath);
+    };
 
     for (let attr of attributes) {
         let val = node.getAttribute(attr);
-        if (val && val.trim() !== "") {
-            let cleanVal = val.trim().replace(/"/g, '');
-            let xpath = `//${tagName}[@${attr}="${cleanVal}"]`;
-            if (!candidates.includes(xpath)) {
-                candidates.push(xpath);
+        if (val && String(val).trim() !== "") {
+            let cleanVal = String(val).trim().replace(/"/g, '');
+            // Skip noisy class-only if we already have stronger ids (still add if alone)
+            if (attr === 'class' && candidates.length > 0) continue;
+            pushUnique(`//${tagName}[@${attr}="${cleanVal}"]`);
+            // Also add tag-agnostic resource-id / name locators (useful alternates)
+            if (attr === 'resource-id' || attr === 'content-desc' || attr === 'name' || attr === 'label') {
+                pushUnique(`//*[@${attr}="${cleanVal}"]`);
             }
         }
     }
 
     // 2b. If generic tag has NO direct attributes, resolve via nearest labeled Parent Context
-    if (candidates.length === 0 && isGeneric) {
+    if (candidates.length === 0 && isGeneric && window.xmlDoc) {
         let ancestor = node.parentNode;
         let ancestorXpath = "";
 
         while (ancestor && ancestor.nodeType === 1 && !["XCUIElementTypeApplication", "hierarchy", "AppiumAUT"].includes(ancestor.nodeName)) {
             for (let attr of attributes) {
                 let parentVal = ancestor.getAttribute(attr);
-                if (parentVal && parentVal.trim() !== "") {
-                    let cleanParentVal = parentVal.trim().replace(/"/g, '');
+                if (parentVal && String(parentVal).trim() !== "") {
+                    let cleanParentVal = String(parentVal).trim().replace(/"/g, '');
                     ancestorXpath = `//${ancestor.nodeName}[@${attr}="${cleanParentVal}"]`;
                     break;
                 }
@@ -9172,46 +9482,34 @@ function getAllPossibleXPaths(node) {
         }
 
         if (ancestorXpath) {
-            let relativePath = `${ancestorXpath}//${tagName}`;
-            let scopedResults = window.xmlDoc.evaluate(relativePath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-            for (let i = 0; i < scopedResults.snapshotLength; i++) {
-                if (scopedResults.snapshotItem(i) === node) {
-                    candidates.push(`(${relativePath})[${i + 1}]`);
+            try {
+                let relativePath = `${ancestorXpath}//${tagName}`;
+                let scopedResults = window.xmlDoc.evaluate(relativePath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+                for (let i = 0; i < scopedResults.snapshotLength; i++) {
+                    if (scopedResults.snapshotItem(i) === node) {
+                        pushUnique(`(${relativePath})[${i + 1}]`);
+                        break;
+                    }
+                }
+            } catch (_) {}
+        }
+    }
+
+    // 3. Indexed tag fallback
+    if ((!isGeneric || candidates.length === 0) && window.xmlDoc) {
+        try {
+            let fallbackXpath = `//${tagName}`;
+            let globalResults = window.xmlDoc.evaluate(fallbackXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+            for (let i = 0; i < globalResults.snapshotLength; i++) {
+                if (globalResults.snapshotItem(i) === node) {
+                    pushUnique(`(${fallbackXpath})[${i + 1}]`);
                     break;
                 }
             }
-        }
+        } catch (_) {}
     }
 
-    // 3. Process index fallback if not generic, OR if generic has no parent attributes found
-    if (!isGeneric || candidates.length === 0) {
-        let fallbackXpath = `//${tagName}`;
-        let globalResults = window.xmlDoc.evaluate(fallbackXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-        for (let i = 0; i < globalResults.snapshotLength; i++) {
-            if (globalResults.snapshotItem(i) === node) {
-                let indexedXpath = `(${fallbackXpath})[${i + 1}]`;
-                if (!candidates.includes(indexedXpath)) {
-                    candidates.push(indexedXpath);
-                }
-                break;
-            }
-        }
-    }
-
-    // 4. Ensure coordinates are always in the list (COMMENTED OUT)
-    /*
-    if (coordXPath && !candidates.includes(coordXPath)) {
-        if (isGeneric) {
-            // For "Other" elements, prioritize the Coordinate at the top of the dropdown
-            candidates.unshift(coordXPath);
-        } else {
-            // For standard buttons/text, put Coordinate at the bottom
-            candidates.push(coordXPath);
-        }
-    }
-    */
-
-    return candidates.length > 0 ? candidates : [`(${tagName})[1]`];
+    return candidates.length > 0 ? candidates : [`//${tagName}`];
 }
 
 

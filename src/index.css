@@ -1381,7 +1381,7 @@ th .resizer:hover {
     width: 100%;
     height: 100%;
     pointer-events: none;
-    z-index: 20;
+    z-index: 2000;
 }
 
 #zoomFrame #overlayContainer .feature-area-label {
@@ -4402,12 +4402,13 @@ html.platform-win #dummyDevice {
 }
 
 html.platform-win #zoomFrame #overlayContainer {
-  z-index: 40 !important;
+  z-index: 2000 !important;
   overflow: hidden !important;
   /* Keep overlays aligned to the phone image box on Windows */
   inset: 0 !important;
   width: 100% !important;
   height: 100% !important;
+  pointer-events: none !important;
 }
 
 html.platform-win #zoomFrame #overlayContainer .feature-full-page-frame,
