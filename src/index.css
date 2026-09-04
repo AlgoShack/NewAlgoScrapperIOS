@@ -3901,6 +3901,7 @@ textarea.floating-input ~ .rec-error-icon {
   margin-bottom: 12px;
 }
 .phone-welcome-info .phone-welcome-title { color: #2F8BCC; }
+.phone-welcome-success .phone-welcome-title { color: #15803d; }
 .phone-welcome-warning .phone-welcome-title { color: #b06000; }
 .phone-welcome-error .phone-welcome-title { color: #c5221f; }
 .phone-welcome-loading .phone-welcome-title { color: #3c4043; }
@@ -6544,6 +6545,10 @@ html.platform-win .device-bezel-android .phone-welcome-overlay {
 .phone-welcome-info .phone-welcome-title { color: #2F8BCC !important; }
 .phone-welcome-info .phone-welcome-detail { color: #475569 !important; }
 
+.phone-welcome-success .info-svg { fill: #16a34a !important; }
+.phone-welcome-success .phone-welcome-title { color: #15803d !important; }
+.phone-welcome-success .phone-welcome-detail { color: #166534 !important; }
+
 .phone-welcome-warning .info-svg { fill: #f59e0b !important; }
 .phone-welcome-warning .phone-welcome-title { color: #b45309 !important; }
 .phone-welcome-warning .phone-welcome-detail { color: #78350f !important; }
@@ -6553,6 +6558,7 @@ html.platform-win .device-bezel-android .phone-welcome-overlay {
 .phone-welcome-error .phone-welcome-detail { color: #991b1b !important; }
 
 .phone-welcome-loading .phone-welcome-title { color: #64748b !important; }
+.phone-welcome-loading .phone-welcome-detail { color: #64748b !important; }
 
 
 html.platform-win .home-layout {

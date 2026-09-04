@@ -997,8 +997,8 @@
     }
 
     /**
-     * Phone preview placeholder messages (info | warning | error | loading).
-     * Keeps icon + colors consistent across launch / reset / session errors.
+     * Phone preview placeholder messages (info | success | warning | error | loading).
+     * Same overlay style on Windows + Mac. Pass explicit:true to skip legacy title rewrites.
      */
     function showDummyDeviceMessage(options = {}) {
         const dummy = document.getElementById("dummyDevice");
@@ -1014,11 +1014,15 @@
         const rawDetail = String(detail || '');
         const lowerTitle = rawTitle.toLowerCase();
         const lowerDetail = rawDetail.toLowerCase();
+        const explicit = options.explicit === true;
 
         // Detect loading: ALWAYS use the user's loader GIF only
-        if (theme === 'loading' || lowerTitle.includes('starting session') || lowerTitle.includes('launching')) {
+        if (theme === 'loading' || (!explicit && (lowerTitle.includes('starting session') || lowerTitle.includes('launching')))) {
             theme = 'loading';
-            if (!title || lowerTitle.includes('starting session')) title = 'Starting session and loading screen…';
+            if (!explicit && (!title || lowerTitle.includes('starting session'))) {
+                title = 'Starting session…';
+                detail = detail || 'Loading device screen. Please wait.';
+            }
             dummy.style.display = "block";
             dummy.innerHTML = `
                 <div class="phone-welcome-overlay phone-welcome-loading">
@@ -1030,19 +1034,25 @@
             return;
         }
 
-        // Detect app in background
-        if (lowerTitle.includes('session interrupted') || lowerDetail.includes('closed or running in the background') || lowerTitle.includes('in the background')) {
-            theme = 'warning';
-            title = 'Application is closed or running in the background.';
-            detail = 'Keep the app open, then click Launch Application to reconnect.';
-        } else if (lowerTitle.includes('disconnected') || lowerDetail.includes('disconnected') || lowerTitle.includes('offline')) {
-            theme = 'error';
-            title = 'Device Disconnected';
-            detail = 'Please reconnect your device and click Launch Application.';
+        // Legacy free-text callers → normalize into the shared message style
+        if (!explicit) {
+            if (lowerTitle.includes('session interrupted') || lowerDetail.includes('closed or running in the background') || lowerTitle.includes('in the background')) {
+                theme = 'warning';
+                title = 'App is in the background';
+                detail = 'Keep the app open, then click Launch Application to reconnect.';
+            } else if (lowerTitle.includes('disconnected') || lowerDetail.includes('disconnected') || lowerTitle.includes('offline')) {
+                theme = 'warning';
+                title = 'Device disconnected';
+                detail = process.platform === 'win32'
+                    ? 'Reconnect an Android device or emulator to continue.'
+                    : 'Reconnect a device, emulator, or simulator to continue.';
+            }
         }
 
         let svgPath = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>';
-        if (theme === 'warning') {
+        if (theme === 'success') {
+            svgPath = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>';
+        } else if (theme === 'warning') {
             svgPath = '<path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>';
         } else if (theme === 'error') {
             svgPath = '<path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>';
@@ -1061,12 +1071,101 @@
     }
 
     function getIdleDummyTitle() {
-        return 'Select platform, app and device, then click Launch Application.';
+        return 'No device connected';
     }
+
+    function getNoDeviceDetail() {
+        return process.platform === 'win32'
+            ? 'Connect an Android device or start an emulator to continue.'
+            : 'Connect an Android or iOS device, emulator, or simulator to continue.';
+    }
+
+    /** Canonical device-screen copy — same wording/style on Windows + Mac. */
+    function getDeviceScreenMessage(kind, extras) {
+        const x = extras || {};
+        switch (kind) {
+            case 'no_device':
+                return {
+                    theme: 'info',
+                    title: 'No device connected',
+                    detail: getNoDeviceDetail(),
+                    explicit: true
+                };
+            case 'connected': {
+                const typeLabel = x.typeLabel || 'device';
+                const name = x.name || x.id || 'Device';
+                return {
+                    theme: 'success',
+                    title: 'Device connected',
+                    detail: `${name} (${typeLabel}). Select an app, then click Launch Application.`,
+                    explicit: true
+                };
+            }
+            case 'disconnected':
+                return {
+                    theme: 'warning',
+                    title: 'Device disconnected',
+                    detail: process.platform === 'win32'
+                        ? 'Reconnect an Android device or emulator. App and Device will update automatically.'
+                        : 'Reconnect a device, emulator, or simulator. App and Device will update automatically.',
+                    explicit: true
+                };
+            case 'loading':
+                return {
+                    theme: 'loading',
+                    title: 'Starting session…',
+                    detail: 'Loading device screen. Please wait.',
+                    explicit: true
+                };
+            case 'app_background':
+                return {
+                    theme: 'warning',
+                    title: 'App is in the background',
+                    detail: 'Keep the app open, then click Launch Application to reconnect.',
+                    explicit: true
+                };
+            case 'session_interrupted':
+                return {
+                    theme: 'error',
+                    title: 'Session interrupted',
+                    detail: x.detail || 'Communication with the application was interrupted.',
+                    explicit: true
+                };
+            case 'ready_to_launch':
+                return {
+                    theme: 'success',
+                    title: 'Ready to launch',
+                    detail: x.detail || 'Click Launch Application to open the app on your device.',
+                    explicit: true
+                };
+            case 'select_device':
+                return {
+                    theme: 'info',
+                    title: 'Select a device',
+                    detail: 'Choose Platform, App, and Device, then click Launch Application.',
+                    explicit: true
+                };
+            default:
+                return {
+                    theme: 'info',
+                    title: 'No device connected',
+                    detail: getNoDeviceDetail(),
+                    explicit: true
+                };
+        }
+    }
+
+    function showDeviceScreenMessage(kind, extras) {
+        const msg = getDeviceScreenMessage(kind, extras);
+        showDummyDeviceMessage(msg);
+        return msg;
+    }
+    window.showDeviceScreenMessage = showDeviceScreenMessage;
+    window.getDeviceScreenMessage = getDeviceScreenMessage;
 
     /**
      * Keep phone-preview status in sync with real device list (Win + Mac).
-     * Connect → Connected: name (type). Disconnect / none → No device connected.
+     * Connect → Device connected. Disconnect / none → No device connected.
      * Does not override active Launch screenshot or in-progress loading overlay.
      */
     function syncDevicePreviewConnectionMessage(deviceList, opts) {
@@ -1084,7 +1183,7 @@
 
             // Don't clobber an in-progress launch loader unless forced
             const mainText = (document.getElementById('dummyMainText')?.textContent || '').toLowerCase();
-            if (!options.force && (mainText.includes('starting session') || mainText.includes('loading screen'))) {
+            if (!options.force && (mainText.includes('starting session') || mainText.includes('loading'))) {
                 return;
             }
 
@@ -1093,16 +1192,7 @@
             );
 
             if (!list.length) {
-                const detail = process.platform === 'win32'
-                    ? 'Connect an Android device or start an emulator.'
-                    : 'Connect an Android/iOS device, emulator, or simulator.';
-                showDummyDeviceMessage({
-                    theme: options.disconnected ? 'warning' : 'info',
-                    title: options.disconnected ? 'Device Disconnected' : 'No device connected',
-                    detail: options.disconnected
-                        ? 'Reconnect a device to continue. App and Device will update automatically.'
-                        : detail
-                });
+                showDeviceScreenMessage(options.disconnected ? 'disconnected' : 'no_device');
                 return;
             }
 
@@ -1113,11 +1203,10 @@
                 : selected.type === 'simulator'
                     ? 'simulator'
                     : 'device';
-            const name = selected.name || selected.id || 'device';
-            showDummyDeviceMessage({
-                theme: 'info',
-                title: `Connected: ${name} (${typeLabel})`,
-                detail: 'Select an app, then click Launch Application.'
+            showDeviceScreenMessage('connected', {
+                name: selected.name || selected.id || 'Device',
+                typeLabel,
+                id: selected.id
             });
         } catch (err) {
             console.warn('syncDevicePreviewConnectionMessage failed:', err);
@@ -1127,7 +1216,11 @@
 
     function resetLaunchPlaceholder(message, theme = 'error') {
         if (!message) {
-            showDummyDeviceMessage({ theme: 'info', title: getIdleDummyTitle(), detail: '' });
+            if (typeof syncDevicePreviewConnectionMessage === 'function') {
+                syncDevicePreviewConnectionMessage(connectedDevices || [], { force: true });
+            } else {
+                showDeviceScreenMessage('no_device');
+            }
             return;
         }
 
@@ -1141,8 +1234,9 @@
 
         showDummyDeviceMessage({
             theme,
-            title: title || 'Launch Notice',
-            detail: detail
+            title: title || 'Launch notice',
+            detail: detail,
+            explicit: true
         });
     }
 
@@ -1387,14 +1481,8 @@
 
            if (typeof syncDevicePreviewConnectionMessage === 'function') {
                syncDevicePreviewConnectionMessage(connectedDevices || [], { force: true });
-           } else if (typeof showDummyDeviceMessage === 'function') {
-               showDummyDeviceMessage({
-                   theme: 'info',
-                   title: 'No device connected',
-                   detail: process.platform === 'win32'
-                       ? 'Connect an Android device or start an emulator.'
-                       : 'Connect an Android/iOS device, emulator, or simulator.'
-               });
+           } else if (typeof showDeviceScreenMessage === 'function') {
+               showDeviceScreenMessage('no_device');
            }
            // Fill table empty rows after shared layout settles (Windows + macOS)
            requestAnimationFrame(() => {
@@ -2860,10 +2948,14 @@
         }
         const appRunning = document.getElementById('AppRunningPopup');
         if (appRunning) appRunning.style.display = 'none';
-        if (typeof showDummyDeviceMessage === 'function') {
+        if (typeof showDeviceScreenMessage === 'function') {
+            showDeviceScreenMessage('loading');
+        } else if (typeof showDummyDeviceMessage === 'function') {
             showDummyDeviceMessage({
                 theme: 'loading',
-                title: 'Starting session and loading screen…'
+                title: 'Starting session…',
+                detail: 'Loading device screen. Please wait.',
+                explicit: true
             });
         }
     }
@@ -5908,28 +6000,15 @@ function markSessionInterrupted(err) {
     const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection/i.test(rawMsg);
     const isAppBackground = /closed or running in the background|not running|background/i.test(rawMsg);
 
-    const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
-    const isAndroid = platform === 'Android';
-
     const screenshotImg = document.getElementById("screenshot");
     if (screenshotImg) screenshotImg.style.display = "none";
 
     if (isDeviceDisconnected) {
-        showDummyDeviceMessage({
-            theme: 'error',
-            title: isAndroid ? 'Android Device Disconnected' : 'iOS Device Disconnected',
-            detail: 'Please reconnect your device and click Launch Application.'
-        });
+        showDeviceScreenMessage('disconnected');
     } else if (isAppBackground) {
-        showDummyDeviceMessage({
-            theme: 'warning',
-            title: 'Application is closed or running in the background.',
-            detail: 'Keep the app open, then click Launch Application to reconnect.'
-        });
+        showDeviceScreenMessage('app_background');
     } else {
-        showDummyDeviceMessage({
-            theme: 'error',
-            title: 'Session Interrupted',
+        showDeviceScreenMessage('session_interrupted', {
             detail: readableError || 'Communication with the application was interrupted.'
         });
     }
@@ -11909,11 +11988,12 @@ function updateRowEyeButtonState() {
                 const imgElement = document.getElementById('screenshot');
                 if (imgElement) imgElement.remove();
 
-                // 4. Restore idle phone preview message
-                showDummyDeviceMessage({
-                    theme: 'info',
-                    title: getIdleDummyTitle()
-                });
+                // 4. Restore idle phone preview message from live device state
+                if (typeof syncDevicePreviewConnectionMessage === 'function') {
+                    syncDevicePreviewConnectionMessage(connectedDevices || [], { force: true });
+                } else if (typeof showDeviceScreenMessage === 'function') {
+                    showDeviceScreenMessage('no_device');
+                }
 
                 imgTagFlag = false;
                 const ssElement = document.getElementById('ss');
@@ -12155,22 +12235,12 @@ function displayScreenshotError(err) {
     const isDeviceDisconnected = /device (offline|not found|disconnected)|connection refused|econnrefused|device '[^']+' not found|closed the connection|session [a-f0-9-]+ not found|invalid session id|a session is either terminated or not started/i.test(readableError);
 
     if (isDeviceDisconnected) {
-        showDummyDeviceMessage({
-            theme: 'error',
-            title: 'Device Disconnected',
-            detail: 'Please reconnect your device and click Launch Application.'
-        });
+        showDeviceScreenMessage('disconnected');
         setNoDeviceConnectedState();
     } else if (isAppBackground) {
-        showDummyDeviceMessage({
-            theme: 'warning',
-            title: 'Application is closed or running in the background.',
-            detail: 'Keep the app open, then click Launch Application to reconnect.'
-        });
+        showDeviceScreenMessage('app_background');
     } else {
-        showDummyDeviceMessage({
-            theme: 'error',
-            title: 'Session Interrupted',
+        showDeviceScreenMessage('session_interrupted', {
             detail: readableError || 'Communication with the application was interrupted.'
         });
     }
