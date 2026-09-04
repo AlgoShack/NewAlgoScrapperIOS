@@ -585,6 +585,11 @@ input[type=text], select, textarea {
   scrollbar-color: #cbd5e1 transparent;
 }
 
+.custom-select-menu.is-visible,
+.custom-select-wrap.is-open .custom-select-menu {
+  display: block;
+}
+
 .custom-select-menu::-webkit-scrollbar {
   width: 5px;
 }
@@ -603,8 +608,40 @@ input[type=text], select, textarea {
   background: #94a3b8;
 }
 
-.custom-select-wrap.is-open .custom-select-menu {
-  display: block;
+/* Placeholder-only (No device connected / Loading apps) — static chip, no menu caret */
+.custom-select-wrap.no-dropdown .custom-select-trigger,
+.custom-select-wrap.is-static .custom-select-trigger {
+  cursor: default;
+}
+
+.custom-select-wrap.no-dropdown .custom-select-caret,
+.custom-select-wrap.is-static .custom-select-caret {
+  display: none !important;
+}
+
+.home-field:has(.custom-select-wrap.no-dropdown) label,
+.home-field:has(.custom-select-wrap.is-static) label {
+  cursor: default !important;
+}
+
+.home-field .custom-select-wrap.no-dropdown,
+.home-field .custom-select-wrap.is-static {
+  pointer-events: none;
+}
+
+.home-field .custom-select-wrap.no-dropdown .custom-select-trigger,
+.home-field .custom-select-wrap.is-static .custom-select-trigger {
+  pointer-events: none;
+  cursor: default;
+}
+
+html.platform-win .custom-select-menu {
+  z-index: 999999 !important;
+}
+
+html.platform-win .home-field .custom-select-wrap.no-dropdown,
+html.platform-win .home-field .custom-select-wrap.is-static {
+  pointer-events: none;
 }
 
 .custom-select-option {

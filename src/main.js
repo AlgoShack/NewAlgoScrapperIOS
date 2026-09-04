@@ -1918,6 +1918,12 @@
       // Windows can miss ready-to-show in some packaged builds — force reveal
       mainWindow.webContents.once('did-finish-load', () => {
         setTimeout(revealMainWindow, 50);
+        // Push splash-discovered devices into Home (Win/Mac) — don't rely only on renderer request timing
+        setTimeout(() => {
+          checkDeviceConnected()
+            .catch(() => false)
+            .finally(() => pushConnectedDevicesToRenderer(mainWindow));
+        }, 120);
       });
       setTimeout(revealMainWindow, 4000);
 
@@ -2524,21 +2530,41 @@
 
     const appDataPath = app.getPath('appData');
     const folderPath = path.join(appDataPath, 'algoScraperScreenShot');
-    ipcMain.on('message', (event, message) => {
-      if(message === 'get me appData and device details'){
-      //   if(deviceId != undefined || deviceName !=undefined){
-      // event.reply('message-from-main', {folderPath, deviceId, deviceName});
-      //   }
-        // else{
-          event.reply('message-from-main', {folderPath, connectedDevices});
-        // }
-      }
-    });
+
+    function pushConnectedDevicesToRenderer(targetWindow) {
+        const win = targetWindow || mainWindow;
+        if (!win || win.isDestroyed()) return;
+        try {
+            win.webContents.send('connected-devices-updated', {
+                folderPath,
+                devices: connectedDevices || [],
+                connectedDevices: connectedDevices || []
+            });
+            win.webContents.send('message-from-main', {
+                folderPath,
+                connectedDevices: connectedDevices || []
+            });
+        } catch (err) {
+            console.warn('pushConnectedDevicesToRenderer failed:', err);
+        }
+    }
 
     ipcMain.on('message', (event, message) => {
-      if(message === 'get me appData and device details'){
-          event.reply('message-from-main', {folderPath, connectedDevices});
-      }
+        if (message === 'get me appData and device details') {
+            // Re-scan so Home gets a fresh list (Windows ADB can settle after splash)
+            checkDeviceConnected()
+                .catch(() => false)
+                .finally(() => {
+                    try {
+                        event.reply('message-from-main', {
+                            folderPath,
+                            connectedDevices: connectedDevices || []
+                        });
+                    } catch (err) {
+                        console.warn('message-from-main reply failed:', err);
+                    }
+                });
+        }
     });
 
     ipcMain.on("close-app", () => {

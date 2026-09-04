@@ -1117,6 +1117,11 @@
        document.getElementById("touchBtn").style.background = "transparent";
        document.getElementById("touchBtn").style.color = "#333";
 
+       // Windows: keep same dropdown chrome, Android-only option list
+       if (typeof lockPlatformToAndroidOnWindows === 'function') {
+           lockPlatformToAndroidOnWindows();
+       }
+
        // ALWAYS clear past session on a fresh app launch so it never auto-connects
        localStorage.removeItem("algoQAUser");
 
@@ -1135,9 +1140,23 @@
        // Trigger platform UI (Android fields / iOS fields) on load
        const platformSelect = document.getElementById('platformname');
        if (platformSelect && platformSelect.tagName === 'SELECT') {
+           if (typeof applyingPlatformFromDevice !== 'undefined') applyingPlatformFromDevice = true;
            platformSelect.dispatchEvent(new Event('change'));
+           if (typeof applyingPlatformFromDevice !== 'undefined') applyingPlatformFromDevice = false;
        } else if (typeof updatePlatformUI === 'function') {
            updatePlatformUI();
+       }
+
+       // Re-pull devices after Home UI is ready (Windows + Mac parity)
+       if (typeof requestInitialConnectedDevices === 'function') {
+           requestInitialConnectedDevices();
+       }
+       if (typeof refreshConnectedDevicesList === 'function' && typeof applyConnectedDevicesToUi === 'function') {
+           refreshConnectedDevicesList().then((list) => {
+               if (typeof isDeviceDropdownEmpty === 'function' && isDeviceDropdownEmpty()) {
+                   applyConnectedDevicesToUi(list || [], { startup: true });
+               }
+           }).catch(() => {});
        }
 
        // Initialize animated typewriter placeholder on token input
@@ -1408,16 +1427,39 @@
     prestart();
 
     // ---- Custom dropdown enhancer (keeps native <select> API working) ----
+    // Same chrome on Windows + macOS. Placeholder-only states (No device connected)
+    // show as static text — no caret / no menu.
     function closeAllCustomSelects(exceptWrap) {
         document.querySelectorAll('.custom-select-wrap.is-open').forEach((wrap) => {
             if (exceptWrap && wrap === exceptWrap) return;
             wrap.classList.remove('is-open');
             if (wrap._customSelectMenu) {
                 wrap._customSelectMenu.style.display = 'none';
+                wrap._customSelectMenu.classList.remove('is-visible');
             }
             const trigger = wrap.querySelector('.custom-select-trigger');
             if (trigger) trigger.style.borderRadius = '';
         });
+    }
+
+    function isCustomSelectPlaceholderOnly(selectEl) {
+        if (!selectEl || !selectEl.options || selectEl.options.length === 0) return true;
+        if (selectEl.options.length > 1) return false;
+        const opt = selectEl.options[0];
+        const text = String((opt && (opt.textContent || opt.value)) || '').trim().toLowerCase();
+        const val = String((opt && opt.value) || '').trim();
+        if (!text) return true;
+        // Single non-selectable status row — not a real app/device list
+        const placeholders = [
+            'no device connected',
+            'no apps found',
+            'loading apps...',
+            'loading apps',
+            'select app',
+            'select device',
+            'select...'
+        ];
+        return !val || placeholders.includes(text);
     }
 
     // Custom dropdown chrome over native <select> (Platform / App / Device)
@@ -1446,6 +1488,7 @@
         menu.className = 'custom-select-menu';
         menu.setAttribute('role', 'listbox');
         menu.style.display = 'none';
+        // Body-fixed menu so Windows overflow:hidden parents cannot clip it (same as Mac look)
         document.body.appendChild(menu);
 
         wrap.appendChild(trigger);
@@ -1456,14 +1499,31 @@
         });
 
         const labelEl = trigger.querySelector('.custom-select-label');
+        const caretEl = trigger.querySelector('.custom-select-caret');
 
         function syncDisabledAndError() {
             const disabled = !!selectEl.disabled;
+            const placeholderOnly = isCustomSelectPlaceholderOnly(selectEl);
             trigger.disabled = disabled;
             wrap.classList.toggle('is-disabled', disabled);
-            if (disabled) {
+            wrap.classList.toggle('is-static', placeholderOnly);
+            wrap.classList.toggle('no-dropdown', placeholderOnly);
+            if (caretEl) {
+                caretEl.style.display = placeholderOnly ? 'none' : '';
+                caretEl.setAttribute('aria-hidden', placeholderOnly ? 'true' : 'false');
+            }
+            trigger.setAttribute('aria-haspopup', placeholderOnly ? 'false' : 'listbox');
+            trigger.title = placeholderOnly ? '' : 'Open dropdown';
+
+            const fieldLabel = wrap.closest('.home-field') && wrap.closest('.home-field').querySelector('label');
+            if (fieldLabel) {
+                fieldLabel.style.cursor = placeholderOnly ? 'default' : 'pointer';
+            }
+
+            if (disabled || placeholderOnly) {
                 wrap.classList.remove('is-open');
                 menu.style.display = 'none';
+                menu.classList.remove('is-visible');
             }
 
             const border = (selectEl.style && selectEl.style.borderColor) || '';
@@ -1489,72 +1549,90 @@
                 selectedOpt = options[0];
             }
 
-            options.forEach((opt, index) => {
-                const item = document.createElement('div');
-                item.className = 'custom-select-option';
-                item.setAttribute('role', 'option');
-                item.dataset.index = String(index);
+            const placeholderOnly = isCustomSelectPlaceholderOnly(selectEl);
 
-                const isSelected = (index === selectEl.selectedIndex);
-                if (opt.disabled) item.classList.add('is-disabled');
-                if (isSelected) item.classList.add('is-selected');
+            if (!placeholderOnly) {
+                options.forEach((opt, index) => {
+                    const item = document.createElement('div');
+                    item.className = 'custom-select-option';
+                    item.setAttribute('role', 'option');
+                    item.dataset.index = String(index);
 
-                const textSpan = document.createElement('span');
-                textSpan.className = 'custom-select-option-text';
-                textSpan.textContent = opt.textContent || opt.value || '';
-                item.appendChild(textSpan);
+                    const isSelected = (index === selectEl.selectedIndex);
+                    if (opt.disabled) item.classList.add('is-disabled');
+                    if (isSelected) item.classList.add('is-selected');
 
-                if (isSelected) {
-                    const checkSpan = document.createElement('span');
-                    checkSpan.style.display = 'inline-flex';
-                    checkSpan.style.alignItems = 'center';
-                    checkSpan.style.marginLeft = '8px';
-                    checkSpan.style.flexShrink = '0';
-                    checkSpan.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" style="width: 14px; height: 14px; color: #2F8BCC;"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`;
-                    item.appendChild(checkSpan);
-                }
+                    const textSpan = document.createElement('span');
+                    textSpan.className = 'custom-select-option-text';
+                    textSpan.textContent = opt.textContent || opt.value || '';
+                    item.appendChild(textSpan);
 
-                item.addEventListener('click', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (opt.disabled) return;
+                    if (isSelected) {
+                        const checkSpan = document.createElement('span');
+                        checkSpan.className = 'custom-select-check';
+                        checkSpan.style.display = 'inline-flex';
+                        checkSpan.style.alignItems = 'center';
+                        checkSpan.style.marginLeft = '8px';
+                        checkSpan.style.flexShrink = '0';
+                        checkSpan.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" style="width: 14px; height: 14px; color: #2F8BCC;"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/></svg>`;
+                        item.appendChild(checkSpan);
+                    }
 
-                    selectEl.selectedIndex = index;
-                    selectEl.value = opt.value;
-                    selectEl.style.borderColor = '';
-                    rebuildMenu();
-                    menu.style.display = 'none';
-                    wrap.classList.remove('is-open');
-                    selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (opt.disabled) return;
+
+                        selectEl.selectedIndex = index;
+                        selectEl.value = opt.value;
+                        selectEl.style.borderColor = '';
+                        rebuildMenu();
+                        menu.style.display = 'none';
+                        menu.classList.remove('is-visible');
+                        wrap.classList.remove('is-open');
+                        selectEl.dispatchEvent(new Event('change', { bubbles: true }));
+                    });
+
+                    menu.appendChild(item);
                 });
-
-                menu.appendChild(item);
-            });
+            }
 
             if (selectedOpt) {
                 const text = (selectedOpt.textContent || selectedOpt.value || '').trim();
                 labelEl.textContent = text || 'Select...';
-                labelEl.classList.toggle('is-placeholder', !text || text === 'Loading Apps...');
+                const softPlaceholder = !text
+                    || text === 'Loading Apps...'
+                    || text === 'No device connected'
+                    || text === 'No apps found';
+                labelEl.classList.toggle('is-placeholder', softPlaceholder);
             }
             syncDisabledAndError();
         }
 
         function toggleMenu() {
             if (selectEl.disabled) return;
+            if (isCustomSelectPlaceholderOnly(selectEl)) {
+                wrap.classList.remove('is-open');
+                menu.style.display = 'none';
+                menu.classList.remove('is-visible');
+                return;
+            }
             selectEl.style.borderColor = '';
             syncDisabledAndError();
             const willOpen = !wrap.classList.contains('is-open');
             closeAllCustomSelects(wrap);
             if (willOpen) {
+                rebuildMenu();
                 const rect = trigger.getBoundingClientRect();
                 const fieldWrap = wrap.closest('.home-field');
                 const fieldRect = fieldWrap ? fieldWrap.getBoundingClientRect() : rect;
 
-                // Anchor menu under the full chip with ample min-width so text is fully visible
+                // Anchor menu under the full chip (Mac + Windows identical)
                 const menuLeft = Math.round(fieldWrap ? fieldRect.left : rect.left);
                 const minW = Math.round(fieldWrap ? fieldRect.width : rect.width);
 
                 menu.style.display = 'block';
+                menu.classList.add('is-visible');
                 menu.style.position = 'fixed';
                 menu.style.left = `${menuLeft}px`;
                 menu.style.minWidth = `${Math.max(minW, 140)}px`;
@@ -1564,7 +1642,6 @@
                 menu.style.bottom = 'auto';
                 menu.style.zIndex = '999999';
 
-                // Prevent overflowing off-screen on the right
                 requestAnimationFrame(() => {
                     const mRect = menu.getBoundingClientRect();
                     if (mRect.right > window.innerWidth - 12) {
@@ -1573,7 +1650,6 @@
                     }
                 });
 
-                // Flip upward if not enough space below
                 const spaceBelow = window.innerHeight - (fieldWrap ? fieldRect.bottom : rect.bottom);
                 if (spaceBelow < 180 && (fieldWrap ? fieldRect.top : rect.top) > spaceBelow) {
                     menu.style.top = 'auto';
@@ -1582,6 +1658,7 @@
                 wrap.classList.add('is-open');
             } else {
                 menu.style.display = 'none';
+                menu.classList.remove('is-visible');
                 wrap.classList.remove('is-open');
             }
         }
@@ -1597,14 +1674,15 @@
             const label = fieldWrap.querySelector('label');
             if (label) {
                 label.removeAttribute('for');
-                label.style.cursor = 'pointer';
                 label.addEventListener('click', (e) => {
                     e.preventDefault();
                     e.stopPropagation();
+                    if (isCustomSelectPlaceholderOnly(selectEl)) return;
                     toggleMenu();
                 });
             }
             fieldWrap.addEventListener('click', (e) => {
+                if (isCustomSelectPlaceholderOnly(selectEl)) return;
                 if (e.target !== trigger && !trigger.contains(e.target) && !menu.contains(e.target)) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1672,14 +1750,15 @@
     // - Device list is filtered by selected platform (Android-only or iOS-only)
     // - When both platforms exist at startup, Android is preferred by default
     // - Switching platform live-checks devices via refresh-connected-devices IPC
+    // - Same connect/disconnect + Home fill behavior on Windows and macOS
     // ===========================================================================
-    ipcRenderer.send('message', 'get me appData and device details');
 
     // --- AUTO-SWITCH PLATFORM ON LOAD ---
     let lastSelectedPlatform = document.getElementById('platformname')
         ? document.getElementById('platformname').value
         : 'Android';
     let applyingPlatformFromDevice = false;
+    let deviceUiSyncGeneration = 0;
 
     function normalizePlatformName(platform) {
         const p = String(platform || '').toUpperCase();
@@ -1710,6 +1789,41 @@
         return `${device.name} (${typeLabel})`;
     }
 
+    /** Windows builds are Android-only — keep Platform dropdown consistent. */
+    function lockPlatformToAndroidOnWindows() {
+        if (process.platform !== 'win32') return;
+        const platformEl = document.getElementById('platformname');
+        if (!platformEl || platformEl.tagName !== 'SELECT') return;
+        platformEl.innerHTML = '<option value="Android" selected>Android</option>';
+        platformEl.value = 'Android';
+        lastSelectedPlatform = 'Android';
+        if (typeof platformEl._rebuildCustomSelect === 'function') {
+            platformEl._rebuildCustomSelect();
+        }
+    }
+    lockPlatformToAndroidOnWindows();
+
+    function setAppDropdownPlaceholder(label) {
+        const appSelect = document.getElementById('appname');
+        if (!appSelect) return;
+        appSelect.innerHTML = `<option value="">${label || 'No device connected'}</option>`;
+        appSelect.value = '';
+        if (typeof appSelect._rebuildCustomSelect === 'function') {
+            appSelect._rebuildCustomSelect();
+        }
+    }
+
+    function isDeviceDropdownEmpty() {
+        const deviceSelect = document.getElementById('devicename');
+        if (!deviceSelect) return true;
+        const val = (deviceSelect.value || '').trim();
+        const text = (deviceSelect.options && deviceSelect.selectedIndex >= 0)
+            ? String(deviceSelect.options[deviceSelect.selectedIndex].text || '').trim()
+            : '';
+        return !val || val === 'No device connected' || val === 'Select Device'
+            || text === 'No device connected' || text === 'Select Device';
+    }
+
     function setNoDeviceConnectedState() {
         const deviceSelect = document.getElementById('devicename');
         if (deviceSelect) {
@@ -1724,14 +1838,7 @@
         deviceId = '';
         deviceName = '';
 
-        const appSelect = document.getElementById('appname');
-        if (appSelect) {
-            appSelect.innerHTML = '<option value="">No device connected</option>';
-            appSelect.value = '';
-            if (typeof appSelect._rebuildCustomSelect === 'function') {
-                appSelect._rebuildCustomSelect();
-            }
-        }
+        setAppDropdownPlaceholder('No device connected');
 
         const pkgInput = document.getElementById('apppackage');
         if (pkgInput) pkgInput.value = '';
@@ -1770,6 +1877,14 @@
     }
     window.setNoDeviceConnectedState = setNoDeviceConnectedState;
 
+    let realtimeDeviceMonitorInterval = null;
+    let lastKnownDeviceFingerprint = "";
+
+    function computeDeviceFingerprint(devices) {
+        if (!devices || !devices.length) return "";
+        return devices.map(d => `${d.id}:${d.platform}:${d.name}`).sort().join("|");
+    }
+
     function populateDeviceDropdown(devices) {
         const deviceSelect = document.getElementById('devicename');
         if (!deviceSelect) return null;
@@ -1797,15 +1912,16 @@
 
         ordered.forEach((device) => {
             const option = document.createElement('option');
-            option.value = device.name;
+            option.value = device.id || device.name;
             option.text = deviceDisplayLabel(device);
             option.dataset.deviceId = device.id;
+            option.dataset.deviceName = device.name;
             deviceSelect.appendChild(option);
         });
 
         deviceId = ordered[0].id;
         deviceName = ordered[0].name;
-        deviceSelect.value = deviceName;
+        deviceSelect.value = ordered[0].id || ordered[0].name;
         const udidInput = document.getElementById('udid');
         if (udidInput) udidInput.value = deviceId;
 
@@ -1851,6 +1967,80 @@
         }
     }
 
+    /**
+     * Shared Home fill for Windows + Mac (real / emulator / simulator).
+     * Device found → Device + apps on Home. None → No device connected + optional Repo tab.
+     */
+    function applyConnectedDevicesToUi(deviceList, opts) {
+        const options = opts || {};
+        const isStartup = !!options.startup;
+        const requestApps = options.requestApps !== false;
+
+        connectedDevices = preferAndroidDevicesFirst(deviceList || []);
+        lastKnownDeviceFingerprint = computeDeviceFingerprint(connectedDevices);
+
+        const platformSelect = document.getElementById('platformname');
+        let activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
+        let targetPlatform = normalizePlatformName(activePlatform);
+        let platformDevices = devicesForPlatform(targetPlatform, connectedDevices);
+
+        // macOS only: if current platform empty but other platform has devices, switch
+        if (platformDevices.length === 0 && connectedDevices.length > 0 && process.platform !== 'win32') {
+            const alternatePlatform = targetPlatform === 'Android' ? 'IOS' : 'Android';
+            const altDevices = devicesForPlatform(alternatePlatform, connectedDevices);
+            if (altDevices.length > 0) {
+                targetPlatform = alternatePlatform;
+                platformDevices = altDevices;
+                if (platformSelect) {
+                    applyingPlatformFromDevice = true;
+                    platformSelect.value = alternatePlatform;
+                    lastSelectedPlatform = alternatePlatform;
+                    if (typeof updatePlatformUI === 'function') updatePlatformUI();
+                    if (typeof platformSelect._rebuildCustomSelect === 'function') {
+                        platformSelect._rebuildCustomSelect();
+                    }
+                    applyingPlatformFromDevice = false;
+                }
+            }
+        }
+
+        if (platformDevices.length > 0) {
+            const selectedDevice = populateDeviceDropdown(platformDevices);
+            if (selectedDevice && requestApps) {
+                setAppDropdownPlaceholder('Loading apps...');
+                ipcRenderer.send('get-installed-apps', selectedDevice);
+            }
+            if (typeof setPlatformAppDeviceEditable === 'function') {
+                setPlatformAppDeviceEditable(true);
+            }
+            if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
+                setLaunchEnabled(canEnableLaunch());
+            }
+            if (isStartup && typeof window.switchAppTab === 'function') {
+                window.switchAppTab('home');
+            }
+            return selectedDevice;
+        }
+
+        setNoDeviceConnectedState();
+        if (isStartup && typeof window.switchAppTab === 'function') {
+            window.switchAppTab('repository');
+        }
+        return null;
+    }
+    window.applyConnectedDevicesToUi = applyConnectedDevicesToUi;
+
+    function requestInitialConnectedDevices() {
+        try {
+            ipcRenderer.send('message', 'get me appData and device details');
+        } catch (err) {
+            console.warn('requestInitialConnectedDevices failed:', err);
+        }
+    }
+    window.requestInitialConnectedDevices = requestInitialConnectedDevices;
+    window.refreshConnectedDevicesList = refreshConnectedDevicesList;
+    window.isDeviceDropdownEmpty = isDeviceDropdownEmpty;
+
     let platformSwitchInProgress = false;
 
     function showPlatformSwitchLoader(message) {
@@ -1880,89 +2070,47 @@
         }
     }
 
+    let initialDeviceUiApplied = false;
+
+    // Register listener BEFORE requesting — otherwise Windows can drop the startup reply
     ipcRenderer.on('message-from-main', (event, message) => {
-        // Keep full list in memory; dropdown shows only the active platform
-        connectedDevices = preferAndroidDevicesFirst(message.connectedDevices || []);
-        console.log("connectedDevices =", connectedDevices);
-
-        const platformSelect = document.getElementById('platformname');
-        let activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
-        let targetPlatform = normalizePlatformName(activePlatform);
-
-        let platformDevices = devicesForPlatform(targetPlatform, connectedDevices);
-
-        // If current platform has no devices, but alternate platform has devices on macOS, switch platform
-        if (platformDevices.length === 0 && connectedDevices.length > 0 && process.platform !== 'win32') {
-            const alternatePlatform = targetPlatform === 'Android' ? 'IOS' : 'Android';
-            const altDevices = devicesForPlatform(alternatePlatform, connectedDevices);
-            if (altDevices.length > 0) {
-                targetPlatform = alternatePlatform;
-                platformDevices = altDevices;
-                if (platformSelect) {
-                    applyingPlatformFromDevice = true;
-                    platformSelect.value = alternatePlatform;
-                    lastSelectedPlatform = alternatePlatform;
-                    if (typeof updatePlatformUI === 'function') updatePlatformUI();
-                    if (typeof platformSelect._rebuildCustomSelect === 'function') {
-                        platformSelect._rebuildCustomSelect();
-                    }
-                    applyingPlatformFromDevice = false;
-                }
-            }
+        if (message && message.folderPath) {
+            folderPath = message.folderPath;
         }
-
-        if (platformDevices.length > 0) {
-            const selectedDevice = populateDeviceDropdown(platformDevices);
-            if (selectedDevice) {
-                if (normalizePlatformName(selectedDevice.platform) === 'Android') {
-                    ipcRenderer.invoke("get-android-version", selectedDevice.id).then((ver) => {
-                        if (ver) {
-                            const pv = document.getElementById('platformversion');
-                            if (pv) {
-                                pv.value = ver;
-                                pv.dataset.userEdited = 'true';
-                            }
-                        }
-                    }).catch(() => {});
-                }
-
-                ipcRenderer.send("get-installed-apps", selectedDevice);
-
-                if (typeof window.switchAppTab === 'function') {
-                    window.switchAppTab('home');
-                }
-            } else {
-                setNoDeviceConnectedState();
-                if (typeof window.switchAppTab === 'function') {
-                    window.switchAppTab('repository');
-                }
-            }
-        } else {
-            setNoDeviceConnectedState();
-            if (typeof window.switchAppTab === 'function') {
-                window.switchAppTab('repository');
-            }
-        }
-
-        lastKnownDeviceFingerprint = computeDeviceFingerprint(connectedDevices);
-        // Start continuous real-time device monitoring
+        console.log('connectedDevices (startup) =', message && message.connectedDevices);
+        const list = (message && message.connectedDevices) || [];
+        const isFirstFill = !initialDeviceUiApplied;
+        applyConnectedDevicesToUi(list, { startup: isFirstFill });
+        initialDeviceUiApplied = true;
         startRealtimeDeviceMonitoring();
     });
 
-    // Also start monitoring immediately in case message-from-main arrived prior or is empty
+    // Main can also push devices after did-finish-load (same payload shape)
+    ipcRenderer.on('connected-devices-updated', (event, payload) => {
+        const list = (payload && payload.devices) || (payload && payload.connectedDevices) || [];
+        const isFirstFill = !initialDeviceUiApplied;
+        applyConnectedDevicesToUi(list, { startup: isFirstFill });
+        initialDeviceUiApplied = true;
+        if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
+    });
+
+    requestInitialConnectedDevices();
+    // Retry once after DOM/custom-select settle (covers slow Windows IPC timing)
     setTimeout(() => {
-        if (!realtimeDeviceMonitorInterval) {
+        if (isDeviceDropdownEmpty()) {
+            requestInitialConnectedDevices();
+            refreshConnectedDevicesList().then((list) => {
+                if (list && list.length) {
+                    applyConnectedDevicesToUi(list, { startup: true });
+                } else if (isDeviceDropdownEmpty()) {
+                    applyConnectedDevicesToUi([], { startup: true });
+                }
+                startRealtimeDeviceMonitoring();
+            }).catch(() => startRealtimeDeviceMonitoring());
+        } else if (!realtimeDeviceMonitorInterval) {
             startRealtimeDeviceMonitoring();
         }
-    }, 500);
-
-    let realtimeDeviceMonitorInterval = null;
-    let lastKnownDeviceFingerprint = "";
-
-    function computeDeviceFingerprint(devices) {
-        if (!devices || !devices.length) return "";
-        return devices.map(d => `${d.id}:${d.platform}:${d.name}`).sort().join("|");
-    }
+    }, 700);
 
     function startRealtimeDeviceMonitoring() {
         if (realtimeDeviceMonitorInterval) clearInterval(realtimeDeviceMonitorInterval);
@@ -1971,7 +2119,10 @@
             if (platformSwitchInProgress) return;
 
             try {
+                const syncId = ++deviceUiSyncGeneration;
                 const freshDevices = await refreshConnectedDevicesList();
+                if (syncId !== deviceUiSyncGeneration) return;
+
                 const freshFingerprint = computeDeviceFingerprint(freshDevices);
 
                 // --- 1. ACTIVE SESSION REAL-TIME VALIDATION ---
@@ -1990,15 +2141,16 @@
                         setNoDeviceConnectedState();
                         return;
                     }
+                    lastKnownDeviceFingerprint = freshFingerprint;
+                    return;
                 }
 
-                // --- 2. IDLE / FORM REAL-TIME UPDATE ---
+                // --- 2. IDLE / FORM REAL-TIME UPDATE (device dropdown only — apps load separately) ---
                 const platformSelect = document.getElementById('platformname');
                 const activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
                 const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
                 let matching = devicesForPlatform(platformTarget, freshDevices);
 
-                // If current platform has no devices, but alternate platform has devices on macOS, auto-switch platform
                 if (matching.length === 0 && freshDevices.length > 0 && process.platform !== 'win32') {
                     const alternateTarget = platformTarget === 'Android' ? 'IOS' : 'Android';
                     const alternateMatching = devicesForPlatform(alternateTarget, freshDevices);
@@ -2017,11 +2169,11 @@
                     }
                 }
 
+                const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
                 const deviceSelect = document.getElementById('devicename');
-                const appSelect = document.getElementById('appname');
                 const currentDeviceVal = deviceSelect ? (deviceSelect.value || '') : '';
-                const currentAppVal = appSelect ? (appSelect.value || '') : '';
-                const isUiShowingNoDevice = !currentDeviceVal || currentDeviceVal === 'No device connected' || currentDeviceVal === 'Select Device' || !currentAppVal || currentAppVal === 'No device connected' || currentAppVal === 'Select App';
+                const uiEmpty = isDeviceDropdownEmpty();
+                const isCurrentDeviceStillPresent = !!(currentUdid && matching.some(d => d.id === currentUdid || d.name === currentDeviceVal || d.id === currentDeviceVal));
 
                 const closeDeviceDisconnectedAlertIfOpen = () => {
                     const popup = document.getElementById('confirmationPopup');
@@ -2034,59 +2186,36 @@
                     }
                 };
 
-                if (!driver) {
-                    if (matching.length > 0) {
-                        const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
-                        const isCurrentDeviceStillPresent = currentUdid && matching.some(d => d.id === currentUdid || d.name === currentDeviceVal);
-
-                        if (!isCurrentDeviceStillPresent || isUiShowingNoDevice || (freshFingerprint !== lastKnownDeviceFingerprint)) {
-                            lastKnownDeviceFingerprint = freshFingerprint;
-                            closeDeviceDisconnectedAlertIfOpen();
-
-                            const selected = populateDeviceDropdown(matching);
-                            if (selected) {
-                                if (normalizePlatformName(selected.platform) === 'Android') {
-                                    ipcRenderer.invoke("get-android-version", selected.id).then((ver) => {
-                                        if (ver) {
-                                            const pv = document.getElementById('platformversion');
-                                            if (pv) {
-                                                pv.value = ver;
-                                                pv.dataset.userEdited = 'true';
-                                            }
-                                        }
-                                    }).catch(() => {});
-                                }
-                                ipcRenderer.send("get-installed-apps", selected);
-                            }
-
-                            if (typeof setPlatformAppDeviceEditable === 'function') {
-                                setPlatformAppDeviceEditable(true);
-                            }
-                            setLaunchEnabled(canEnableLaunch());
+                if (matching.length > 0) {
+                    const needsUiRefresh = uiEmpty || !isCurrentDeviceStillPresent || (freshFingerprint !== lastKnownDeviceFingerprint);
+                    if (needsUiRefresh) {
+                        const wasEmpty = uiEmpty;
+                        closeDeviceDisconnectedAlertIfOpen();
+                        applyConnectedDevicesToUi(freshDevices, { startup: false, requestApps: true });
+                        // First connect after empty → keep user on Home with filled fields
+                        if (wasEmpty && typeof window.switchAppTab === 'function') {
+                            window.switchAppTab('home');
                         }
                     } else {
-                        // NO matching devices connected for this platform
-                        if (!isUiShowingNoDevice || lastKnownDeviceFingerprint) {
-                            const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !isUiShowingNoDevice;
-                            lastKnownDeviceFingerprint = "";
-                            setNoDeviceConnectedState();
-
-                            if (wasDeviceConnectedBefore) {
-                                showCustomAlert(
-                                    "Device Disconnected",
-                                    `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
-                                    "warning",
-                                    () => {
-                                        setNoDeviceConnectedState();
-                                    }
-                                );
-                            }
-                        } else {
-                            const udidInput = document.getElementById('udid');
-                            if (udidInput && udidInput.value) {
-                                setNoDeviceConnectedState();
-                            }
+                        lastKnownDeviceFingerprint = freshFingerprint;
+                    }
+                } else {
+                    const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !uiEmpty;
+                    if (!uiEmpty || lastKnownDeviceFingerprint) {
+                        lastKnownDeviceFingerprint = "";
+                        setNoDeviceConnectedState();
+                        if (wasDeviceConnectedBefore) {
+                            showCustomAlert(
+                                "Device Disconnected",
+                                `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
+                                "warning",
+                                () => {
+                                    setNoDeviceConnectedState();
+                                }
+                            );
                         }
+                    } else {
+                        lastKnownDeviceFingerprint = "";
                     }
                 }
             } catch (pollErr) {
@@ -2094,12 +2223,14 @@
             }
         }, 1500);
     }
+
     document.getElementById('devicename').addEventListener('change', async function() {
         const platformSelect = document.getElementById('platformname');
         const currentPlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
+        const selectedId = this.value;
         const platformDevices = devicesForPlatform(currentPlatform, connectedDevices);
-        const selectedDevice = platformDevices.find(device => device.name === this.value)
-            || connectedDevices.find(device => device.name === this.value);
+        const selectedDevice = platformDevices.find(device => device.id === selectedId || device.name === selectedId)
+            || connectedDevices.find(device => device.id === selectedId || device.name === selectedId);
 
         if (selectedDevice) {
             deviceId = selectedDevice.id;
@@ -2133,6 +2264,7 @@
                 } catch (_) {}
             }
 
+            setAppDropdownPlaceholder('Loading apps...');
             ipcRenderer.send("get-installed-apps", selectedDevice);
         }
     });
@@ -2145,13 +2277,19 @@
             const dropdown = document.getElementById("appname");
             if (!dropdown) return;
 
+            // Device was disconnected while apps were loading
+            if (isDeviceDropdownEmpty()) {
+                setAppDropdownPlaceholder('No device connected');
+                return;
+            }
+
             const platform = (document.getElementById('platformname') && document.getElementById('platformname').value) || 'Android';
             const platformKey = platform.toLowerCase().includes('ios') ? 'IOS' : 'Android';
             const previousValue = dropdown.value;
             dropdown.innerHTML = "";
 
             if (!apps || !apps.length) {
-                dropdown.innerHTML = '<option value="">No device connected</option>';
+                dropdown.innerHTML = '<option value="">No apps found</option>';
                 dropdown.value = '';
                 if (typeof dropdown._rebuildCustomSelect === 'function') {
                     dropdown._rebuildCustomSelect();
@@ -15081,6 +15219,7 @@ function getDeviceDimensions() {
                     }
                 } catch (_) {}
             }
+            setAppDropdownPlaceholder('Loading apps...');
             ipcRenderer.send("get-installed-apps", selected);
         }
     } catch (err) {
