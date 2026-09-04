@@ -1904,8 +1904,13 @@
         deviceSelect.innerHTML = '';
 
         if (!filtered || filtered.length === 0) {
-            setNoDeviceConnectedState();
-            return null;
+            // Prefer showing any known devices over wiping the Home fields
+            if (Array.isArray(devices) && devices.length > 0) {
+                filtered = preferAndroidDevicesFirst(devices);
+            } else {
+                setNoDeviceConnectedState();
+                return null;
+            }
         }
 
         const ordered = preferAndroidDevicesFirst(filtered);
@@ -1975,32 +1980,59 @@
         const options = opts || {};
         const isStartup = !!options.startup;
         const requestApps = options.requestApps !== false;
+        const list = preferAndroidDevicesFirst(Array.isArray(deviceList) ? deviceList : []);
 
-        connectedDevices = preferAndroidDevicesFirst(deviceList || []);
+        // Windows is Android-only — force platform before filtering so devices are never dropped
+        if (process.platform === 'win32' && typeof lockPlatformToAndroidOnWindows === 'function') {
+            lockPlatformToAndroidOnWindows();
+        }
+
+        // Empty scan: do not wipe a filled Home on a single flaky ADB miss (common on Windows)
+        if (list.length === 0) {
+            if (options.ignoreEmpty) return null;
+            if (!options.forceEmpty && !isDeviceDropdownEmpty()) {
+                console.warn('[Devices] Empty scan ignored — keeping current Device/App selection');
+                return null;
+            }
+            connectedDevices = [];
+            lastKnownDeviceFingerprint = '';
+            setNoDeviceConnectedState();
+            if (isStartup && typeof window.switchAppTab === 'function') {
+                window.switchAppTab('repository');
+            }
+            return null;
+        }
+
+        connectedDevices = list;
         lastKnownDeviceFingerprint = computeDeviceFingerprint(connectedDevices);
 
         const platformSelect = document.getElementById('platformname');
         let activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
-        let targetPlatform = normalizePlatformName(activePlatform);
+        let targetPlatform = normalizePlatformName(activePlatform || 'Android');
         let platformDevices = devicesForPlatform(targetPlatform, connectedDevices);
 
-        // macOS only: if current platform empty but other platform has devices, switch
-        if (platformDevices.length === 0 && connectedDevices.length > 0 && process.platform !== 'win32') {
-            const alternatePlatform = targetPlatform === 'Android' ? 'IOS' : 'Android';
-            const altDevices = devicesForPlatform(alternatePlatform, connectedDevices);
-            if (altDevices.length > 0) {
-                targetPlatform = alternatePlatform;
-                platformDevices = altDevices;
-                if (platformSelect) {
-                    applyingPlatformFromDevice = true;
-                    platformSelect.value = alternatePlatform;
-                    lastSelectedPlatform = alternatePlatform;
-                    if (typeof updatePlatformUI === 'function') updatePlatformUI();
-                    if (typeof platformSelect._rebuildCustomSelect === 'function') {
-                        platformSelect._rebuildCustomSelect();
+        // If filter yields nothing but we have devices, show them anyway (don't leave "No device connected")
+        if (platformDevices.length === 0 && connectedDevices.length > 0) {
+            if (process.platform !== 'win32') {
+                const alternatePlatform = targetPlatform === 'Android' ? 'IOS' : 'Android';
+                const altDevices = devicesForPlatform(alternatePlatform, connectedDevices);
+                if (altDevices.length > 0) {
+                    targetPlatform = alternatePlatform;
+                    platformDevices = altDevices;
+                    if (platformSelect) {
+                        applyingPlatformFromDevice = true;
+                        platformSelect.value = alternatePlatform;
+                        lastSelectedPlatform = alternatePlatform;
+                        if (typeof updatePlatformUI === 'function') updatePlatformUI();
+                        if (typeof platformSelect._rebuildCustomSelect === 'function') {
+                            platformSelect._rebuildCustomSelect();
+                        }
+                        applyingPlatformFromDevice = false;
                     }
-                    applyingPlatformFromDevice = false;
                 }
+            }
+            if (platformDevices.length === 0) {
+                platformDevices = connectedDevices.slice();
             }
         }
 
@@ -2071,46 +2103,77 @@
     }
 
     let initialDeviceUiApplied = false;
+    let consecutiveEmptyDevicePolls = 0;
 
     // Register listener BEFORE requesting — otherwise Windows can drop the startup reply
     ipcRenderer.on('message-from-main', (event, message) => {
         if (message && message.folderPath) {
             folderPath = message.folderPath;
         }
-        console.log('connectedDevices (startup) =', message && message.connectedDevices);
         const list = (message && message.connectedDevices) || [];
+        console.log('connectedDevices (startup) =', list.length, list);
         const isFirstFill = !initialDeviceUiApplied;
-        applyConnectedDevicesToUi(list, { startup: isFirstFill });
-        initialDeviceUiApplied = true;
+        // First empty reply before ADB finishes — ignore; only clear on confirmed empty after a fill
+        if (!list.length && !initialDeviceUiApplied) {
+            console.warn('[Devices] Ignoring empty startup payload until a real scan arrives');
+            startRealtimeDeviceMonitoring();
+            return;
+        }
+        applyConnectedDevicesToUi(list, {
+            startup: isFirstFill,
+            forceEmpty: list.length === 0 && initialDeviceUiApplied
+        });
+        if (list.length > 0) initialDeviceUiApplied = true;
         startRealtimeDeviceMonitoring();
     });
 
     // Main can also push devices after did-finish-load (same payload shape)
     ipcRenderer.on('connected-devices-updated', (event, payload) => {
         const list = (payload && payload.devices) || (payload && payload.connectedDevices) || [];
+        console.log('connectedDevices (push) =', list.length, list);
+        if (!list.length && !initialDeviceUiApplied) {
+            if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
+            return;
+        }
         const isFirstFill = !initialDeviceUiApplied;
-        applyConnectedDevicesToUi(list, { startup: isFirstFill });
-        initialDeviceUiApplied = true;
+        applyConnectedDevicesToUi(list, {
+            startup: isFirstFill,
+            forceEmpty: list.length === 0 && initialDeviceUiApplied
+        });
+        if (list.length > 0) initialDeviceUiApplied = true;
         if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
     });
 
     requestInitialConnectedDevices();
-    // Retry once after DOM/custom-select settle (covers slow Windows IPC timing)
+    // Windows needs longer retries — ADB daemon often warms up after splash
+    const startupRetryMs = process.platform === 'win32' ? 1200 : 700;
     setTimeout(() => {
         if (isDeviceDropdownEmpty()) {
             requestInitialConnectedDevices();
             refreshConnectedDevicesList().then((list) => {
                 if (list && list.length) {
                     applyConnectedDevicesToUi(list, { startup: true });
-                } else if (isDeviceDropdownEmpty()) {
-                    applyConnectedDevicesToUi([], { startup: true });
+                    initialDeviceUiApplied = true;
                 }
                 startRealtimeDeviceMonitoring();
             }).catch(() => startRealtimeDeviceMonitoring());
         } else if (!realtimeDeviceMonitorInterval) {
             startRealtimeDeviceMonitoring();
         }
-    }, 700);
+    }, startupRetryMs);
+
+    // Extra Windows pass — second chance after custom-select + ADB settle
+    if (process.platform === 'win32') {
+        setTimeout(() => {
+            if (!isDeviceDropdownEmpty()) return;
+            refreshConnectedDevicesList().then((list) => {
+                if (list && list.length) {
+                    applyConnectedDevicesToUi(list, { startup: !initialDeviceUiApplied });
+                    initialDeviceUiApplied = true;
+                }
+            }).catch(() => {});
+        }, 2800);
+    }
 
     function startRealtimeDeviceMonitoring() {
         if (realtimeDeviceMonitorInterval) clearInterval(realtimeDeviceMonitorInterval);
@@ -2146,9 +2209,13 @@
                 }
 
                 // --- 2. IDLE / FORM REAL-TIME UPDATE (device dropdown only — apps load separately) ---
+                if (process.platform === 'win32' && typeof lockPlatformToAndroidOnWindows === 'function') {
+                    lockPlatformToAndroidOnWindows();
+                }
+
                 const platformSelect = document.getElementById('platformname');
                 const activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
-                const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
+                const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform || 'Android') : (activePlatform || 'Android');
                 let matching = devicesForPlatform(platformTarget, freshDevices);
 
                 if (matching.length === 0 && freshDevices.length > 0 && process.platform !== 'win32') {
@@ -2169,6 +2236,11 @@
                     }
                 }
 
+                // Never drop a discovered device due to platform-filter mismatch
+                if (matching.length === 0 && freshDevices.length > 0) {
+                    matching = freshDevices.slice();
+                }
+
                 const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
                 const deviceSelect = document.getElementById('devicename');
                 const currentDeviceVal = deviceSelect ? (deviceSelect.value || '') : '';
@@ -2187,6 +2259,7 @@
                 };
 
                 if (matching.length > 0) {
+                    consecutiveEmptyDevicePolls = 0;
                     const needsUiRefresh = uiEmpty || !isCurrentDeviceStillPresent || (freshFingerprint !== lastKnownDeviceFingerprint);
                     if (needsUiRefresh) {
                         const wasEmpty = uiEmpty;
@@ -2200,10 +2273,16 @@
                         lastKnownDeviceFingerprint = freshFingerprint;
                     }
                 } else {
+                    consecutiveEmptyDevicePolls += 1;
+                    // Require 2 empty polls before clearing (Windows ADB often misses one tick)
+                    const emptyNeeded = process.platform === 'win32' ? 2 : 1;
+                    if (consecutiveEmptyDevicePolls < emptyNeeded) {
+                        return;
+                    }
                     const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !uiEmpty;
                     if (!uiEmpty || lastKnownDeviceFingerprint) {
                         lastKnownDeviceFingerprint = "";
-                        setNoDeviceConnectedState();
+                        applyConnectedDevicesToUi([], { forceEmpty: true, startup: false });
                         if (wasDeviceConnectedBefore) {
                             showCustomAlert(
                                 "Device Disconnected",

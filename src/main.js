@@ -1918,12 +1918,16 @@
       // Windows can miss ready-to-show in some packaged builds — force reveal
       mainWindow.webContents.once('did-finish-load', () => {
         setTimeout(revealMainWindow, 50);
-        // Push splash-discovered devices into Home (Win/Mac) — don't rely only on renderer request timing
+        // 1) Push splash-cached devices immediately so Windows Home is not stuck on "No device connected"
+        setTimeout(() => {
+          try { pushConnectedDevicesToRenderer(mainWindow); } catch (_) {}
+        }, 60);
+        // 2) Re-scan and push again (ADB may need a moment after splash on Windows)
         setTimeout(() => {
           checkDeviceConnected()
             .catch(() => false)
             .finally(() => pushConnectedDevicesToRenderer(mainWindow));
-        }, 120);
+        }, 400);
       });
       setTimeout(revealMainWindow, 4000);
 
@@ -1975,76 +1979,103 @@
     // ===========================================================================
 
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
+    // Windows: use execFile + retries (shell quoting / CRLF / daemon warm-up are flaky).
     async function getConnectedAndroidDevices() {
         applyAndroidToolingToEnv(process.env);
-        const adbCmd = getAdbCommandPrefix();
+        const adbPath = getAdbExecutable();
+        const { execFile } = require('child_process');
 
-        return new Promise((resolve) => {
-            const parseDevicesFromStdout = (stdout) => {
-                const found = [];
-                if (!stdout) return found;
-                const lines = String(stdout).split('\n');
-                lines.forEach(line => {
-                    const trimmed = line.trim();
-                    if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
+        const parseDevicesFromStdout = (stdout) => {
+            const found = [];
+            if (!stdout) return found;
+            const lines = String(stdout).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+            lines.forEach((line) => {
+                const trimmed = String(line || '').trim();
+                if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
 
-                    // Match any device/emulator line from `adb devices` or `adb devices -l`
-                    const deviceMatch = trimmed.match(/^([^\s]+)\s+([a-zA-Z0-9_-]+)\b/);
-                    if (deviceMatch) {
-                        const id = deviceMatch[1];
-                        const status = (deviceMatch[2] || '').toLowerCase();
-                        if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb') || id.toLowerCase().includes('error')) return;
+                // id + state (device|offline|unauthorized|…) — tolerate extra Windows spacing
+                const deviceMatch = trimmed.match(/^([^\s]+)\s+(\S+)/);
+                if (!deviceMatch) return;
 
-                        // Only consider active 'device' state
-                        if (status !== 'device') {
-                            console.log(`[Android Discovery] Skipping device ${id} with status: ${status}`);
-                            return;
-                        }
+                const id = String(deviceMatch[1] || '').trim();
+                const status = String(deviceMatch[2] || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                if (!id) return;
+                if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb') || id.toLowerCase().includes('error')) return;
 
-                        let name = id;
-                        const modelMatch = trimmed.match(/model:([^\s]+)/);
-                        if (modelMatch) {
-                            name = modelMatch[1].replace(/_/g, ' ');
-                        } else {
-                            const prodMatch = trimmed.match(/product:([^\s]+)/);
-                            if (prodMatch) {
-                                name = prodMatch[1].replace(/_/g, ' ');
-                            }
-                        }
-
-                        const isEmulator = id.toLowerCase().startsWith('emulator-')
-                            || id.toLowerCase().includes('127.0.0.1')
-                            || id.toLowerCase().includes('localhost')
-                            || name.toLowerCase().includes('sdk')
-                            || name.toLowerCase().includes('emulator')
-                            || name.toLowerCase().includes('generic');
-
-                        found.push({
-                            id: id,
-                            name: name,
-                            type: isEmulator ? 'emulator' : 'physical',
-                            platform: 'Android'
-                        });
-                    }
-                });
-                return found;
-            };
-
-            exec(`${adbCmd} devices -l`, { timeout: 10000, env: process.env, maxBuffer: 10 * 1024 * 1024 }, (error, stdout) => {
-                let devices = parseDevicesFromStdout(stdout);
-
-                // Fallback: If `adb devices -l` returned empty, attempt standard `adb devices`
-                if (!devices || devices.length === 0) {
-                    exec(`${adbCmd} devices`, { timeout: 8000, env: process.env, maxBuffer: 10 * 1024 * 1024 }, (err2, stdout2) => {
-                        devices = parseDevicesFromStdout(stdout2);
-                        resolve(devices || []);
-                    });
+                // Only online targets
+                if (status !== 'device') {
+                    console.log(`[Android Discovery] Skipping device ${id} with status: ${status}`);
                     return;
                 }
 
-                resolve(devices);
+                let name = id;
+                const modelMatch = trimmed.match(/model:([^\s]+)/i);
+                if (modelMatch) {
+                    name = modelMatch[1].replace(/_/g, ' ');
+                } else {
+                    const prodMatch = trimmed.match(/product:([^\s]+)/i);
+                    if (prodMatch) {
+                        name = prodMatch[1].replace(/_/g, ' ');
+                    }
+                }
+
+                const isEmulator = id.toLowerCase().startsWith('emulator-')
+                    || id.toLowerCase().includes('127.0.0.1')
+                    || id.toLowerCase().includes('localhost')
+                    || name.toLowerCase().includes('sdk')
+                    || name.toLowerCase().includes('emulator')
+                    || name.toLowerCase().includes('generic');
+
+                found.push({
+                    id: id,
+                    name: name,
+                    type: isEmulator ? 'emulator' : 'physical',
+                    platform: 'Android'
+                });
             });
+            return found;
+        };
+
+        const runAdbDevices = (args) => new Promise((resolve) => {
+            try {
+                execFile(
+                    adbPath,
+                    args,
+                    {
+                        timeout: 12000,
+                        env: process.env,
+                        windowsHide: true,
+                        maxBuffer: 10 * 1024 * 1024
+                    },
+                    (error, stdout, stderr) => {
+                        if (error) {
+                            console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
+                        }
+                        resolve(parseDevicesFromStdout(stdout));
+                    }
+                );
+            } catch (err) {
+                console.warn('[Android Discovery] execFile threw:', err);
+                resolve([]);
+            }
         });
+
+        // Retry: Windows often returns empty while the adb daemon is starting
+        const attempts = process.platform === 'win32' ? 4 : 2;
+        let devices = [];
+        for (let i = 0; i < attempts; i++) {
+            devices = await runAdbDevices(['devices', '-l']);
+            if (!devices.length) {
+                devices = await runAdbDevices(['devices']);
+            }
+            if (devices.length) break;
+            if (i < attempts - 1) {
+                await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 700 : 350));
+            }
+        }
+
+        console.log(`[Android Discovery] adb=${adbPath} found=${devices.length}`, devices.map((d) => d.id).join(', '));
+        return devices;
     }
 
     // --- iOS: booted Simulator (simctl) + physical iPhone (xcdevice) ---
