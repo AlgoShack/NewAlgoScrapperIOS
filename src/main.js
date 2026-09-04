@@ -189,15 +189,32 @@
 
     function resolveAndroidSdkRoot() {
         const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+        const userProfile = process.env.USERPROFILE || os.homedir();
+        const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+        const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
         const candidates = [
             process.env.ANDROID_HOME,
             process.env.ANDROID_SDK_ROOT,
             path.join(localAppData, 'Android', 'Sdk'),
-            path.join(os.homedir(), 'AppData', 'Local', 'Android', 'Sdk'),
-            path.join(os.homedir(), 'Android', 'Sdk'),
+            path.join(localAppData, 'Android', 'sdk'),
+            path.join(userProfile, 'AppData', 'Local', 'Android', 'Sdk'),
+            path.join(userProfile, 'AppData', 'Local', 'Android', 'sdk'),
+            path.join(userProfile, 'Android', 'Sdk'),
+            path.join(userProfile, 'Android', 'sdk'),
             'C:\\Android\\Sdk',
+            'C:\\Android\\sdk',
             'C:\\Android',
+            'D:\\Android\\Sdk',
+            'D:\\Android\\sdk',
+            'D:\\Android',
+            'E:\\Android\\Sdk',
+            'E:\\Android\\sdk',
+            'E:\\Android',
+            path.join(progFiles, 'Android', 'Android Studio'),
+            path.join(progFilesX86, 'Android', 'android-sdk'),
             path.join(os.homedir(), 'Library', 'Android', 'sdk'),
+            path.join(os.homedir(), 'Library', 'Android', 'Sdk'),
             '/usr/local/share/android-sdk',
             '/opt/homebrew/share/android-sdk',
             '/opt/android-sdk',
@@ -222,6 +239,59 @@
             }
         } catch (_) {}
         return null;
+    }
+
+    function getAdbExecutable() {
+        const adbName = process.platform === 'win32' ? 'adb.exe' : 'adb';
+        const sdk = resolveAndroidSdkRoot();
+        if (sdk) {
+            const p = path.join(sdk, 'platform-tools', adbName);
+            if (fs.existsSync(p)) return p;
+        }
+
+        const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+        const userProfile = process.env.USERPROFILE || os.homedir();
+        const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
+        const progFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
+
+        const candidates = process.platform === 'win32' ? [
+            path.join(localAppData, 'Android', 'Sdk', 'platform-tools', adbName),
+            path.join(localAppData, 'Android', 'sdk', 'platform-tools', adbName),
+            path.join(userProfile, 'AppData', 'Local', 'Android', 'Sdk', 'platform-tools', adbName),
+            path.join(userProfile, 'AppData', 'Local', 'Android', 'sdk', 'platform-tools', adbName),
+            path.join(userProfile, 'Android', 'Sdk', 'platform-tools', adbName),
+            path.join(userProfile, 'Android', 'sdk', 'platform-tools', adbName),
+            path.join('C:\\Android\\Sdk', 'platform-tools', adbName),
+            path.join('C:\\Android\\sdk', 'platform-tools', adbName),
+            path.join('C:\\Android', 'platform-tools', adbName),
+            path.join('D:\\Android\\Sdk', 'platform-tools', adbName),
+            path.join('D:\\Android\\sdk', 'platform-tools', adbName),
+            path.join('D:\\Android', 'platform-tools', adbName),
+            path.join('E:\\Android\\Sdk', 'platform-tools', adbName),
+            path.join('E:\\Android\\sdk', 'platform-tools', adbName),
+            path.join('E:\\Android', 'platform-tools', adbName),
+            path.join(progFiles, 'Android', 'Android Studio', 'platform-tools', adbName),
+            path.join(progFilesX86, 'Android', 'android-sdk', 'platform-tools', adbName),
+            path.join(getManagedAndroidSdkRoot(), 'platform-tools', adbName)
+        ] : [
+            path.join(os.homedir(), 'Library', 'Android', 'sdk', 'platform-tools', 'adb'),
+            path.join(os.homedir(), 'Library', 'Android', 'Sdk', 'platform-tools', 'adb'),
+            '/usr/local/bin/adb',
+            '/opt/homebrew/bin/adb',
+            path.join(getManagedAndroidSdkRoot(), 'platform-tools', 'adb')
+        ];
+
+        for (const c of candidates) {
+            try {
+                if (c && fs.existsSync(c)) return c;
+            } catch (_) {}
+        }
+        return adbName;
+    }
+
+    function getAdbCommandPrefix() {
+        const adb = getAdbExecutable();
+        return adb.includes(' ') ? `"${adb}"` : adb;
     }
 
     function applyAndroidSdkToEnv(env) {
@@ -1900,43 +1970,72 @@
 
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
     async function getConnectedAndroidDevices() {
+        applyAndroidToolingToEnv(process.env);
+        const adbCmd = getAdbCommandPrefix();
+
         return new Promise((resolve) => {
-            exec("adb devices -l", { timeout: 4000 }, (error, stdout) => {
-                const devices = [];
-                if (!error && stdout) {
-                    const lines = stdout.split('\n');
-                    lines.forEach(line => {
-                        const trimmed = line.trim();
-                        if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
+            const parseDevicesFromStdout = (stdout) => {
+                const found = [];
+                if (!stdout) return found;
+                const lines = String(stdout).split('\n');
+                lines.forEach(line => {
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
 
-                        // Match any authorized device/emulator line from `adb devices -l`
-                        const deviceMatch = trimmed.match(/^([^\s]+)\s+device\b/);
-                        if (deviceMatch) {
-                            const id = deviceMatch[1];
-                            if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb') || id.toLowerCase().includes('error')) return;
-                            let name = id;
+                    // Match any device/emulator line from `adb devices` or `adb devices -l`
+                    const deviceMatch = trimmed.match(/^([^\s]+)\s+([a-zA-Z0-9_-]+)\b/);
+                    if (deviceMatch) {
+                        const id = deviceMatch[1];
+                        const status = (deviceMatch[2] || '').toLowerCase();
+                        if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb') || id.toLowerCase().includes('error')) return;
 
-                            const modelMatch = trimmed.match(/model:([^\s]+)/);
-                            if (modelMatch) {
-                                name = modelMatch[1].replace(/_/g, ' ');
-                            } else {
-                                const prodMatch = trimmed.match(/product:([^\s]+)/);
-                                if (prodMatch) {
-                                    name = prodMatch[1].replace(/_/g, ' ');
-                                }
-                            }
-
-                            const isEmulator = id.toLowerCase().startsWith('emulator-') || id.toLowerCase().includes('127.0.0.1') || id.toLowerCase().includes('localhost');
-
-                            devices.push({
-                                id: id,
-                                name: name,
-                                type: isEmulator ? 'emulator' : 'physical',
-                                platform: 'Android'
-                            });
+                        // Only consider active 'device' state
+                        if (status !== 'device') {
+                            console.log(`[Android Discovery] Skipping device ${id} with status: ${status}`);
+                            return;
                         }
+
+                        let name = id;
+                        const modelMatch = trimmed.match(/model:([^\s]+)/);
+                        if (modelMatch) {
+                            name = modelMatch[1].replace(/_/g, ' ');
+                        } else {
+                            const prodMatch = trimmed.match(/product:([^\s]+)/);
+                            if (prodMatch) {
+                                name = prodMatch[1].replace(/_/g, ' ');
+                            }
+                        }
+
+                        const isEmulator = id.toLowerCase().startsWith('emulator-')
+                            || id.toLowerCase().includes('127.0.0.1')
+                            || id.toLowerCase().includes('localhost')
+                            || name.toLowerCase().includes('sdk')
+                            || name.toLowerCase().includes('emulator')
+                            || name.toLowerCase().includes('generic');
+
+                        found.push({
+                            id: id,
+                            name: name,
+                            type: isEmulator ? 'emulator' : 'physical',
+                            platform: 'Android'
+                        });
+                    }
+                });
+                return found;
+            };
+
+            exec(`${adbCmd} devices -l`, { timeout: 10000, env: process.env, maxBuffer: 10 * 1024 * 1024 }, (error, stdout) => {
+                let devices = parseDevicesFromStdout(stdout);
+
+                // Fallback: If `adb devices -l` returned empty, attempt standard `adb devices`
+                if (!devices || devices.length === 0) {
+                    exec(`${adbCmd} devices`, { timeout: 8000, env: process.env, maxBuffer: 10 * 1024 * 1024 }, (err2, stdout2) => {
+                        devices = parseDevicesFromStdout(stdout2);
+                        resolve(devices || []);
                     });
+                    return;
                 }
+
                 resolve(devices);
             });
         });
@@ -2523,7 +2622,7 @@
                 resolve("");
                 return;
             }
-            exec(`adb -s ${udid} shell getprop ro.build.version.release`, (error, stdout) => {
+            exec(`${getAdbCommandPrefix()} -s ${udid} shell getprop ro.build.version.release`, { timeout: 8000, env: process.env }, (error, stdout) => {
                 if (error || !stdout) {
                     resolve("");
                     return;
@@ -2565,7 +2664,11 @@
         }
 
         const runAdb = (cmd) => new Promise((resolve) => {
-            exec(cmd, { timeout: 15000 }, (error, stdout, stderr) => {
+            const adbPrefix = getAdbCommandPrefix();
+            const fullCmd = cmd.startsWith('adb ')
+                ? `${adbPrefix} ${cmd.slice(4)}`
+                : cmd;
+            exec(fullCmd, { timeout: 15000, env: process.env }, (error, stdout, stderr) => {
                 resolve({
                     success: !error,
                     output: String(stdout || ""),
@@ -2598,7 +2701,7 @@
                 resolve({ success: false, error: "Missing udid" });
                 return;
             }
-            exec(`adb -s ${udid} shell dumpsys window windows`, { timeout: 8000 }, (error, stdout) => {
+            exec(`${getAdbCommandPrefix()} -s ${udid} shell dumpsys window windows`, { timeout: 8000, env: process.env }, (error, stdout) => {
                 const text = String(stdout || "");
                 const focusMatch = text.match(/mCurrentFocus[^\n]*\b([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/)
                     || text.match(/mFocusedApp[^\n]*\b([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/)
@@ -2621,7 +2724,7 @@
                 return;
             }
             const { execFile } = require('child_process');
-            execFile('adb', ['-s', udid, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 25 * 1024 * 1024 }, (error, stdout) => {
+            execFile(getAdbExecutable(), ['-s', udid, 'exec-out', 'screencap', '-p'], { encoding: 'buffer', maxBuffer: 25 * 1024 * 1024, env: process.env }, (error, stdout) => {
                 if (error || !stdout || !stdout.length) {
                     resolve({ success: false, error: error ? error.message : "Empty screenshot" });
                     return;
@@ -2643,8 +2746,8 @@
                 return;
             }
             const remote = '/data/local/tmp/algo_window_dump.xml';
-            const cmd = `adb -s ${udid} shell uiautomator dump ${remote} && adb -s ${udid} shell cat ${remote}`;
-            exec(cmd, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+            const cmd = `${getAdbCommandPrefix()} -s ${udid} shell uiautomator dump ${remote} && ${getAdbCommandPrefix()} -s ${udid} shell cat ${remote}`;
+            exec(cmd, { maxBuffer: 10 * 1024 * 1024, env: process.env }, (error, stdout, stderr) => {
                 if (error || !stdout) {
                     resolve({ success: false, error: stderr || (error && error.message) || "Dump failed" });
                     return;
@@ -2663,20 +2766,17 @@
 
     // Prepare device: whitelist Appium packages and stop leftover instrumentation only
     ipcMain.handle("android-prepare-device", async (event, udid) => {
-        return new Promise((resolve) => {
-            if (!udid) {
-                resolve({ success: false });
-                return;
-            }
-            const cmds = [
-                `adb -s ${udid} shell am force-stop io.appium.uiautomator2.server.test`,
-                `adb -s ${udid} shell am force-stop io.appium.uiautomator2.server`,
-                `adb -s ${udid} shell dumpsys deviceidle whitelist +io.appium.settings >/dev/null 2>&1 || true`,
-                `adb -s ${udid} shell dumpsys deviceidle whitelist +io.appium.uiautomator2.server >/dev/null 2>&1 || true`,
-                `adb -s ${udid} shell dumpsys deviceidle whitelist +io.appium.uiautomator2.server.test >/dev/null 2>&1 || true`
-            ].join(' ; ');
-            exec(cmds, () => resolve({ success: true }));
-        });
+        if (!udid) return { success: false };
+        const adbPrefix = getAdbCommandPrefix();
+        const run = (c) => new Promise((res) => exec(`${adbPrefix} -s ${udid} shell ${c}`, { timeout: 5000, env: process.env }, () => res()));
+        try {
+            await run('am force-stop io.appium.uiautomator2.server.test');
+            await run('am force-stop io.appium.uiautomator2.server');
+            await run('dumpsys deviceidle whitelist +io.appium.settings');
+            await run('dumpsys deviceidle whitelist +io.appium.uiautomator2.server');
+            await run('dumpsys deviceidle whitelist +io.appium.uiautomator2.server.test');
+        } catch (_) {}
+        return { success: true };
     });
 
     // ===========================================================================
@@ -2866,15 +2966,15 @@
 
     async function resolveAndroidLabelWithAapt(udid, pkg, aaptPath) {
         try {
-            const { stdout: pathOut } = await execAsync(`adb -s "${udid}" shell pm path "${pkg}"`, { timeout: 8000 });
+            const { stdout: pathOut } = await execAsync(`${getAdbCommandPrefix()} -s "${udid}" shell pm path "${pkg}"`, { timeout: 8000, env: process.env });
             const apkLine = String(pathOut || '').split('\n').map((l) => l.trim()).find((l) => l.startsWith('package:'));
             if (!apkLine) return null;
             const apkRemote = apkLine.replace(/^package:/, '').trim();
             if (!apkRemote) return null;
 
             const tmpApk = path.join(os.tmpdir(), `algoscraper-label-${pkg.replace(/[^a-zA-Z0-9._-]/g, '_')}.apk`);
-            await execAsync(`adb -s "${udid}" pull "${apkRemote}" "${tmpApk}"`, { timeout: 20000 });
-            const { stdout: badging } = await execAsync(`"${aaptPath}" dump badging "${tmpApk}"`, { timeout: 10000 });
+            await execAsync(`${getAdbCommandPrefix()} -s "${udid}" pull "${apkRemote}" "${tmpApk}"`, { timeout: 20000, env: process.env });
+            const { stdout: badging } = await execAsync(`"${aaptPath}" dump badging "${tmpApk}"`, { timeout: 10000, env: process.env });
             try { fs.unlinkSync(tmpApk); } catch (_) {}
 
             const labelMatch = String(badging).match(/application-label(?:-[\w-]+)?:'([^']+)'/);
@@ -2896,8 +2996,8 @@
         try {
             // Prefer modern query; works on emulator + most real devices (Win/Mac)
             const { stdout } = await execAsync(
-                `adb -s "${udid}" shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER`,
-                { timeout: 15000 }
+                `${getAdbCommandPrefix()} -s "${udid}" shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER`,
+                { timeout: 15000, env: process.env }
             );
             String(stdout || '').split('\n').forEach((line) => {
                 const match = line.match(/^\s*([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/);
@@ -2911,12 +3011,12 @@
         if (!launchable.size) {
             try {
                 const { stdout } = await execAsync(
-                    `adb -s "${udid}" shell dumpsys package | grep -E "android.intent.action.MAIN|android.intent.category.LAUNCHER|^[ ]+[a-zA-Z0-9._]+/"`,
-                    { timeout: 20000 }
+                    `${getAdbCommandPrefix()} -s "${udid}" shell dumpsys package`,
+                    { timeout: 20000, env: process.env }
                 );
                 const lines = String(stdout || '').split('\n');
                 for (let i = 0; i < lines.length; i++) {
-                    if (!lines[i].includes('android.intent.category.LAUNCHER')) continue;
+                    if (!lines[i].includes('android.intent.category.LAUNCHER') && !lines[i].includes('android.intent.action.MAIN')) continue;
                     // Look nearby for component "pkg/activity"
                     for (let j = Math.max(0, i - 8); j <= Math.min(lines.length - 1, i + 2); j++) {
                         const m = lines[j].match(/([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/);
@@ -2931,7 +3031,7 @@
         // Last resort: third-party packages (still better than empty dropdown)
         if (!launchable.size) {
             try {
-                const { stdout } = await execAsync(`adb -s "${udid}" shell pm list packages -3`, { timeout: 10000 });
+                const { stdout } = await execAsync(`${getAdbCommandPrefix()} -s "${udid}" shell pm list packages -3`, { timeout: 10000, env: process.env });
                 String(stdout || '').split('\n').forEach((line) => {
                     if (line.includes('package:')) {
                         launchable.add(line.replace('package:', '').trim());
@@ -3187,8 +3287,12 @@
 
     // --- ANDROID: resolve launcher MainActivity for App Activity field ---
     ipcMain.on("get-android-activity", (event, data) => {
-        const cmd = `adb -s ${data.udid} shell cmd package resolve-activity --brief ${data.pkg}`;
-        exec(cmd, (error, stdout) => {
+        if (!data || !data.udid || !data.pkg) {
+            event.reply('receive-android-activity', '');
+            return;
+        }
+        const cmd = `${getAdbCommandPrefix()} -s ${data.udid} shell cmd package resolve-activity --brief ${data.pkg}`;
+        exec(cmd, { timeout: 8000, env: process.env }, (error, stdout) => {
             if (!error && stdout) {
                 const lines = stdout.trim().split('\n');
                 const activityLine = lines.find(l => l.includes('/'));
