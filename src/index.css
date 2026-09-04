@@ -2507,6 +2507,20 @@ th .resizer:hover {
     flex-shrink: 1;
 }
 
+.launch-picker-linked-pill {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: #fff7ed;
+    color: #ea580c;
+    border: 1px solid #fed7aa;
+    line-height: 15px;
+    flex-shrink: 0;
+}
+
 .launch-picker-stats {
     display: flex;
     align-items: center;
@@ -4843,10 +4857,10 @@ html.platform-win .split-div2 #imageToolbarmain {
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
 }
 
-/* 3 METRIC CHIPS */
+/* 4 METRIC CHIPS */
 .config-metrics-row {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 10px;
 }
 
@@ -4874,6 +4888,7 @@ html.platform-win .split-div2 #imageToolbarmain {
 .metric-chip-icon.blue { background: #eff6ff; color: #2F8BCC; }
 .metric-chip-icon.purple { background: #faf5ff; color: #a855f7; }
 .metric-chip-icon.green { background: #f0fdf4; color: #16a34a; }
+.metric-chip-icon.orange { background: #fff7ed; color: #ea580c; }
 
 .metric-chip-icon svg { width: 15px; height: 15px; }
 
@@ -5028,6 +5043,271 @@ html.platform-win .split-div2 #imageToolbarmain {
 .dash-spec-hint {
   font-size: 9.5px;
   color: #94a3b8;
+}
+
+/* CONFIG DASHBOARD SEPARATE LAST PROJECT & LAUNCH SECTION */
+.config-project-launch-section {
+  margin-top: 14px;
+  width: 100%;
+}
+
+.config-project-launch-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-launch-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fafbfc;
+  gap: 12px;
+}
+
+.config-launch-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.config-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  outline: none;
+  border: none;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.config-action-btn svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+.config-action-btn.secondary {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.config-action-btn.secondary:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.config-action-btn.primary {
+  background: #2F8BCC;
+  color: #ffffff;
+  border: 1px solid #2577b0;
+  box-shadow: 0 1px 2px rgba(47, 139, 204, 0.25);
+}
+
+.config-action-btn.primary:hover {
+  background: #2577b0;
+}
+
+.config-action-btn.primary:active {
+  transform: scale(0.98);
+}
+
+.config-action-btn.primary.is-disabled {
+  background: #cbd5e1 !important;
+  border-color: #cbd5e1 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+
+.config-launch-card-body {
+  padding: 12px 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-switch-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #64748b;
+  margin-right: 6px;
+}
+
+.config-project-card-box {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.config-project-card-box:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.config-project-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.config-project-identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.config-project-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+  flex-shrink: 0;
+  background: #64748b;
+}
+
+.config-project-avatar.is-ios {
+  background: #2563eb;
+}
+
+.config-project-avatar.is-android {
+  background: #16a34a;
+}
+
+.config-project-meta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.config-project-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-project-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.config-project-id-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: #475569;
+  background: #e2e8f0;
+  border: 1px solid #cbd5e1;
+  letter-spacing: 0.02em;
+}
+
+.config-project-key-label {
+  font-size: 10.5px;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 2px;
+}
+
+.config-project-switch-wrap {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.config-project-select {
+  padding: 3px 8px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  outline: none;
+  cursor: pointer;
+  max-width: 160px;
+}
+
+.config-project-select:focus {
+  border-color: #2F8BCC;
+  box-shadow: 0 0 0 2px rgba(47, 139, 204, 0.15);
+}
+
+.config-project-stats-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-top: 6px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.config-pstat {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.config-pstat.is-scen {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.config-pstat.is-feat {
+  background: #fdf4ff;
+  color: #a21caf;
+}
+
+.config-pstat.is-page {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+.config-pstat.is-updated {
+  background: #f8fafc;
+  color: #64748b;
+  margin-left: auto;
+  font-weight: 500;
 }
 
 /* =============================================================================

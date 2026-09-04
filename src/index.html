@@ -108,7 +108,7 @@
             </div>
         </div>
 
-        <!-- 3 SUMMARY METRIC CHIPS -->
+        <!-- 4 SUMMARY METRIC CHIPS -->
         <div class="config-metrics-row">
             <div class="config-metric-chip">
                 <div class="metric-chip-icon blue">
@@ -137,6 +137,16 @@
                 <div class="metric-chip-content">
                     <span class="metric-chip-label">Platform OS Version</span>
                     <span class="metric-chip-value" id="configMetricVersion">Android 14</span>
+                </div>
+            </div>
+
+            <div class="config-metric-chip">
+                <div class="metric-chip-icon orange">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                </div>
+                <div class="metric-chip-content">
+                    <span class="metric-chip-label">Linked Project</span>
+                    <span class="metric-chip-value" id="configMetricProject">No Project</span>
                 </div>
             </div>
         </div>
@@ -185,7 +195,7 @@
                             </button>
                         </div>
                         <div class="dash-code-pill">
-                            <input type="text" id="apppackage" name="apppackage" class="dash-prop-input mono" readonly value="com.ril.mobilecal" placeholder="App Package">
+                            <input type="text" id="apppackage" name="apppackage" class="dash-prop-input mono" readonly value="" placeholder="No app selected">
                         </div>
                         <span class="dash-spec-hint">Android package namespace identifier</span>
                     </div>
@@ -200,7 +210,7 @@
                             </button>
                         </div>
                         <div class="dash-code-pill">
-                            <input type="text" id="appactivity" name="appactivity" class="dash-prop-input mono" readonly value="com.apple.mobilecal" placeholder="App Activity">
+                            <input type="text" id="appactivity" name="appactivity" class="dash-prop-input mono" readonly value="" placeholder="No activity specified">
                         </div>
                         <span class="dash-spec-hint">Main launch activity component invoked</span>
                     </div>
@@ -215,7 +225,7 @@
                             </button>
                         </div>
                         <div class="dash-code-pill">
-                            <input type="text" id="bundleID" name="bundleID" class="dash-prop-input mono" readonly value="com.apple.mobilecal" placeholder="Bundle ID">
+                            <input type="text" id="bundleID" name="bundleID" class="dash-prop-input mono" readonly value="" placeholder="No app selected">
                         </div>
                         <span class="dash-spec-hint">Primary bundle identifier for iOS app bundle</span>
                     </div>
@@ -285,6 +295,57 @@
                 </div>
             </div>
 
+        </div>
+
+        <!-- SEPARATE BOTTOM SECTION: LAST CONFIGURED PROJECT & DIRECT LAUNCH -->
+        <div class="config-project-launch-section" id="configProjectLaunchSection">
+            <div class="config-dash-card config-project-launch-card">
+                <div class="dash-card-header config-launch-card-header">
+                    <div class="dash-card-title-wrap">
+                        <div class="dash-icon-box orange">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                        </div>
+                        <div>
+                            <h3 class="dash-card-title">Last Configured Project</h3>
+                            <p class="dash-card-subtitle">Active linked project workspace for the connected app with direct session launch</p>
+                        </div>
+                    </div>
+                    <div class="config-launch-actions">
+                        <button type="button" class="config-action-btn secondary" id="configOpenRepoBtn" onclick="openActiveProjectInRepo()" title="Open this project in Repository">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            <span>Open in Repo</span>
+                        </button>
+                        <button type="button" class="config-action-btn primary" id="configLaunchProjectBtn" onclick="launchConfiguredProject()" title="Launch Application with this project">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                            <span>Launch Application</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="dash-card-body config-launch-card-body">
+                    <div class="config-project-card-box" id="configProjectCardBox">
+                        <div class="config-project-card-header">
+                            <div class="config-project-identity">
+                                <span class="config-project-avatar is-android" id="configProjectAvatar">P</span>
+                                <div class="config-project-meta">
+                                    <div class="config-project-name-row">
+                                        <span class="config-project-name" id="configProjectName">No Linked Project</span>
+                                        <span class="config-project-id-badge" id="configProjectIdBadge" style="display:none;"></span>
+                                    </div>
+                                    <span class="config-project-key-label mono" id="configProjectKey">No saved project configured for this app</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-project-stats-row" id="configProjectStatsRow" style="display:none;">
+                            <span class="config-pstat is-scen" id="configStatScen" title="Recorded Scenarios">0s</span>
+                            <span class="config-pstat is-feat" id="configStatFeat" title="Features">0f</span>
+                            <span class="config-pstat is-page" id="configStatPage" title="Scraped Pages">0p</span>
+                            <span class="config-pstat is-updated" id="configStatUpdated" title="Last Updated">—</span>
+                        </div>
+                    </div>
+                    <span class="dash-spec-hint" id="configProjectHint">Session will automatically link and open this project when launched</span>
+                </div>
+            </div>
         </div>
 
         <!-- HIDDEN LABELS / COMPATIBILITY HOOKS -->
@@ -1473,11 +1534,11 @@
 
         var platformText = isIos ? "Apple iOS" : "Android";
         var engineText = isIos ? "XCUITest" : "UiAutomator2";
-        var osVersion = (document.getElementById("platformversion") && document.getElementById("platformversion").value) || (isIos ? "17.2" : "14");
+        var osVersion = (document.getElementById("platformversion") && document.getElementById("platformversion").value) || "";
         var udidVal = (document.getElementById("udid") && document.getElementById("udid").value) || "";
-        var pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "com.ril.mobilecal";
-        var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || ".MainActivity";
-        var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "com.apple.mobilecal";
+        var pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
+        var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || "";
+        var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
 
         var mPlatform = document.getElementById("configMetricPlatform");
         if (mPlatform) mPlatform.textContent = platformText;
@@ -1486,21 +1547,38 @@
         if (mEngine) mEngine.textContent = engineText;
 
         var mVersion = document.getElementById("configMetricVersion");
-        if (mVersion) mVersion.textContent = isIos ? ("iOS " + osVersion) : ("Android " + osVersion);
+        if (mVersion) mVersion.textContent = osVersion ? (isIos ? ("iOS " + osVersion) : ("Android " + osVersion)) : "Not Connected";
 
         var jsonPreview = document.getElementById("configJsonPreview");
         if (jsonPreview) {
-            var caps = {
-                "platformName": isIos ? "iOS" : "Android",
-                "appium:automationName": engineText,
-                "appium:udid": udidVal || (isIos ? "SIMULATOR-UDID" : "DEVICE-SERIAL"),
-                "appium:platformVersion": osVersion
-            };
-            if (isIos) {
-                caps["appium:bundleId"] = bndlVal;
+            var caps = {};
+            if (!udidVal && !pkgVal && !bndlVal) {
+                caps = {
+                    "status": "No device or application connected",
+                    "platformName": isIos ? "iOS" : "Android",
+                    "appium:automationName": engineText,
+                    "appium:udid": "",
+                    "appium:platformVersion": osVersion || ""
+                };
+                if (isIos) {
+                    caps["appium:bundleId"] = "";
+                } else {
+                    caps["appium:appPackage"] = "";
+                    caps["appium:appActivity"] = "";
+                }
             } else {
-                caps["appium:appPackage"] = pkgVal;
-                caps["appium:appActivity"] = actVal;
+                caps = {
+                    "platformName": isIos ? "iOS" : "Android",
+                    "appium:automationName": engineText,
+                    "appium:udid": udidVal,
+                    "appium:platformVersion": osVersion || ""
+                };
+                if (isIos) {
+                    caps["appium:bundleId"] = bndlVal;
+                } else {
+                    caps["appium:appPackage"] = pkgVal;
+                    caps["appium:appActivity"] = actVal;
+                }
             }
             lastRawConfigJson = JSON.stringify(caps, null, 2);
             jsonPreview.innerHTML = formatJsonToHtml(lastRawConfigJson);

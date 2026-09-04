@@ -1706,6 +1706,19 @@
             }
         }
 
+        const pkgInput = document.getElementById('apppackage');
+        if (pkgInput) pkgInput.value = '';
+        const actInput = document.getElementById('appactivity');
+        if (actInput) actInput.value = '';
+        const bundleInput = document.getElementById('bundleID');
+        if (bundleInput) bundleInput.value = '';
+        const pvInput = document.getElementById('platformversion');
+        if (pvInput && !pvInput.dataset.userEdited) pvInput.value = '';
+
+        if (typeof updateConfigDashboard === 'function') {
+            updateConfigDashboard();
+        }
+
         const runBtn = document.getElementById('Run');
         if (runBtn) {
             runBtn.disabled = true;
@@ -2091,6 +2104,8 @@
             const dropdown = document.getElementById("appname");
             if (!dropdown) return;
 
+            const platform = (document.getElementById('platformname') && document.getElementById('platformname').value) || 'Android';
+            const platformKey = platform.toLowerCase().includes('ios') ? 'IOS' : 'Android';
             const previousValue = dropdown.value;
             dropdown.innerHTML = "";
 
@@ -2108,18 +2123,59 @@
 
             if (!apps || !apps.length) return;
 
-            // Keep current selection when labels refresh in background
-            const stillExists = previousValue && apps.some((app) => app.bundleId === previousValue);
-            if (stillExists) {
-                dropdown.value = previousValue;
+            // Retrieve saved last selected app for this platform
+            let savedAppBundle = null;
+            let savedAppName = null;
+            try {
+                savedAppBundle = localStorage.getItem('algo_last_selected_app_' + platformKey)
+                    || localStorage.getItem('algo_last_selected_app_' + platform);
+                savedAppName = localStorage.getItem('algo_last_selected_app_name_' + platformKey)
+                    || localStorage.getItem('algo_last_selected_app_name_' + platform);
+            } catch (_) {}
+
+            let targetValue = null;
+            if (previousValue && apps.some((app) => app.bundleId === previousValue)) {
+                targetValue = previousValue;
+            } else if (savedAppBundle && apps.some((app) => app.bundleId === savedAppBundle)) {
+                targetValue = savedAppBundle;
+            } else if (savedAppName && apps.some((app) => (app.name && app.name.toLowerCase() === savedAppName.toLowerCase()))) {
+                const matched = apps.find((app) => app.name && app.name.toLowerCase() === savedAppName.toLowerCase());
+                if (matched) targetValue = matched.bundleId;
+            }
+
+            if (targetValue) {
+                dropdown.value = targetValue;
             } else {
                 dropdown.selectedIndex = 0;
-                dropdown.dispatchEvent(new Event('change'));
             }
+
+            dropdown.dispatchEvent(new Event('change'));
         });
 
         document.getElementById("appname").addEventListener("change", function(){
-            const platform = document.getElementById('platformname').value;
+            const platform = (document.getElementById('platformname') && document.getElementById('platformname').value) || 'Android';
+            const platformKey = platform.toLowerCase().includes('ios') ? 'IOS' : 'Android';
+
+            // Prefill first page name with the selected app name & save last selected app
+            const appSelect = this;
+            let cleanApp = '';
+            if (appSelect.options && appSelect.selectedIndex >= 0) {
+                const opt = appSelect.options[appSelect.selectedIndex];
+                cleanApp = typeof getCleanAppName === 'function' ? getCleanAppName(opt.text || opt.innerText || appSelect.value) : (opt.text || appSelect.value);
+            }
+
+            if (this.value && this.value !== 'No device connected' && this.value !== 'Loading Apps...') {
+                try {
+                    localStorage.setItem('algo_last_selected_app_' + platformKey, this.value);
+                    localStorage.setItem('algo_last_selected_app_' + platform, this.value);
+                    if (cleanApp && cleanApp !== 'Select App' && cleanApp !== 'No device connected') {
+                        localStorage.setItem('algo_last_selected_app_name_' + platformKey, cleanApp);
+                        localStorage.setItem('algo_last_selected_app_name_' + platform, cleanApp);
+                        localStorage.setItem('algo_last_global_configured_app', cleanApp);
+                    }
+                    localStorage.setItem('algo_last_global_configured_platform', platformKey);
+                } catch (_) {}
+            }
 
             if (platform === 'Android') {
                 // Fill Android Package
@@ -2136,13 +2192,10 @@
                 document.getElementById("bundleID").value = this.value;
             }
 
-            // Prefill first page name with the selected app name
-            const appSelect = this;
-            let cleanApp = '';
-            if (appSelect.options && appSelect.selectedIndex >= 0) {
-                const opt = appSelect.options[appSelect.selectedIndex];
-                cleanApp = typeof getCleanAppName === 'function' ? getCleanAppName(opt.text || opt.innerText || appSelect.value) : (opt.text || appSelect.value);
+            if (typeof updateConfigDashboard === 'function') {
+                updateConfigDashboard();
             }
+
             if (cleanApp && cleanApp !== 'Select App' && cleanApp !== 'Active App' && cleanApp !== 'Loading Apps...') {
                 const currentVal = document.getElementById('pagename_searchbox')?.value.trim();
                 if (!currentVal || currentVal === 'DefaultPage' || currentVal === 'home' || currentVal === 'Page' || currentVal === '') {
@@ -2158,7 +2211,13 @@
 
         // Receive the Android Activity from main.js and populate the field
         ipcRenderer.on("receive-android-activity", (event, activity) => {
-            document.getElementById("appactivity").value = activity || "MainActivity";
+            const actEl = document.getElementById("appactivity");
+            if (actEl) {
+                actEl.value = activity || "";
+            }
+            if (typeof updateConfigDashboard === 'function') {
+                updateConfigDashboard();
+            }
         });
 
 
@@ -2233,6 +2292,272 @@
         const matches = findExistingRepoProjects(appName, platform);
         return matches.length ? matches[0] : null;
     }
+
+    function getAppConfigStorageKey(appName, platform) {
+        const clean = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : (appName || '')).trim().toLowerCase();
+        const plat = String(platform || '').toLowerCase().includes('ios') ? 'ios' : 'android';
+        return `algo_last_configured_project_${clean}_${plat}`;
+    }
+    window.getAppConfigStorageKey = getAppConfigStorageKey;
+
+    function setGlobalLastConfiguredProject(projectKey, project) {
+        if (!projectKey) return;
+        try {
+            localStorage.setItem('algo_last_configured_project_global_key', projectKey);
+            window.activeConfiguredProjectKey = projectKey;
+            const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+            const p = project || store[projectKey];
+            if (p) {
+                const plat = String(p.platform || projectKey).toLowerCase().includes('ios') ? 'ios' : 'android';
+                localStorage.setItem('algo_last_configured_project_platform_key_' + plat, projectKey);
+                if (p.appName) {
+                    setAppConfiguredProject(p.appName, p.platform || (plat === 'ios' ? 'iOS' : 'Android'), projectKey);
+                }
+            }
+        } catch (_) {}
+    }
+    window.setGlobalLastConfiguredProject = setGlobalLastConfiguredProject;
+
+    function getGlobalLastConfiguredProject(platform) {
+        try {
+            const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+            let key = null;
+            if (platform) {
+                const plat = String(platform).toLowerCase().includes('ios') ? 'ios' : 'android';
+                key = localStorage.getItem('algo_last_configured_project_platform_key_' + plat);
+            }
+            if (!key) {
+                key = localStorage.getItem('algo_last_configured_project_global_key');
+            }
+            if (key) {
+                const found = typeof findProjectKeyInStore === 'function' ? findProjectKeyInStore(store, key) : null;
+                if (found && found.project) return { key: found.key || key, project: found.project };
+                if (store[key]) return { key: key, project: store[key] };
+            }
+            // Fallback: Pick the most recently updated project from the store
+            const storeKeys = Object.keys(store);
+            if (storeKeys.length > 0) {
+                let candidates = [];
+                storeKeys.forEach(k => {
+                    const pr = store[k];
+                    if (pr && projectHasLaunchableData(pr)) {
+                        const platNorm = String(pr.platform || k).toLowerCase().includes('ios') ? 'iOS' : 'Android';
+                        if (!platform || platNorm === (platform.toLowerCase().includes('ios') ? 'iOS' : 'Android')) {
+                            candidates.push({ key: k, project: pr });
+                        }
+                    }
+                });
+                if (candidates.length > 0) {
+                    candidates.sort((a, b) => (b.project.lastUpdated || b.project.createdAt || 0) - (a.project.lastUpdated || a.project.createdAt || 0));
+                    return candidates[0];
+                }
+            }
+        } catch (_) {}
+        return null;
+    }
+    window.getGlobalLastConfiguredProject = getGlobalLastConfiguredProject;
+
+    function setAppConfiguredProject(appName, platform, projectKey) {
+        if (!appName) return;
+        const storageKey = getAppConfigStorageKey(appName, platform);
+        if (projectKey) {
+            localStorage.setItem(storageKey, projectKey);
+            window.activeConfiguredProjectKey = projectKey;
+            try {
+                localStorage.setItem('algo_last_configured_project_global_key', projectKey);
+                const plat = String(platform || '').toLowerCase().includes('ios') ? 'ios' : 'android';
+                localStorage.setItem('algo_last_configured_project_platform_key_' + plat, projectKey);
+            } catch (_) {}
+        } else {
+            localStorage.removeItem(storageKey);
+        }
+    }
+    window.setAppConfiguredProject = setAppConfiguredProject;
+
+    function getAppConfiguredProject(appName, platform) {
+        if (!appName) return null;
+        const storageKey = getAppConfigStorageKey(appName, platform);
+        const key = localStorage.getItem(storageKey);
+        if (key) {
+            const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+            const found = typeof findProjectKeyInStore === 'function' ? findProjectKeyInStore(store, key) : null;
+            if (found && found.project) return found.key || key;
+            if (store[key]) return key;
+        }
+        return null;
+    }
+    window.getAppConfiguredProject = getAppConfiguredProject;
+
+    window.openActiveProjectInRepo = function() {
+        const key = window.activeConfiguredProjectKey || window.activeResumedProjectKey;
+        if (typeof switchAppTab === 'function') switchAppTab('repository');
+        if (key) {
+            currentSelectedProjectKey = key;
+            currentRepoFilter = 'all';
+            if (typeof closeRepoSideView === 'function') closeRepoSideView();
+            if (typeof window.renderRepositoryView === 'function') window.renderRepositoryView();
+        }
+    };
+
+    window.launchConfiguredProject = async function() {
+        if (typeof canEnableLaunch === 'function' && !canEnableLaunch()) {
+            if (typeof showCustomAlert === 'function') {
+                showCustomAlert("Authentication Required", "Please paste and connect a valid token before launching the application.", "warning");
+            }
+            return;
+        }
+
+        const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+        const configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
+            ? getGlobalLastConfiguredProject()
+            : null;
+        const key = window.activeConfiguredProjectKey || (configuredInfo ? configuredInfo.key : null);
+        const project = key ? store[key] : (configuredInfo ? configuredInfo.project : null);
+
+        const currentPlatform = (typeof getSelectedPlatform === 'function') ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
+        const projPlatform = project ? (String(project.platform || '').toLowerCase().includes('ios') ? 'IOS' : 'Android') : currentPlatform;
+        const isIos = projPlatform === 'IOS' || projPlatform === 'iOS';
+
+        // 1. Windows platform guard
+        if (process.platform === 'win32' && isIos) {
+            if (typeof showCustomAlert === 'function') {
+                showCustomAlert(
+                    "Platform Not Supported on Windows",
+                    "iOS automation requires macOS with Xcode and Apple developer tools.<br><br>Windows only supports Android devices and emulators. Please switch Platform to <b>Android</b>.",
+                    "error"
+                );
+            }
+            return;
+        }
+
+        // 2. Synchronize Platform & App in Home page if a project is configured
+        if (project) {
+            window.activeResumedProjectKey = key;
+            window.activeConfiguredProjectKey = key;
+            window.activeResumedAppName = project.appName;
+
+            // Sync platform select if different
+            const pSelect = document.getElementById('platformname');
+            if (pSelect && pSelect.value !== projPlatform) {
+                pSelect.value = projPlatform;
+                if (typeof updatePlatformUI === 'function') updatePlatformUI();
+            }
+
+            // Sync app in dropdown if present
+            const appSelect = document.getElementById('appname');
+            if (appSelect && appSelect.options) {
+                const targetAppName = (project.appName || '').toLowerCase();
+                for (let i = 0; i < appSelect.options.length; i++) {
+                    const opt = appSelect.options[i];
+                    const optText = (opt.text || opt.innerText || '').toLowerCase();
+                    if (optText === targetAppName || opt.value === targetAppName) {
+                        appSelect.selectedIndex = i;
+                        appSelect.dispatchEvent(new Event('change'));
+                        break;
+                    }
+                }
+            }
+        }
+
+        const devName = (document.getElementById('devicename')?.value || '').trim();
+        const udidName = (document.getElementById('udid')?.value || '').trim();
+        const appName = (document.getElementById('appname')?.value || '').trim();
+        const bundleID = (document.getElementById('bundleID')?.value || '').trim();
+        const appPackage = (document.getElementById('apppackage')?.value || '').trim();
+        const appActivity = (document.getElementById('appactivity')?.value || '').trim();
+        const appiumURL = (document.getElementById('appiumurl')?.value || '').trim();
+
+        // 3. Device connectivity validation
+        if (!devName || devName === 'No device connected' || devName === 'Select Device' || !udidName) {
+            if (typeof showCustomAlert === 'function') {
+                showCustomAlert(
+                    "Device Required",
+                    "No connected device or simulator detected.<br><br>Please connect a physical device via USB or start an emulator/simulator before launching.",
+                    "warning"
+                );
+            }
+            return;
+        }
+
+        // 4. Application package / bundle validation
+        if (!appName || appName === 'No device connected' || appName === 'Select App' || appName === 'Loading Apps...') {
+            if (typeof showCustomAlert === 'function') {
+                showCustomAlert("Application Required", "Please select an installed application from the App dropdown before launching.", "warning");
+            }
+            return;
+        }
+
+        if (isIos && !bundleID) {
+            if (typeof showCustomAlert === 'function') {
+                showCustomAlert("Bundle Identifier Required", "Please specify a valid iOS Bundle ID in Configuration before launching.", "warning");
+            }
+            return;
+        }
+
+        if (!isIos) {
+            if (!appPackage) {
+                if (typeof showCustomAlert === 'function') {
+                    showCustomAlert("App Package Required", "Please specify a valid Android Package identifier before launching.", "warning");
+                }
+                return;
+            }
+            if (!appActivity || appActivity.toLowerCase() === 'loading activity...') {
+                if (typeof showCustomAlert === 'function') {
+                    showCustomAlert("App Activity Required", "Android Activity is still resolving. Please wait a moment or specify MainActivity before launching.", "warning");
+                }
+                return;
+            }
+        }
+
+        if (!appiumURL) {
+            if (typeof showCustomAlert === 'function') {
+                showCustomAlert("Appium Gateway Required", "Appium server URL is missing. Please ensure Appium is running on port 4723.", "warning");
+            }
+            return;
+        }
+
+        // 5. Navigate to Home tab for live preview & canvas transition
+        if (typeof switchAppTab === 'function') {
+            switchAppTab('home');
+        }
+
+        // 6. Build launch parameters
+        var platformVersion = (document.getElementById('platformversion')?.value || '').trim();
+        var automationName = (document.getElementById('automationName')?.value || (isIos ? 'XCUITest' : 'UiAutomator2')).trim();
+        if (!platformVersion) {
+            platformVersion = isIos ? '17.0' : '14';
+        }
+
+        const launchParams = [
+            projPlatform,
+            devName,
+            platformVersion,
+            automationName,
+            appiumURL,
+            udidName,
+            bundleID,
+            appPackage,
+            appActivity
+        ];
+
+        // 7. Execute direct application launch (auto-run saved project without picker modal)
+        if (typeof setLaunchEnabled === 'function') {
+            setLaunchEnabled(true);
+        }
+
+        if (project && key && typeof resumeExistingProjectAndLaunch === 'function') {
+            await resumeExistingProjectAndLaunch(key, project, launchParams);
+        } else if (typeof startCreateNewProjectLaunch === 'function') {
+            const cleanApp = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : appName) || appName;
+            await startCreateNewProjectLaunch(cleanApp, projPlatform, launchParams);
+        } else {
+            const runBtn = document.getElementById('Run');
+            if (runBtn) {
+                runBtn.disabled = false;
+                runBtn.click();
+            }
+        }
+    };
 
     function restoreProjectDataToHomePage(project) {
         if (!project) return;
@@ -2616,6 +2941,13 @@
                 || (snapshot.projectId ? `${snapshot.appName} (${snapshot.platform})::${snapshot.projectId}` : `${snapshot.appName} (${snapshot.platform})`);
             window.activeResumedAppName = snapshot.appName || resolveActiveAppName();
 
+            if (typeof setAppConfiguredProject === 'function') {
+                setAppConfiguredProject(snapshot.appName || resolveActiveAppName(), snapshot.platform || (launchParams && launchParams[0]), window.activeResumedProjectKey);
+            }
+            if (typeof setGlobalLastConfiguredProject === 'function') {
+                setGlobalLastConfiguredProject(window.activeResumedProjectKey, snapshot);
+            }
+
             pendingLaunchProjectData = null;
             window.pendingLaunchProjectData = null;
             pendingExportAction = null;
@@ -2676,6 +3008,13 @@
                 ? createFreshRepoProject(activeApp, plateformOption)
                 : { key: `${activeApp} (${plateformOption})::${Date.now().toString(36)}`, appName: activeApp };
 
+            if (typeof setAppConfiguredProject === 'function') {
+                setAppConfiguredProject(activeApp, plateformOption, uniqueInfo.key);
+            }
+            if (typeof setGlobalLastConfiguredProject === 'function') {
+                setGlobalLastConfiguredProject(uniqueInfo.key, { appName: activeApp, platform: plateformOption, projectId: uniqueInfo.projectId });
+            }
+
             pendingLaunchProjectData = null;
             window.pendingLaunchProjectData = null;
             pendingExportAction = null;
@@ -2714,7 +3053,10 @@
         const items = Array.isArray(projects) ? projects.slice() : [];
         const displayApp = appName || 'this app';
         const esc = (typeof escapeDummyHtml === 'function') ? escapeDummyHtml : (v) => String(v || '');
-        let selectedKey = items[0] ? items[0].key : '';
+        const configuredKey = (typeof getAppConfiguredProject === 'function') ? getAppConfiguredProject(appName, platform) : null;
+        let selectedKey = (configuredKey && items.some(it => it.key === configuredKey))
+            ? configuredKey
+            : (items[0] ? items[0].key : '');
 
         titleEl.textContent = `Launch ${displayApp}`;
         if (items.length > 1) {
@@ -2761,14 +3103,17 @@
             const scens = (p.scenarios || []).length;
             const feats = (typeof countProjectFeatures === 'function') ? countProjectFeatures(p) : ((p.features || []).length);
             const updated = formatLaunchPickerDate(p.lastUpdated || p.createdAt);
+            const isConfigured = (item.key === configuredKey);
+            const isSelected = (item.key === selectedKey);
             const searchBits = `${title} ${shortId} ${item.key}`.toLowerCase();
             return `
-                <button type="button" class="launch-picker-card${idx === 0 ? ' is-selected' : ''}" data-project-key="${esc(item.key)}" data-search="${esc(searchBits)}" title="${esc(title)}${shortId ? ` · ${shortId}` : ''} · Updated ${esc(updated)}" role="option" aria-selected="${idx === 0 ? 'true' : 'false'}">
+                <button type="button" class="launch-picker-card${isSelected ? ' is-selected' : ''}" data-project-key="${esc(item.key)}" data-search="${esc(searchBits)}" title="${esc(title)}${shortId ? ` · ${shortId}` : ''} · Updated ${esc(updated)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}">
                     <span class="launch-picker-radio" aria-hidden="true"></span>
                     <span class="launch-picker-avatar ${platCls}">${esc(initial)}</span>
                     <span class="launch-picker-info">
                         <span class="launch-picker-name">${esc(title)}</span>
                         ${shortId ? `<span class="launch-picker-id">${esc(shortId)}</span>` : ''}
+                        ${isConfigured ? `<span class="launch-picker-linked-pill" title="Configured project for this app">Linked</span>` : ''}
                     </span>
                     <span class="launch-picker-stats">
                         <span class="launch-picker-stat is-scen" title="${scens} Scenarios">${scens}s</span>
@@ -2828,6 +3173,9 @@
         continueBtn.onclick = async () => {
             const chosen = items.find(it => it.key === selectedKey);
             if (!chosen || window._resumeOldProjectLaunchInFlight) return;
+            if (typeof setAppConfiguredProject === 'function') {
+                setAppConfiguredProject(appName, platform, chosen.key);
+            }
             hideLaunchProjectPicker();
             await resumeExistingProjectAndLaunch(chosen.key, chosen.project, launchParams);
         };
@@ -2978,6 +3326,17 @@
                 : [];
 
             if (existingProjects.length > 0) {
+                const configuredKey = (typeof getAppConfiguredProject === 'function')
+                    ? getAppConfiguredProject(activeApp, plateformOption)
+                    : null;
+                if (configuredKey) {
+                    const cfgIdx = existingProjects.findIndex(p => p.key === configuredKey);
+                    if (cfgIdx > 0) {
+                        const [cfgProj] = existingProjects.splice(cfgIdx, 1);
+                        existingProjects.unshift(cfgProj);
+                    }
+                }
+                const chosenInitial = existingProjects[0];
                 const launchParams = [
                     plateformOption,
                     deviceName,
@@ -2990,8 +3349,8 @@
                     appActivity
                 ];
                 pendingLaunchProjectData = {
-                    key: existingProjects[0].key,
-                    project: existingProjects[0].project,
+                    key: chosenInitial.key,
+                    project: chosenInitial.project,
                     initialData: launchParams
                 };
                 window.pendingLaunchProjectData = pendingLaunchProjectData;
@@ -3011,6 +3370,9 @@
             window.activeProjectSessionMode = 'new';
             window.activeResumedProjectKey = uniqueInfo.key;
             window.activeResumedAppName = uniqueInfo.appName;
+            if (typeof setAppConfiguredProject === 'function') {
+                setAppConfiguredProject(uniqueInfo.appName, plateformOption, uniqueInfo.key);
+            }
 
             if (!store[uniqueInfo.key]) {
                 store[uniqueInfo.key] = {
@@ -8438,6 +8800,9 @@ function createFreshRepoProject(baseAppName, platform) {
     window.activeProjectSessionMode = 'new';
     window.activeResumedProjectKey = uniqueInfo.key;
     window.activeResumedAppName = uniqueInfo.appName;
+    if (typeof setAppConfiguredProject === 'function') {
+        setAppConfiguredProject(uniqueInfo.appName, platform, uniqueInfo.key);
+    }
 
     return uniqueInfo;
 }
@@ -14258,8 +14623,10 @@ function updatePlatformUI() {
 
     if (selectedPlatform === 'Android') {
         if (automationNameInput) automationNameInput.value = 'UiAutomator2';
-        if (platformVersionInput && (!platformVersionInput.dataset.userEdited || platformVersionInput.value === '17.2')) {
-            platformVersionInput.value = '14';
+        if (platformVersionInput && !platformVersionInput.dataset.userEdited) {
+            if (platformVersionInput.value === '17.2' || platformVersionInput.value === '14') {
+                platformVersionInput.value = '';
+            }
         }
         if (udidLabel) udidLabel.textContent = 'Device Identifier (Serial / ID)';
         if (udidInput) {
@@ -14276,8 +14643,10 @@ function updatePlatformUI() {
         if (statEngine) statEngine.textContent = 'UiAutomator2';
     } else {
         if (automationNameInput) automationNameInput.value = 'XCUITest';
-        if (platformVersionInput && (!platformVersionInput.dataset.userEdited || platformVersionInput.value === '14')) {
-            platformVersionInput.value = '17.2';
+        if (platformVersionInput && !platformVersionInput.dataset.userEdited) {
+            if (platformVersionInput.value === '14' || platformVersionInput.value === '17.2') {
+                platformVersionInput.value = '';
+            }
         }
         if (udidLabel) udidLabel.textContent = 'Device Identifier (UDID)';
         if (udidInput) {
@@ -14310,6 +14679,225 @@ function updatePlatformUI() {
         updateDeviceFrameStyle(selectedPlatform);
     }
 }
+
+function updateConfigDashboard() {
+    var isIos = false;
+    var pSelect = document.getElementById("platformname");
+    if (pSelect && pSelect.value === "IOS") isIos = true;
+    if (typeof getSelectedPlatform === 'function' && getSelectedPlatform() === 'IOS') isIos = true;
+
+    var platformText = isIos ? "Apple iOS" : "Android";
+    var platformShort = isIos ? "iOS" : "Android";
+    var engineText = isIos ? "XCUITest" : "UiAutomator2";
+    var osVersion = (document.getElementById("platformversion") && document.getElementById("platformversion").value) || "";
+    var udidVal = (document.getElementById("udid") && document.getElementById("udid").value) || "";
+    var pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
+    var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || "";
+    var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
+
+    if (isIos && !bndlVal) {
+        try {
+            bndlVal = localStorage.getItem('algo_last_selected_app_IOS') || localStorage.getItem('algo_last_selected_app_iOS') || '';
+            if (bndlVal && document.getElementById("bundleID") && !document.getElementById("bundleID").value) {
+                document.getElementById("bundleID").value = bndlVal;
+            }
+        } catch (_) {}
+    } else if (!isIos && !pkgVal) {
+        try {
+            pkgVal = localStorage.getItem('algo_last_selected_app_Android') || '';
+            if (pkgVal && document.getElementById("apppackage") && !document.getElementById("apppackage").value) {
+                document.getElementById("apppackage").value = pkgVal;
+            }
+        } catch (_) {}
+    }
+
+    var mPlatform = document.getElementById("configMetricPlatform");
+    if (mPlatform) mPlatform.textContent = platformText;
+
+    var mEngine = document.getElementById("configMetricEngine");
+    if (mEngine) mEngine.textContent = engineText;
+
+    var mVersion = document.getElementById("configMetricVersion");
+    if (mVersion) {
+        mVersion.textContent = osVersion ? (isIos ? ("iOS " + osVersion) : ("Android " + osVersion)) : (platformShort + " (Auto)");
+    }
+
+    // --- Active App & Linked Project Resolution ---
+    var appSelect = document.getElementById('appname');
+    var rawAppName = '';
+    if (appSelect && appSelect.options && appSelect.selectedIndex >= 0) {
+        var opt = appSelect.options[appSelect.selectedIndex];
+        rawAppName = (opt.text || opt.innerText || '').trim();
+    }
+    if (!rawAppName || rawAppName.toLowerCase() === 'select app' || rawAppName.toLowerCase() === 'loading apps...' || rawAppName.toLowerCase() === 'no device connected') {
+        rawAppName = (appSelect ? appSelect.value : '') || '';
+    }
+    if (rawAppName.toLowerCase() === 'select app' || rawAppName.toLowerCase() === 'loading apps...' || rawAppName.toLowerCase() === 'no device connected') {
+        rawAppName = '';
+    }
+    if (!rawAppName) {
+        rawAppName = isIos ? (bndlVal || '') : (pkgVal || '');
+    }
+    if (!rawAppName) {
+        try {
+            var platKey = isIos ? 'IOS' : 'Android';
+            rawAppName = localStorage.getItem('algo_last_selected_app_name_' + platKey)
+                || localStorage.getItem('algo_last_selected_app_name_' + platformShort)
+                || '';
+        } catch (_) {}
+    }
+    var currentAppName = (typeof getCleanAppName === 'function' && rawAppName) ? getCleanAppName(rawAppName) : rawAppName;
+    if (window.activeResumedAppName && (!currentAppName || currentAppName === 'Select App' || currentAppName === 'No device connected')) {
+        currentAppName = window.activeResumedAppName;
+    }
+
+    var store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+
+    // Resolve Last Configured Project globally / per platform (persisted, not driven by volatile Home dropdown changes)
+    var configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
+        ? getGlobalLastConfiguredProject(platformShort)
+        : null;
+    var configuredKey = window.activeConfiguredProjectKey || (configuredInfo ? configuredInfo.key : null);
+    var linkedProject = configuredKey ? store[configuredKey] : (configuredInfo ? configuredInfo.project : null);
+
+    if (!linkedProject && configuredKey && typeof findProjectKeyInStore === 'function') {
+        var foundInfo = findProjectKeyInStore(store, configuredKey);
+        if (foundInfo && foundInfo.project) {
+            linkedProject = foundInfo.project;
+            configuredKey = foundInfo.key;
+        }
+    }
+    if (linkedProject && configuredKey) {
+        window.activeConfiguredProjectKey = configuredKey;
+    }
+
+    var mProject = document.getElementById("configMetricProject");
+    var projNameEl = document.getElementById("configProjectName");
+    var projIdBadgeEl = document.getElementById("configProjectIdBadge");
+    var projKeyEl = document.getElementById("configProjectKey");
+    var projAvatarEl = document.getElementById("configProjectAvatar");
+    var projStatsRow = document.getElementById("configProjectStatsRow");
+    var statScenEl = document.getElementById("configStatScen");
+    var statFeatEl = document.getElementById("configStatFeat");
+    var statPageEl = document.getElementById("configStatPage");
+    var statUpdatedEl = document.getElementById("configStatUpdated");
+    var openRepoBtn = document.getElementById("configOpenRepoBtn");
+    var hintEl = document.getElementById("configProjectHint");
+
+    if (linkedProject && configuredKey) {
+        var pTitle = (typeof getProjectCardTitle === 'function') ? getProjectCardTitle(linkedProject, configuredKey) : (linkedProject.appName || 'Project');
+        var pShortId = (typeof getProjectShortId === 'function') ? getProjectShortId(linkedProject, configuredKey) : (linkedProject.projectId || '');
+        var pInitial = String(pTitle || 'P').charAt(0).toUpperCase();
+        var pIsIos = String(linkedProject.platform || platformShort).toLowerCase().includes('ios');
+        var pScens = (linkedProject.scenarios || []).length;
+        var pFeats = (typeof countProjectFeatures === 'function') ? countProjectFeatures(linkedProject) : ((linkedProject.features || []).length);
+        var pPages = (linkedProject.pages || []).length;
+        var pUpdated = (typeof formatLaunchPickerDate === 'function') ? formatLaunchPickerDate(linkedProject.lastUpdated || linkedProject.createdAt) : 'Recently';
+
+        if (mProject) mProject.textContent = pShortId ? `${pTitle} · ${pShortId}` : pTitle;
+        if (projNameEl) projNameEl.textContent = pTitle;
+        if (projIdBadgeEl) {
+            projIdBadgeEl.textContent = pShortId;
+            projIdBadgeEl.style.display = pShortId ? 'inline-block' : 'none';
+        }
+        if (projKeyEl) projKeyEl.textContent = configuredKey;
+        if (projAvatarEl) {
+            projAvatarEl.textContent = pInitial;
+            projAvatarEl.className = 'config-project-avatar ' + (pIsIos ? 'is-ios' : 'is-android');
+        }
+        if (projStatsRow) projStatsRow.style.display = 'flex';
+        if (statScenEl) statScenEl.textContent = `${pScens}s`;
+        if (statFeatEl) statFeatEl.textContent = `${pFeats}f`;
+        if (statPageEl) statPageEl.textContent = `${pPages}p`;
+        if (statUpdatedEl) statUpdatedEl.textContent = `Updated ${pUpdated}`;
+        if (openRepoBtn) openRepoBtn.style.display = 'inline-flex';
+        if (hintEl) hintEl.textContent = `Launch Project will link and open "${pTitle}" (${pShortId || 'Saved'})`;
+
+        var launchBtn = document.getElementById("configLaunchProjectBtn");
+        if (launchBtn) {
+            launchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Launch Project</span>';
+            launchBtn.title = 'Launch Application and open "' + (linkedProject.appName || pTitle) + '"';
+        }
+    } else {
+        if (mProject) mProject.textContent = 'No Linked Project';
+        if (projNameEl) projNameEl.textContent = 'No Configured Project';
+        if (projIdBadgeEl) projIdBadgeEl.style.display = 'none';
+        if (projKeyEl) projKeyEl.textContent = 'Launch or create a project workspace to configure';
+        if (projAvatarEl) {
+            projAvatarEl.textContent = '—';
+            projAvatarEl.className = 'config-project-avatar ' + (isIos ? 'is-ios' : 'is-android');
+        }
+        if (projStatsRow) projStatsRow.style.display = 'none';
+        if (openRepoBtn) openRepoBtn.style.display = 'none';
+        if (hintEl) hintEl.textContent = 'Launch Application on the Home tab will create and link a new project workspace';
+
+        var launchBtnNoProj = document.getElementById("configLaunchProjectBtn");
+        if (launchBtnNoProj) {
+            launchBtnNoProj.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Launch Application</span>';
+            launchBtnNoProj.title = 'Launch Application session';
+        }
+    }
+
+    // --- W3C Capabilities JSON Preview ---
+    var jsonPreview = document.getElementById("configJsonPreview");
+    if (jsonPreview) {
+        var caps;
+        if (!udidVal && !pkgVal && !bndlVal && !currentAppName) {
+            caps = {
+                "status": "No device or application connected",
+                "platformName": isIos ? "iOS" : "Android",
+                "appium:automationName": engineText,
+                "appium:udid": "",
+                "appium:platformVersion": osVersion || ""
+            };
+            if (isIos) {
+                caps["appium:bundleId"] = "";
+            } else {
+                caps["appium:appPackage"] = "";
+                caps["appium:appActivity"] = "";
+            }
+        } else {
+            caps = {
+                "platformName": isIos ? "iOS" : "Android",
+                "appium:automationName": engineText,
+                "appium:udid": udidVal,
+                "appium:platformVersion": osVersion || ""
+            };
+            if (isIos) {
+                caps["appium:bundleId"] = bndlVal;
+            } else {
+                caps["appium:appPackage"] = pkgVal;
+                caps["appium:appActivity"] = actVal;
+            }
+        }
+        var rawJson = JSON.stringify(caps, null, 2);
+        jsonPreview.innerHTML = (typeof formatJsonToHtml === 'function') ? formatJsonToHtml(rawJson) : rawJson;
+
+        var lineCount = rawJson.split('\n').length;
+        var gutterEl = document.getElementById('configJsonGutter');
+        if (gutterEl) {
+            var linesHtml = '';
+            for (var i = 1; i <= lineCount; i++) {
+                linesHtml += '<span>' + i + '</span>';
+            }
+            gutterEl.innerHTML = linesHtml;
+        }
+    }
+}
+window.updateConfigDashboard = updateConfigDashboard;
+
+// Bind live input listeners to all configuration fields so UI and JSON stay in sync
+['udid', 'apppackage', 'appactivity', 'bundleID', 'platformversion', 'automationName', 'appiumurl'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) {
+        el.addEventListener('input', function() {
+            if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
+        });
+        el.addEventListener('change', function() {
+            if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
+        });
+    }
+});
 
 function getDeviceDimensions() {
     const xml = getXmlHierarchySize();
@@ -16405,6 +16993,11 @@ if (platformVersionField) {
             if (pKey) {
                 currentSelectedProjectKey = pKey;
                 currentRepoFilter = 'all';
+                const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+                const p = store[pKey];
+                if (p && typeof setAppConfiguredProject === 'function') {
+                    setAppConfiguredProject(p.appName, p.platform, pKey);
+                }
                 closeRepoSideView();
                 window.renderRepositoryView();
             }
@@ -16424,6 +17017,11 @@ if (platformVersionField) {
             if (pKey) {
                 currentSelectedProjectKey = pKey;
                 currentRepoFilter = 'all';
+                const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+                const p = store[pKey];
+                if (p && typeof setAppConfiguredProject === 'function') {
+                    setAppConfiguredProject(p.appName, p.platform, pKey);
+                }
                 closeRepoSideView();
                 window.renderRepositoryView();
             }
