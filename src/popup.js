@@ -7453,14 +7453,60 @@ function createAndAppendTable(dtControls) {
 
             showCustomAlert("Success!", "Scraped data shared successfully to AlgoQA.", "success");
 
-            if (driver) { try { await driver.quit(); } catch (err) {} }
-            // Only shut down iOS simulators on macOS — never run xcrun on Windows
-            if (process.platform === 'darwin') {
-                const { exec } = require("child_process");
-                exec("xcrun simctl shutdown all", () => { ipcRenderer.send("close-app"); });
-            } else {
-                ipcRenderer.send("close-app");
+            const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
+            const udid = (document.getElementById('udid')?.value || '').trim();
+            const packageName = (document.getElementById('apppackage')?.value || '').trim();
+            const bundleId = (document.getElementById('bundleID')?.value || '').trim();
+
+            if (driver) {
+                try {
+                    if (platform === 'Android' && packageName) {
+                        try {
+                            await driver.executeScript("mobile: terminateApp", { appId: packageName });
+                        } catch (_) {
+                            try { await driver.terminateApp(packageName); } catch (_) {}
+                        }
+                    } else if (bundleId) {
+                        try {
+                            await driver.executeScript("mobile: terminateApp", { bundleId: bundleId });
+                        } catch (_) {
+                            try { await driver.terminateApp(bundleId); } catch (_) {}
+                        }
+                    }
+                } catch (termErr) {
+                    console.log("Terminate app on device skipped:", termErr);
+                }
+
+                try {
+                    await driver.quit();
+                } catch (err) {}
+                driver = null;
             }
+
+            // Explicit OS/CLI level termination for real Android/iOS devices and emulators/simulators
+            try {
+                const { exec } = require("child_process");
+                if (platform === 'Android' && packageName) {
+                    const adbCmd = udid
+                        ? `adb -s "${udid}" shell am force-stop "${packageName}"`
+                        : `adb shell am force-stop "${packageName}"`;
+                    exec(adbCmd, () => {});
+                } else if (process.platform === 'darwin' && (platform === 'IOS' || platform === 'iOS')) {
+                    if (bundleId) {
+                        exec(`xcrun simctl terminate booted "${bundleId}"`, () => {});
+                        if (udid) {
+                            exec(`xcrun devicectl device process terminate --device "${udid}" "${bundleId}"`, () => {});
+                        }
+                    }
+                    exec("xcrun simctl shutdown all", () => {});
+                }
+            } catch (cliErr) {
+                console.log("CLI termination skipped:", cliErr);
+            }
+
+            setTimeout(() => {
+                ipcRenderer.send("close-app");
+            }, 1200);
 
         } catch (error) {
             console.error("Error sending table data:", error);
