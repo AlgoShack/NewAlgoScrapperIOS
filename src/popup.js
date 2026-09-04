@@ -3725,8 +3725,16 @@
             elements.forEach(el => {
                 if (!el) return;
                 const name = (el['CONTROL NAME'] || el.ControlName || '').trim().toLowerCase();
-                const xpRaw = el['XPATH'] || el.ControlId || '';
-                const xp = (Array.isArray(xpRaw) ? xpRaw[0] : xpRaw);
+                const xpField = el['XPATH'];
+                const xpRaw = (Array.isArray(xpField) && xpField.some((v) => String(v || '').trim()))
+                    ? xpField
+                    : (typeof xpField === 'string' && xpField.trim()
+                        ? xpField
+                        : (el.ControlId != null ? el.ControlId : ''));
+                let xpaths = Array.isArray(xpRaw)
+                    ? xpRaw.map((xp) => String(xp == null ? '' : xp).trim()).filter(Boolean)
+                    : (String(xpRaw || '').trim() ? [String(xpRaw).trim()] : []);
+                const xp = xpaths[0] || '';
                 const rowKey = pName.trim().toLowerCase() + '|' + name + '|' + String(xp || '').trim().toLowerCase();
                 if (name || String(xp || '').trim()) {
                     if (seenRowKeys.has(rowKey)) return;
@@ -3734,10 +3742,6 @@
                 }
                 const tr = tbody.insertRow(0);
                 tr.dataset.rect = JSON.stringify(el.rect || null);
-
-                let xpaths = Array.isArray(el['XPATH'] || el.ControlId)
-                    ? (el['XPATH'] || el.ControlId)
-                    : [(el['XPATH'] || el.ControlId || '')];
 
                 let controlIdCellHtml = (typeof buildControlIdSelectHtml === 'function')
                     ? buildControlIdSelectHtml(xpaths)
@@ -5498,31 +5502,50 @@
             ? window.resolveHomePageNameForScrape()
             : (document.getElementById('pagename_searchbox')?.value || '').trim();
 
+        /** Collect every Control ID option (selected first) so project save keeps multi-xpath. */
+        function getControlIdLocatorList(cell) {
+            if (!cell) return [];
+            const selectEl = cell.querySelector('select.control-id-dropdown, select.xpath-dropdown');
+            if (!selectEl) {
+                const text = String(cell.textContent || '').trim();
+                return text ? [text] : [];
+            }
+            const unique = [];
+            const selected = String(selectEl.value || '').trim();
+            if (selected) unique.push(selected);
+            Array.from(selectEl.options || []).forEach((opt) => {
+                if (opt.disabled) return;
+                const v = String(opt.value || opt.text || '').trim();
+                if (v && !unique.includes(v)) unique.push(v);
+            });
+            return unique;
+        }
+
+        function getCellValue(cell) {
+            if (!cell) return "";
+            const selectEl = cell.querySelector('select');
+            if (selectEl) {
+                if (selectEl.value !== undefined && selectEl.value !== null && selectEl.value !== "") {
+                    return String(selectEl.value).trim();
+                }
+                if (selectEl.selectedIndex >= 0 && selectEl.options[selectEl.selectedIndex]) {
+                    return String(selectEl.options[selectEl.selectedIndex].text).trim();
+                }
+                return "";
+            }
+            const inputEl = cell.querySelector('input[type="text"], textarea');
+            if (inputEl) {
+                return (inputEl.value || "").trim();
+            }
+            // textContent correctly retrieves text even when display: none !important is active on hidden columns
+            return (cell.textContent || "").trim();
+        }
+
         rows.forEach((row) => {
             if (row.classList.contains('empty-excel-row') || row.classList.contains('no-results-row')) return;
 
             const allCells = Array.from(row.querySelectorAll('td'));
             if (allCells.length === 0) return;
-
-            function getCellValue(cell) {
-                if (!cell) return "";
-                const selectEl = cell.querySelector('select');
-                if (selectEl) {
-                    if (selectEl.value !== undefined && selectEl.value !== null && selectEl.value !== "") {
-                        return String(selectEl.value).trim();
-                    }
-                    if (selectEl.selectedIndex >= 0 && selectEl.options[selectEl.selectedIndex]) {
-                        return String(selectEl.options[selectEl.selectedIndex].text).trim();
-                    }
-                    return "";
-                }
-                const inputEl = cell.querySelector('input[type="text"], textarea');
-                if (inputEl) {
-                    return (inputEl.value || "").trim();
-                }
-                // textContent correctly retrieves text even when display: none !important is active on hidden columns
-                return (cell.textContent || "").trim();
-            }
 
             const rowObj = {
                 "CONTROL NAME": "",
@@ -5551,7 +5574,11 @@
 
             if (cnCell) rowObj["CONTROL NAME"] = getCellValue(cnCell);
             if (ctCell) rowObj["CONTROL TYPE"] = getCellValue(ctCell);
-            if (xpathCell) rowObj["XPATH"] = getCellValue(xpathCell);
+            // Persist ALL Control ID options (not only the selected one)
+            if (xpathCell) {
+                const locatorList = getControlIdLocatorList(xpathCell);
+                rowObj["XPATH"] = locatorList.length > 1 ? locatorList : (locatorList[0] || "");
+            }
             if (pageCell) rowObj["PAGE NAME"] = getCellValue(pageCell);
             if (identCell) rowObj["IDENTIFICATION TYPE"] = getCellValue(identCell);
             if (valCell) rowObj["CONTROL VALUE"] = getCellValue(valCell);
@@ -5560,12 +5587,19 @@
             if (fingerprintCell) rowObj["FINGERPRINT"] = getCellValue(fingerprintCell);
             rowObj["APP URL"] = "";
 
-            // 2. Map custom or position-based cells if present
+            // 2. Map custom or position-based cells if present (never overwrite multi-xpath with a single select value)
             allCells.forEach((cell, cellIndex) => {
                 const fieldName = colIndexToField[cellIndex];
                 if (!fieldName || fieldName === "APP URL") return;
+                if (fieldName === "XPATH") {
+                    if (!rowObj["XPATH"]) {
+                        const locatorList = getControlIdLocatorList(cell);
+                        rowObj["XPATH"] = locatorList.length > 1 ? locatorList : (locatorList[0] || "");
+                    }
+                    return;
+                }
                 const cellVal = getCellValue(cell);
-                if (!rowObj[fieldName] || (fieldName !== "CONTROL NAME" && fieldName !== "CONTROL TYPE" && fieldName !== "XPATH" && fieldName !== "PAGE NAME" && fieldName !== "IDENTIFICATION TYPE" && fieldName !== "CONTROL VALUE" && fieldName !== "FEATURE NAME" && fieldName !== "NODE NAME")) {
+                if (!rowObj[fieldName] || (fieldName !== "CONTROL NAME" && fieldName !== "CONTROL TYPE" && fieldName !== "PAGE NAME" && fieldName !== "IDENTIFICATION TYPE" && fieldName !== "CONTROL VALUE" && fieldName !== "FEATURE NAME" && fieldName !== "NODE NAME")) {
                     rowObj[fieldName] = cellVal;
                 }
             });
@@ -5585,7 +5619,8 @@
 
             // Identification Type: ensure it's always populated even if column was hidden
             if (!rowObj["IDENTIFICATION TYPE"]) {
-                const loc = rowObj["XPATH"] || "";
+                const locRaw = rowObj["XPATH"] || "";
+                const loc = Array.isArray(locRaw) ? String(locRaw[0] || "") : String(locRaw || "");
                 if (typeof inferIdentificationType === 'function') {
                     rowObj["IDENTIFICATION TYPE"] = inferIdentificationType(loc);
                 } else {
@@ -5606,7 +5641,10 @@
             }
 
             // Validate that row has actual data (Control Name, XPath, Control Type, or Page Name)
-            const hasData = rowObj["CONTROL NAME"] || rowObj["XPATH"] || rowObj["CONTROL TYPE"] || rowObj["PAGE NAME"];
+            const xpathHasData = Array.isArray(rowObj["XPATH"])
+                ? rowObj["XPATH"].some((v) => String(v || '').trim())
+                : !!rowObj["XPATH"];
+            const hasData = rowObj["CONTROL NAME"] || xpathHasData || rowObj["CONTROL TYPE"] || rowObj["PAGE NAME"];
             if (hasData) {
                 extractedData.push(rowObj);
             }
@@ -17543,14 +17581,20 @@ if (platformVersionField) {
             }
 
             const cleanElList = rawElList.map(el => {
-                const loc = el['XPATH'] || el.ControlId || '';
+                const locRaw = el['XPATH'] != null && el['XPATH'] !== ''
+                    ? el['XPATH']
+                    : (el.ControlId != null ? el.ControlId : '');
+                const loc = Array.isArray(locRaw)
+                    ? locRaw.map((xp) => String(xp == null ? '' : xp).trim()).filter(Boolean)
+                    : String(locRaw || '').trim();
+                const primaryLoc = Array.isArray(loc) ? (loc[0] || '') : loc;
                 const inferredIdType = (typeof inferIdentificationType === 'function')
-                    ? inferIdentificationType(loc)
-                    : ((loc.startsWith('//') || loc.startsWith('(')) ? 'XPath' : (loc ? 'AccessibilityId' : 'Name'));
+                    ? inferIdentificationType(primaryLoc)
+                    : ((primaryLoc.startsWith('//') || primaryLoc.startsWith('(')) ? 'XPath' : (primaryLoc ? 'AccessibilityId' : 'Name'));
                 return {
                     "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
                     "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                    "XPATH": loc,
+                    "XPATH": Array.isArray(loc) ? (loc.length > 1 ? loc : (loc[0] || '')) : loc,
                     "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
                     "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
                     "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
@@ -17589,14 +17633,20 @@ if (platformVersionField) {
 
             const pageName = item.pageName || item.name || 'Default';
             const cleanSteps = rawSteps.map(el => {
-                const loc = el['XPATH'] || el.ControlId || '';
+                const locRaw = el['XPATH'] != null && el['XPATH'] !== ''
+                    ? el['XPATH']
+                    : (el.ControlId != null ? el.ControlId : '');
+                const loc = Array.isArray(locRaw)
+                    ? locRaw.map((xp) => String(xp == null ? '' : xp).trim()).filter(Boolean)
+                    : String(locRaw || '').trim();
+                const primaryLoc = Array.isArray(loc) ? (loc[0] || '') : loc;
                 const inferredIdType = (typeof inferIdentificationType === 'function')
-                    ? inferIdentificationType(loc)
-                    : ((loc.startsWith('//') || loc.startsWith('(')) ? 'XPath' : (loc ? 'AccessibilityId' : 'Name'));
+                    ? inferIdentificationType(primaryLoc)
+                    : ((primaryLoc.startsWith('//') || primaryLoc.startsWith('(')) ? 'XPath' : (primaryLoc ? 'AccessibilityId' : 'Name'));
                 return {
                     "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
                     "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                    "XPATH": loc,
+                    "XPATH": Array.isArray(loc) ? (loc.length > 1 ? loc : (loc[0] || '')) : loc,
                     "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
                     "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
                     "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
@@ -18394,7 +18444,10 @@ if (platformVersionField) {
                 const outlineMatch = (item.outline || '').toLowerCase().includes(repoSearchQuery);
                 const elementsMatch = item.elements && item.elements.some(el =>
                     (el['CONTROL NAME'] || '').toLowerCase().includes(repoSearchQuery) ||
-                    (el['XPATH'] || '').toLowerCase().includes(repoSearchQuery)
+                    (Array.isArray(el['XPATH'])
+                        ? el['XPATH'].join(' ')
+                        : (el['XPATH'] || '')
+                    ).toLowerCase().includes(repoSearchQuery)
                 );
                 const featuresMatch = (item.features || []).some(f => ((f && f.name) || '').toLowerCase().includes(repoSearchQuery));
                 return nameMatch || pageMatch || outlineMatch || elementsMatch || featuresMatch;
