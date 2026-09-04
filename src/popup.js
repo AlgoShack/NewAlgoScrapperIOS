@@ -214,16 +214,6 @@
             e.preventDefault();
             connectAlgoTokenFromInput();
         });
-        // Windows: paste often doesn't include Enter — auto-connect after paste
-        tokenInput.addEventListener("paste", function () {
-            setTimeout(() => {
-                try {
-                    if ((tokenInput.value || '').trim()) connectAlgoTokenFromInput();
-                } catch (err) {
-                    console.error('token paste connect failed:', err);
-                }
-            }, 0);
-        });
         window.__algoTokenBound = true;
     }
     bindTokenConnectEarly();
@@ -2304,7 +2294,7 @@
         startRealtimeDeviceMonitoring();
     });
 
-    // Main can also push devices after did-finish-load (same payload shape)
+    // Main can also push devices after did-finish-load + realtime watcher (same payload shape)
     ipcRenderer.on('connected-devices-updated', (event, payload) => {
         const list = (payload && payload.devices) || (payload && payload.connectedDevices) || [];
         console.log('connectedDevices (push) =', list.length, list);
@@ -2313,11 +2303,21 @@
             return;
         }
         const isFirstFill = !initialDeviceUiApplied;
+        const fp = computeDeviceFingerprint(list);
+        // Ignore duplicate pushes with identical fingerprint
+        if (!isFirstFill && fp && fp === lastKnownDeviceFingerprint && !isDeviceDropdownEmpty()) {
+            if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
+            return;
+        }
         applyConnectedDevicesToUi(list, {
             startup: isFirstFill,
-            forceEmpty: list.length === 0 && initialDeviceUiApplied
+            forceEmpty: list.length === 0 && initialDeviceUiApplied,
+            requestApps: list.length > 0
         });
-        if (list.length > 0) initialDeviceUiApplied = true;
+        if (list.length > 0) {
+            initialDeviceUiApplied = true;
+            consecutiveEmptyDevicePolls = 0;
+        }
         if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
     });
 
@@ -2375,11 +2375,27 @@
 
     window.__algoDeviceListenersReady = true;
 
-    function startRealtimeDeviceMonitoring() {
-        if (realtimeDeviceMonitorInterval) clearInterval(realtimeDeviceMonitorInterval);
+    let realtimeDevicePollInFlight = false;
 
-        realtimeDeviceMonitorInterval = setInterval(async () => {
+    /**
+     * Realtime connect/disconnect for:
+     *   Mac  → Android real/emulator + iOS real/simulator
+     *   Win  → Android real/emulator
+     * Polls via IPC; main process also pushes on change (connected-devices-updated).
+     */
+    function startRealtimeDeviceMonitoring() {
+        if (realtimeDeviceMonitorInterval) {
+            clearInterval(realtimeDeviceMonitorInterval);
+            realtimeDeviceMonitorInterval = null;
+        }
+
+        const tickMs = process.platform === 'win32' ? 1400 : 1100;
+        console.log(`[Real-time Monitor] started (${process.platform}, every ${tickMs}ms)`);
+
+        const runPoll = async () => {
             if (platformSwitchInProgress) return;
+            if (realtimeDevicePollInFlight) return;
+            realtimeDevicePollInFlight = true;
 
             try {
                 const syncId = ++deviceUiSyncGeneration;
@@ -2388,36 +2404,59 @@
 
                 const freshFingerprint = computeDeviceFingerprint(freshDevices);
 
-                // --- 1. ACTIVE SESSION REAL-TIME VALIDATION ---
+                // --- 1. ACTIVE SESSION: kill session if active device unplugged / simulator quit ---
                 if (driver) {
                     const activePlatform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
-                    const activePlatformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform) : activePlatform;
+                    const activePlatformTarget = typeof normalizePlatformName === 'function'
+                        ? normalizePlatformName(activePlatform)
+                        : activePlatform;
                     const matchingActiveDevices = devicesForPlatform(activePlatformTarget, freshDevices);
-
                     const activeUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
-                    const isDeviceStillConnected = matchingActiveDevices.some(d => (activeUdid && d.id === activeUdid) || (deviceName && d.name === deviceName));
+                    const isDeviceStillConnected = matchingActiveDevices.some(
+                        (d) => (activeUdid && d.id === activeUdid) || (deviceName && d.name === deviceName)
+                    );
 
                     if (!isDeviceStillConnected) {
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
-                        lastKnownDeviceFingerprint = "";
-                        markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`));
-                        setNoDeviceConnectedState();
+                        lastKnownDeviceFingerprint = '';
+                        consecutiveEmptyDevicePolls = 0;
+                        if (typeof markSessionInterrupted === 'function') {
+                            markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`));
+                        }
+                        applyConnectedDevicesToUi(freshDevices, {
+                            startup: false,
+                            requestApps: freshDevices.length > 0,
+                            forceEmpty: freshDevices.length === 0
+                        });
+                        if (!freshDevices.length) {
+                            showCustomAlert(
+                                'Device Disconnected',
+                                `The device used for this session was disconnected.<br><br>Please reconnect an Android device${process.platform !== 'win32' ? ', emulator, iOS device, or simulator' : ' or emulator'} and Launch again.`,
+                                'warning'
+                            );
+                        }
                         return;
                     }
                     lastKnownDeviceFingerprint = freshFingerprint;
+                    consecutiveEmptyDevicePolls = 0;
+                    // Keep global list fresh even during an active session
+                    connectedDevices = preferAndroidDevicesFirst(freshDevices);
                     return;
                 }
 
-                // --- 2. IDLE / FORM REAL-TIME UPDATE (device dropdown only — apps load separately) ---
+                // --- 2. IDLE: live-update Home Device / App on plug / unplug / boot / shutdown ---
                 if (process.platform === 'win32' && typeof lockPlatformToAndroidOnWindows === 'function') {
                     lockPlatformToAndroidOnWindows();
                 }
 
                 const platformSelect = document.getElementById('platformname');
                 const activePlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
-                const platformTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(activePlatform || 'Android') : (activePlatform || 'Android');
+                const platformTarget = typeof normalizePlatformName === 'function'
+                    ? normalizePlatformName(activePlatform || 'Android')
+                    : (activePlatform || 'Android');
                 let matching = devicesForPlatform(platformTarget, freshDevices);
 
+                // Mac: if current platform has none but the other does, switch (Android ↔ iOS)
                 if (matching.length === 0 && freshDevices.length > 0 && process.platform !== 'win32') {
                     const alternateTarget = platformTarget === 'Android' ? 'IOS' : 'Android';
                     const alternateMatching = devicesForPlatform(alternateTarget, freshDevices);
@@ -2436,7 +2475,6 @@
                     }
                 }
 
-                // Never drop a discovered device due to platform-filter mismatch
                 if (matching.length === 0 && freshDevices.length > 0) {
                     matching = freshDevices.slice();
                 }
@@ -2445,7 +2483,10 @@
                 const deviceSelect = document.getElementById('devicename');
                 const currentDeviceVal = deviceSelect ? (deviceSelect.value || '') : '';
                 const uiEmpty = isDeviceDropdownEmpty();
-                const isCurrentDeviceStillPresent = !!(currentUdid && matching.some(d => d.id === currentUdid || d.name === currentDeviceVal || d.id === currentDeviceVal));
+                const isCurrentDeviceStillPresent = !!(
+                    currentUdid
+                    && matching.some((d) => d.id === currentUdid || d.name === currentDeviceVal || d.id === currentDeviceVal)
+                );
 
                 const closeDeviceDisconnectedAlertIfOpen = () => {
                     const popup = document.getElementById('confirmationPopup');
@@ -2460,48 +2501,67 @@
 
                 if (matching.length > 0) {
                     consecutiveEmptyDevicePolls = 0;
-                    const needsUiRefresh = uiEmpty || !isCurrentDeviceStillPresent || (freshFingerprint !== lastKnownDeviceFingerprint);
+                    const needsUiRefresh = uiEmpty
+                        || !isCurrentDeviceStillPresent
+                        || (freshFingerprint !== lastKnownDeviceFingerprint);
                     if (needsUiRefresh) {
                         const wasEmpty = uiEmpty;
                         closeDeviceDisconnectedAlertIfOpen();
                         applyConnectedDevicesToUi(freshDevices, { startup: false, requestApps: true });
-                        // First connect after empty → keep user on Home with filled fields
+                        initialDeviceUiApplied = true;
                         if (wasEmpty && typeof window.switchAppTab === 'function') {
                             window.switchAppTab('home');
+                        }
+                        if (wasEmpty && typeof showDummyDeviceMessage === 'function') {
+                            const first = preferAndroidDevicesFirst(freshDevices)[0];
+                            const label = first
+                                ? `${first.name || first.id} (${first.type || 'device'})`
+                                : 'device';
+                            showDummyDeviceMessage({
+                                theme: 'info',
+                                title: `Connected: ${label}`
+                            });
                         }
                     } else {
                         lastKnownDeviceFingerprint = freshFingerprint;
                     }
                 } else {
                     consecutiveEmptyDevicePolls += 1;
-                    // Require 2 empty polls before clearing (Windows ADB often misses one tick)
-                    const emptyNeeded = process.platform === 'win32' ? 2 : 1;
+                    // 2 empty polls on all platforms — avoids flaky ADB/simctl one-tick misses
+                    const emptyNeeded = 2;
                     if (consecutiveEmptyDevicePolls < emptyNeeded) {
                         return;
                     }
                     const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !uiEmpty;
                     if (!uiEmpty || lastKnownDeviceFingerprint) {
-                        lastKnownDeviceFingerprint = "";
+                        lastKnownDeviceFingerprint = '';
                         applyConnectedDevicesToUi([], { forceEmpty: true, startup: false });
                         if (wasDeviceConnectedBefore) {
                             showCustomAlert(
-                                "Device Disconnected",
-                                `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ' or start an iOS simulator' : ''}.`,
-                                "warning",
+                                'Device Disconnected',
+                                `The connected device was disconnected and no other device is available.<br><br>Please connect an Android device${process.platform !== 'win32' ? ', emulator, iOS device, or simulator' : ' or emulator'}.`,
+                                'warning',
                                 () => {
                                     setNoDeviceConnectedState();
                                 }
                             );
                         }
                     } else {
-                        lastKnownDeviceFingerprint = "";
+                        lastKnownDeviceFingerprint = '';
                     }
                 }
             } catch (pollErr) {
-                console.warn("[Real-time Monitor] polling tick skipped:", pollErr);
+                console.warn('[Real-time Monitor] polling tick skipped:', pollErr);
+            } finally {
+                realtimeDevicePollInFlight = false;
             }
-        }, 1500);
+        };
+
+        // Immediate first poll, then interval
+        runPoll();
+        realtimeDeviceMonitorInterval = setInterval(runPoll, tickMs);
     }
+    window.startRealtimeDeviceMonitoring = startRealtimeDeviceMonitoring;
 
     const deviceNameEl = document.getElementById('devicename');
     if (deviceNameEl) {

@@ -1926,7 +1926,12 @@
         setTimeout(() => {
           checkDeviceConnected()
             .catch(() => false)
-            .finally(() => pushConnectedDevicesToRenderer(mainWindow));
+            .finally(() => {
+              pushConnectedDevicesToRenderer(mainWindow);
+              try { startConnectedDevicesWatcher(); } catch (err) {
+                console.warn('startConnectedDevicesWatcher failed:', err);
+              }
+            });
         }, 400);
       });
       setTimeout(revealMainWindow, 4000);
@@ -2551,6 +2556,7 @@
     // explicitly with Cmd + Q.
 
     app.on("before-quit", () => {
+        try { stopConnectedDevicesWatcher(); } catch (_) {}
 
         if (appiumProcess) {
 
@@ -2621,6 +2627,63 @@
             });
         } catch (err) {
             console.warn('pushConnectedDevicesToRenderer failed:', err);
+        }
+    }
+
+    // Realtime device connect/disconnect watcher (Mac: Android+iOS device/simulator;
+    // Windows: Android emulator + real device). Pushes to renderer only on change.
+    let deviceWatchInterval = null;
+    let deviceWatchInFlight = false;
+    let lastPushedDeviceFingerprint = '';
+
+    function computeMainDeviceFingerprint(devices) {
+        return (devices || [])
+            .map((d) => `${d.id || ''}:${d.platform || ''}:${d.type || ''}:${d.name || ''}`)
+            .sort()
+            .join('|');
+    }
+
+    function startConnectedDevicesWatcher() {
+        if (deviceWatchInterval) {
+            clearInterval(deviceWatchInterval);
+            deviceWatchInterval = null;
+        }
+
+        const tickMs = process.platform === 'win32' ? 1400 : 1100;
+
+        const runTick = async () => {
+            if (deviceWatchInFlight) return;
+            if (!mainWindow || mainWindow.isDestroyed()) return;
+            deviceWatchInFlight = true;
+            try {
+                await checkDeviceConnected();
+                const fp = computeMainDeviceFingerprint(connectedDevices);
+                if (fp !== lastPushedDeviceFingerprint) {
+                    console.log(
+                        `[Device Watcher] change: ${connectedDevices.length} device(s)`,
+                        (connectedDevices || []).map((d) => `${d.platform}/${d.type}/${d.id}`).join(', ')
+                    );
+                    lastPushedDeviceFingerprint = fp;
+                    pushConnectedDevicesToRenderer(mainWindow);
+                }
+            } catch (err) {
+                console.warn('[Device Watcher] tick failed:', err && err.message ? err.message : err);
+            } finally {
+                deviceWatchInFlight = false;
+            }
+        };
+
+        // Seed fingerprint from current list, then poll forever
+        lastPushedDeviceFingerprint = computeMainDeviceFingerprint(connectedDevices);
+        runTick();
+        deviceWatchInterval = setInterval(runTick, tickMs);
+        console.log(`[Device Watcher] started (${process.platform}, every ${tickMs}ms)`);
+    }
+
+    function stopConnectedDevicesWatcher() {
+        if (deviceWatchInterval) {
+            clearInterval(deviceWatchInterval);
+            deviceWatchInterval = null;
         }
     }
 
