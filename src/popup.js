@@ -2206,204 +2206,25 @@
     window.setNoDeviceConnectedState = setNoDeviceConnectedState;
 
     // -------------------------------------------------------------------------
-    // Device disconnect → save Home to project repo, clear Home.
-    // Reconnect same UDID → restore that project to Home.
-    // Reconnect different UDID → fresh workspace, Launch enabled with device details.
+    // Disconnect → Home back to starting state (blocked). Connect → detect device
+    // + enable Launch only (fresh start). No auto-restore / auto-relaunch.
     // -------------------------------------------------------------------------
-    const LAST_SESSION_DEVICE_STORAGE_KEY = 'algoscraper_last_session_device_v1';
-
-    function readLastSessionDeviceMeta() {
+    function resetHomeToStartingStateOnDisconnect() {
+        if (window._resettingHomeForDisconnect) return;
+        window._resettingHomeForDisconnect = true;
+        window._autoRelaunchInFlight = false;
+        window._parkingHomeForDevice = false;
         try {
-            if (window._lastSessionDeviceMeta) return window._lastSessionDeviceMeta;
-            const raw = localStorage.getItem(LAST_SESSION_DEVICE_STORAGE_KEY);
-            if (!raw) return null;
-            const parsed = JSON.parse(raw);
-            window._lastSessionDeviceMeta = parsed;
-            return parsed;
-        } catch (_) {
-            return null;
-        }
-    }
-
-    function writeLastSessionDeviceMeta(meta) {
-        window._lastSessionDeviceMeta = meta || null;
-        try {
-            if (meta) localStorage.setItem(LAST_SESSION_DEVICE_STORAGE_KEY, JSON.stringify(meta));
-            else localStorage.removeItem(LAST_SESSION_DEVICE_STORAGE_KEY);
-        } catch (_) {}
-    }
-
-    function captureWorkingSessionDeviceMeta() {
-        const udid = (document.getElementById('udid')?.value || deviceId || '').trim();
-        const name = (deviceName
-            || document.getElementById('devicename')?.selectedOptions?.[0]?.text
-            || document.getElementById('devicename')?.value
-            || '').trim();
-        const platform = (typeof getSelectedPlatform === 'function'
-            ? getSelectedPlatform()
-            : (document.getElementById('platformname')?.value || 'Android'));
-        const platformVersion = (document.getElementById('platformversion')?.value || '').trim();
-        const automationName = (document.getElementById('automationName')?.value || '').trim();
-        const appiumUrl = (document.getElementById('appiumurl')?.value || '').trim();
-        const bundleID = (document.getElementById('bundleID')?.value || '').trim();
-        const appPackage = (document.getElementById('apppackage')?.value || '').trim();
-        const appActivity = (document.getElementById('appactivity')?.value || '').trim();
-        const appSelect = document.getElementById('appname');
-        let appSelectLabel = '';
-        if (appSelect && appSelect.options && appSelect.selectedIndex >= 0) {
-            const opt = appSelect.options[appSelect.selectedIndex];
-            appSelectLabel = (opt && (opt.text || opt.innerText || opt.value)) || '';
-        }
-        if (!appSelectLabel) appSelectLabel = (appSelect && appSelect.value) || '';
-
-        // Prefer live form; fall back to last successful launch array
-        const fromInitial = (Array.isArray(initialData) && initialData.length >= 9) ? initialData : null;
-
-        return {
-            udid: udid || (fromInitial && fromInitial[5]) || '',
-            name: name || (fromInitial && fromInitial[1]) || '',
-            platform: platform || (fromInitial && fromInitial[0]) || 'Android',
-            projectKey: window.activeResumedProjectKey || null,
-            appName: window.activeResumedAppName
-                || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '')
-                || appSelectLabel
-                || null,
-            appSelectValue: (appSelect && appSelect.value) || '',
-            appSelectLabel: String(appSelectLabel || '').trim(),
-            mode: window.activeProjectSessionMode || null,
-            hadSession: !!driver,
-            launchParams: [
-                platform || (fromInitial && fromInitial[0]) || 'Android',
-                name || (fromInitial && fromInitial[1]) || '',
-                platformVersion || (fromInitial && fromInitial[2]) || '',
-                automationName || (fromInitial && fromInitial[3]) || '',
-                appiumUrl || (fromInitial && fromInitial[4]) || '',
-                udid || (fromInitial && fromInitial[5]) || '',
-                bundleID || (fromInitial && fromInitial[6]) || '',
-                appPackage || (fromInitial && fromInitial[7]) || '',
-                appActivity || (fromInitial && fromInitial[8]) || ''
-            ],
-            parked: false,
-            updatedAt: Date.now()
-        };
-    }
-
-    /** Call on successful Launch so reconnect can match the last working device. */
-    function rememberWorkingSessionDevice() {
-        const meta = captureWorkingSessionDeviceMeta();
-        if (!meta.udid) return;
-        meta.parked = false;
-        meta.hadSession = true;
-        writeLastSessionDeviceMeta(meta);
-    }
-    window.rememberWorkingSessionDevice = rememberWorkingSessionDevice;
-
-    function applySavedLaunchParamsToForm(meta, selectedDevice) {
-        if (!meta) return;
-        const params = Array.isArray(meta.launchParams) ? meta.launchParams.slice() : [];
-        const platform = meta.platform || params[0] || 'Android';
-        const udid = (selectedDevice && selectedDevice.id) || meta.udid || params[5] || '';
-        const dName = (selectedDevice && (selectedDevice.name || selectedDevice.id)) || meta.name || params[1] || '';
-
-        const platformSelect = document.getElementById('platformname');
-        if (platformSelect && platform) {
-            applyingPlatformFromDevice = true;
-            platformSelect.value = platform;
-            lastSelectedPlatform = platform;
-            if (typeof updatePlatformUI === 'function') updatePlatformUI();
-            if (typeof platformSelect._rebuildCustomSelect === 'function') platformSelect._rebuildCustomSelect();
-            applyingPlatformFromDevice = false;
-        }
-
-        const udidEl = document.getElementById('udid');
-        if (udidEl) udidEl.value = udid;
-        deviceId = udid;
-        deviceName = dName;
-
-        const deviceSelect = document.getElementById('devicename');
-        if (deviceSelect && udid) {
-            const matchOpt = Array.from(deviceSelect.options || []).find(
-                (o) => o.value === udid || o.value === dName || (o.dataset && o.dataset.deviceId === udid)
-            );
-            if (matchOpt) {
-                deviceSelect.value = matchOpt.value;
-                if (typeof deviceSelect._rebuildCustomSelect === 'function') deviceSelect._rebuildCustomSelect();
+            // Keep project in Repository if one was active (no Home restore later)
+            if (window.activeResumedProjectKey
+                && (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed')
+                && typeof window.syncActiveProjectToRepo === 'function') {
+                try { window.syncActiveProjectToRepo(); } catch (_) {}
             }
-        }
 
-        const setVal = (id, val) => {
-            const el = document.getElementById(id);
-            if (el && val != null && String(val).trim() !== '') el.value = val;
-        };
-        setVal('platformversion', params[2] || '');
-        setVal('automationName', params[3] || '');
-        setVal('appiumurl', params[4] || '');
-        setVal('bundleID', params[6] || '');
-        setVal('apppackage', params[7] || '');
-        setVal('appactivity', params[8] || '');
+            window._resettingHome = true;
+            window._restoringProject = true;
 
-        const appSelect = document.getElementById('appname');
-        if (appSelect && (meta.appSelectValue || meta.appSelectLabel || meta.appName)) {
-            const wantVal = String(meta.appSelectValue || '').trim();
-            const wantLabel = String(meta.appSelectLabel || meta.appName || '').trim().toLowerCase();
-            let found = false;
-            for (let i = 0; i < (appSelect.options || []).length; i++) {
-                const opt = appSelect.options[i];
-                const text = String(opt.text || opt.innerText || '').trim().toLowerCase();
-                if ((wantVal && opt.value === wantVal) || (wantLabel && text === wantLabel)) {
-                    appSelect.selectedIndex = i;
-                    found = true;
-                    break;
-                }
-            }
-            if (!found && wantVal) {
-                // Keep package/activity even if app list not loaded yet
-                appSelect.value = wantVal;
-            }
-            if (typeof appSelect._rebuildCustomSelect === 'function') appSelect._rebuildCustomSelect();
-        }
-
-        if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
-    }
-
-    function buildLaunchParamsForReconnect(meta, selectedDevice) {
-        const params = (Array.isArray(meta.launchParams) ? meta.launchParams.slice() : new Array(9).fill(''));
-        while (params.length < 9) params.push('');
-        params[0] = meta.platform || params[0] || 'Android';
-        params[1] = (selectedDevice && (selectedDevice.name || selectedDevice.id)) || meta.name || params[1] || '';
-        params[5] = (selectedDevice && selectedDevice.id) || meta.udid || params[5] || '';
-        // Live form may already be filled by applySavedLaunchParamsToForm
-        params[2] = document.getElementById('platformversion')?.value || params[2] || '';
-        params[3] = document.getElementById('automationName')?.value || params[3] || '';
-        params[4] = document.getElementById('appiumurl')?.value || params[4] || '';
-        params[6] = document.getElementById('bundleID')?.value || params[6] || '';
-        params[7] = document.getElementById('apppackage')?.value || params[7] || '';
-        params[8] = document.getElementById('appactivity')?.value || params[8] || '';
-        return params;
-    }
-
-    function homeHasWorkToPark() {
-        if (window.activeResumedProjectKey
-            && (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed')) {
-            return true;
-        }
-        const tbody = document.getElementById('myTable');
-        if (tbody && tbody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)').length > 0) {
-            return true;
-        }
-        if (window.registeredPageNames && window.registeredPageNames.size > 0) return true;
-        if (window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0) return true;
-        if (Array.isArray(window.registeredFeatureAreas) && window.registeredFeatureAreas.length > 0) return true;
-        if (typeof registeredFeatureAreas !== 'undefined' && Array.isArray(registeredFeatureAreas) && registeredFeatureAreas.length > 0) {
-            return true;
-        }
-        return false;
-    }
-
-    function clearHomeScrapedWorkspaceKeepShell() {
-        window._resettingHome = true;
-        window._restoringProject = true;
-        try {
             createFeatureMode = false;
             pendingFeatureData = null;
             window.createFeatureMode = false;
@@ -2442,6 +2263,8 @@
             window.activeResumedAppName = null;
             window._resumedProjectSnapshot = null;
             window.activeConfiguredProjectKey = null;
+            window._lastSessionDeviceMeta = null;
+            try { localStorage.removeItem('algoscraper_last_session_device_v1'); } catch (_) {}
 
             if (typeof renderDefaultExcelGrid === 'function') renderDefaultExcelGrid();
             else if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
@@ -2450,77 +2273,6 @@
                 currentPage = 1;
                 applyPagination();
             }
-        } finally {
-            window._resettingHome = false;
-            window._restoringProject = false;
-        }
-    }
-
-    /**
-     * On disconnect: persist Home → active project in repo, then clear Home UI.
-     * Remembers last UDID/project so same-device reconnect can restore.
-     */
-    function parkHomeWorkOnDeviceDisconnect(reason) {
-        if (window._parkingHomeForDevice) return false;
-        if (!homeHasWorkToPark()) {
-            // Don't clear an already-parked snapshot waiting for reconnect
-            const existing = readLastSessionDeviceMeta();
-            if (existing && existing.parked) return false;
-            const meta = captureWorkingSessionDeviceMeta();
-            if (meta.udid) {
-                meta.parked = false;
-                writeLastSessionDeviceMeta(meta);
-            }
-            return false;
-        }
-
-        window._parkingHomeForDevice = true;
-        try {
-            const meta = captureWorkingSessionDeviceMeta();
-            console.log(`[Device Session] Parking Home work on disconnect (${reason || 'device'}):`, meta.udid, meta.projectKey);
-
-            // Ensure there is a project to receive scraped Home data
-            if (!window.activeResumedProjectKey) {
-                const appName = (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '')
-                    || (document.getElementById('appname')?.value || '').trim();
-                const cleanApp = (typeof getCleanAppName === 'function' ? getCleanAppName(appName) : appName) || '';
-                const plat = meta.platform || 'Android';
-                if (cleanApp && cleanApp.toLowerCase() !== 'select app' && typeof createFreshRepoProject === 'function') {
-                    try {
-                        const created = createFreshRepoProject(cleanApp, plat);
-                        meta.projectKey = created && created.key;
-                        meta.appName = created && created.appName;
-                        meta.mode = 'new';
-                    } catch (createErr) {
-                        console.warn('parkHome: createFreshRepoProject failed', createErr);
-                    }
-                }
-            }
-
-            if (typeof window.syncActiveProjectToRepo === 'function') {
-                try { window.syncActiveProjectToRepo(); } catch (e) {
-                    console.warn('parkHome: syncActiveProjectToRepo failed', e);
-                }
-            } else if (typeof archiveCurrentActiveSession === 'function') {
-                try { archiveCurrentActiveSession(); } catch (_) {}
-            }
-
-            // Prefer project key from live session; fall back to snapshot key
-            if (!meta.projectKey) {
-                meta.projectKey = window.activeResumedProjectKey || null;
-            }
-            if (!meta.projectKey && window._resumedProjectSnapshot && window._resumedProjectSnapshot.projectKey) {
-                meta.projectKey = window._resumedProjectSnapshot.projectKey;
-            }
-            if (!meta.appName) {
-                meta.appName = window.activeResumedAppName || meta.appName;
-            }
-
-            meta.parked = true;
-            meta.parkedAt = Date.now();
-            writeLastSessionDeviceMeta(meta);
-
-            clearHomeScrapedWorkspaceKeepShell();
 
             ['Scrape', 'scrapeUI', 'reset', 'download', 'algoQA', 'recordScenarioBtn', 'createFeatureBtn', 'addScenarioBtn'].forEach((id) => {
                 const btn = document.getElementById(id);
@@ -2530,212 +2282,17 @@
                 }
             });
 
-            return true;
+            if (typeof setPageNameBoxEnabled === 'function') setPageNameBoxEnabled(false);
+
+            driver = null;
+            refreshShouldLaunchApp = true;
         } finally {
-            window._parkingHomeForDevice = false;
+            window._resettingHome = false;
+            window._restoringProject = false;
+            window._resettingHomeForDisconnect = false;
         }
     }
-    window.parkHomeWorkOnDeviceDisconnect = parkHomeWorkOnDeviceDisconnect;
-
-    function restoreParkedHomeForSameDevice(selectedDevice) {
-        const last = readLastSessionDeviceMeta();
-        if (!last || !last.parked || !last.projectKey) return false;
-
-        const snapshot = (typeof fetchRepoProjectSnapshot === 'function')
-            ? fetchRepoProjectSnapshot(last.projectKey)
-            : null;
-        if (!snapshot) {
-            console.warn('[Device Session] Same device reconnected but project snapshot missing:', last.projectKey);
-            last.parked = false;
-            writeLastSessionDeviceMeta(last);
-            return false;
-        }
-
-        console.log('[Device Session] Same device reconnected — restoring project + relaunching app', last.projectKey);
-        window.activeResumedProjectKey = last.projectKey;
-        window.activeResumedAppName = last.appName || snapshot.appName || null;
-        window.activeConfiguredProjectKey = last.projectKey;
-        window.activeProjectSessionMode = 'resumed';
-        window._resumedProjectSnapshot = snapshot;
-        window._resettingHome = false;
-
-        applySavedLaunchParamsToForm(last, selectedDevice);
-
-        last.parked = false;
-        last.udid = (selectedDevice && selectedDevice.id) || last.udid;
-        last.name = (selectedDevice && selectedDevice.name) || last.name;
-        last.updatedAt = Date.now();
-        writeLastSessionDeviceMeta(last);
-
-        if (typeof setPlatformAppDeviceEditable === 'function') setPlatformAppDeviceEditable(true);
-        if (typeof setPageNameBoxEnabled === 'function') setPageNameBoxEnabled(true);
-
-        const launchParams = buildLaunchParamsForReconnect(last, selectedDevice);
-        const canLaunch = typeof canEnableLaunch === 'function' ? canEnableLaunch() : true;
-        const hasAppTarget = !!(launchParams[7] || launchParams[6]); // package or bundle
-        const shouldAutoLaunch = canLaunch && hasAppTarget && (last.hadSession !== false);
-
-        if (!shouldAutoLaunch) {
-            // Fallback: restore table only; user can press Launch
-            if (typeof window.restoreProjectDataToHomePage === 'function') {
-                window.restoreProjectDataToHomePage(snapshot);
-            }
-            if (typeof setLaunchEnabled === 'function') setLaunchEnabled(canLaunch);
-            if (typeof showDeviceScreenMessage === 'function') {
-                showDeviceScreenMessage('ready_to_launch', {
-                    detail: 'Same device restored. Click Launch Application to continue.'
-                });
-            }
-            return true;
-        }
-
-        if (window._autoRelaunchInFlight) return true;
-        window._autoRelaunchInFlight = true;
-
-        if (typeof showDeviceScreenMessage === 'function') {
-            showDeviceScreenMessage('loading');
-        } else if (typeof triggerScreenshotLoader === 'function') {
-            triggerScreenshotLoader();
-        }
-
-        const runRelaunch = async () => {
-            try {
-                // Give device UI / installed-apps a brief moment after plug-in
-                await new Promise((r) => setTimeout(r, 600));
-                applySavedLaunchParamsToForm(last, selectedDevice);
-                const params = buildLaunchParamsForReconnect(last, selectedDevice);
-                initialData = params;
-
-                if (typeof resumeExistingProjectAndLaunch === 'function') {
-                    await resumeExistingProjectAndLaunch(last.projectKey, snapshot, params);
-                } else if (typeof window.launchApp === 'function') {
-                    window._restoringProject = true;
-                    try {
-                        await window.launchApp(params);
-                        if (typeof window.restoreProjectDataToHomePage === 'function') {
-                            window.restoreProjectDataToHomePage(snapshot);
-                        }
-                    } finally {
-                        window._restoringProject = false;
-                    }
-                } else {
-                    if (typeof window.restoreProjectDataToHomePage === 'function') {
-                        window.restoreProjectDataToHomePage(snapshot);
-                    }
-                    const runBtn = document.getElementById('Run');
-                    if (runBtn && canLaunch) {
-                        runBtn.disabled = false;
-                        runBtn.click();
-                    }
-                }
-            } catch (err) {
-                console.error('[Device Session] Auto relaunch failed:', err);
-                if (typeof window.restoreProjectDataToHomePage === 'function') {
-                    try { window.restoreProjectDataToHomePage(snapshot); } catch (_) {}
-                }
-                if (typeof setLaunchEnabled === 'function') setLaunchEnabled(canEnableLaunch());
-                if (typeof showStructuredAlert === 'function') {
-                    showStructuredAlert(
-                        'Relaunch Failed',
-                        {
-                            lead: 'Same device was restored, but the app could not be opened automatically.',
-                            hint: 'Click Launch Application to try again.'
-                        },
-                        'warning'
-                    );
-                }
-            } finally {
-                window._autoRelaunchInFlight = false;
-            }
-        };
-
-        runRelaunch();
-        return true;
-    }
-
-    function prepareFreshWorkspaceForNewDevice(selectedDevice) {
-        const last = readLastSessionDeviceMeta();
-        console.log('[Device Session] New device connected — fresh workspace', selectedDevice && selectedDevice.id);
-
-        // Home should already be empty from park; ensure session keys are clear
-        if (homeHasWorkToPark()) {
-            clearHomeScrapedWorkspaceKeepShell();
-        } else {
-            window.activeProjectSessionMode = null;
-            window.activeResumedProjectKey = null;
-            window.activeResumedAppName = null;
-            window._resumedProjectSnapshot = null;
-            window.activeConfiguredProjectKey = null;
-        }
-
-        writeLastSessionDeviceMeta({
-            udid: (selectedDevice && selectedDevice.id) || '',
-            name: (selectedDevice && selectedDevice.name) || '',
-            platform: (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android'),
-            projectKey: null,
-            appName: null,
-            mode: null,
-            parked: false,
-            updatedAt: Date.now()
-        });
-
-        if (typeof setPlatformAppDeviceEditable === 'function') setPlatformAppDeviceEditable(true);
-        if (typeof unlockLaunchForm === 'function') {
-            try { unlockLaunchForm(); } catch (_) {}
-        }
-        if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
-            setLaunchEnabled(canEnableLaunch());
-        }
-
-        if (typeof showDeviceScreenMessage === 'function' && selectedDevice) {
-            const typeLabel = selectedDevice.type === 'emulator'
-                ? 'emulator'
-                : selectedDevice.type === 'simulator'
-                    ? 'simulator'
-                    : 'device';
-            showDeviceScreenMessage('connected', {
-                name: selectedDevice.name || selectedDevice.id || 'Device',
-                typeLabel,
-                id: selectedDevice.id
-            });
-        }
-
-        // Drop stale "disconnected" alert if still open
-        try {
-            const popup = document.getElementById('confirmationPopup');
-            const overlay = document.getElementById('overlay');
-            const popupTitle = (document.getElementById('popup_title')?.innerText || '').toLowerCase();
-            if (popup && popup.style.display === 'block' && popupTitle.includes('disconnected')) {
-                popup.style.display = 'none';
-                if (overlay) overlay.style.display = 'none';
-                window._customAlertOnOkay = null;
-            }
-        } catch (_) {}
-    }
-
-    /**
-     * After Device/App UI is filled from a live device list.
-     * Uses parked last-session UDID to restore or start fresh.
-     */
-    function handleDeviceReconnectWorkspace(selectedDevice) {
-        if (!selectedDevice || !selectedDevice.id) return;
-        if (driver) return; // live session owns Home
-        if (window._parkingHomeForDevice || window._restoringProject) return;
-
-        const last = readLastSessionDeviceMeta();
-        if (!last || !last.parked) return;
-
-        const newId = String(selectedDevice.id || '').trim();
-        const lastId = String(last.udid || '').trim();
-        const sameDevice = !!(lastId && newId && lastId === newId);
-
-        if (sameDevice) {
-            restoreParkedHomeForSameDevice(selectedDevice);
-        } else {
-            prepareFreshWorkspaceForNewDevice(selectedDevice);
-        }
-    }
-    window.handleDeviceReconnectWorkspace = handleDeviceReconnectWorkspace;
+    window.resetHomeToStartingStateOnDisconnect = resetHomeToStartingStateOnDisconnect;
 
     let realtimeDeviceMonitorInterval = null;
     let lastKnownDeviceFingerprint = "";
@@ -2910,9 +2467,6 @@
             }
             if (typeof syncDevicePreviewConnectionMessage === 'function') {
                 syncDevicePreviewConnectionMessage(platformDevices, { force: !driver });
-            }
-            if (typeof handleDeviceReconnectWorkspace === 'function') {
-                handleDeviceReconnectWorkspace(selectedDevice);
             }
             if (isStartup && typeof window.switchAppTab === 'function') {
                 window.switchAppTab('home');
@@ -3119,8 +2673,8 @@
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
                         lastKnownDeviceFingerprint = '';
                         consecutiveEmptyDevicePolls = 0;
-                        if (typeof parkHomeWorkOnDeviceDisconnect === 'function') {
-                            parkHomeWorkOnDeviceDisconnect('active-session');
+                        if (typeof resetHomeToStartingStateOnDisconnect === 'function') {
+                            resetHomeToStartingStateOnDisconnect();
                         }
                         if (typeof markSessionInterrupted === 'function') {
                             markSessionInterrupted(new Error(`device disconnected: ${deviceName || activeUdid}`), {
@@ -3226,8 +2780,8 @@
                     }
                     const wasDeviceConnectedBefore = !!lastKnownDeviceFingerprint && !uiEmpty;
                     if (!uiEmpty || lastKnownDeviceFingerprint) {
-                        if (wasDeviceConnectedBefore && typeof parkHomeWorkOnDeviceDisconnect === 'function') {
-                            parkHomeWorkOnDeviceDisconnect('idle-disconnect');
+                        if (wasDeviceConnectedBefore && typeof resetHomeToStartingStateOnDisconnect === 'function') {
+                            resetHomeToStartingStateOnDisconnect();
                         }
                         lastKnownDeviceFingerprint = '';
                         applyConnectedDevicesToUi([], { forceEmpty: true, startup: false });
@@ -5063,12 +4617,6 @@
                 addScenarioBtnAfterLaunch.style.backgroundColor = '#2F8BCC';
             }
 
-            if (typeof rememberWorkingSessionDevice === 'function') {
-                rememberWorkingSessionDevice();
-            } else if (typeof window.rememberWorkingSessionDevice === 'function') {
-                window.rememberWorkingSessionDevice();
-            }
-
             // Set initial page name to the App Name as the first page
             // Resumed projects already restored their saved page / table state — do not overwrite it.
             if (window.activeProjectSessionMode !== 'resumed') {
@@ -6597,9 +6145,9 @@ function markSessionInterrupted(err, opts) {
         ? normalizePlatformName(platform) === 'Android'
         : String(platform).toLowerCase().indexOf('ios') === -1;
 
-    // Save scraped Home → repo and clear Home before tearing down device UI
-    if (isDeviceDisconnected && typeof window.parkHomeWorkOnDeviceDisconnect === 'function') {
-        window.parkHomeWorkOnDeviceDisconnect('session-interrupted');
+    // On device disconnect: Home → starting/blocked state (no restore / relaunch)
+    if (isDeviceDisconnected && typeof window.resetHomeToStartingStateOnDisconnect === 'function') {
+        window.resetHomeToStartingStateOnDisconnect();
     }
 
     const screenshotImg = document.getElementById("screenshot");
@@ -6665,9 +6213,6 @@ function markSessionInterrupted(err, opts) {
                 }).catch(() => {});
             }
             ipcRenderer.send("get-installed-apps", selectedAlt);
-            if (typeof handleDeviceReconnectWorkspace === 'function') {
-                handleDeviceReconnectWorkspace(selectedAlt);
-            }
         }
 
         if (!options.skipDisconnectAlert) {
