@@ -1064,6 +1064,67 @@
         return 'Select platform, app and device, then click Launch Application.';
     }
 
+    /**
+     * Keep phone-preview status in sync with real device list (Win + Mac).
+     * Connect → Connected: name (type). Disconnect / none → No device connected.
+     * Does not override active Launch screenshot or in-progress loading overlay.
+     */
+    function syncDevicePreviewConnectionMessage(deviceList, opts) {
+        const options = opts || {};
+        try {
+            if (driver && !options.force) return;
+            const dummy = document.getElementById('dummyDevice');
+            if (!dummy) return;
+
+            // Active session screenshot is showing — leave it alone
+            const shot = document.getElementById('screenshot');
+            if (shot && shot.style.display !== 'none' && shot.offsetParent !== null && !options.force) {
+                return;
+            }
+
+            // Don't clobber an in-progress launch loader unless forced
+            const mainText = (document.getElementById('dummyMainText')?.textContent || '').toLowerCase();
+            if (!options.force && (mainText.includes('starting session') || mainText.includes('loading screen'))) {
+                return;
+            }
+
+            const list = preferAndroidDevicesFirst(
+                Array.isArray(deviceList) ? deviceList : (connectedDevices || [])
+            );
+
+            if (!list.length) {
+                const detail = process.platform === 'win32'
+                    ? 'Connect an Android device or start an emulator.'
+                    : 'Connect an Android/iOS device, emulator, or simulator.';
+                showDummyDeviceMessage({
+                    theme: options.disconnected ? 'warning' : 'info',
+                    title: options.disconnected ? 'Device Disconnected' : 'No device connected',
+                    detail: options.disconnected
+                        ? 'Reconnect a device to continue. App and Device will update automatically.'
+                        : detail
+                });
+                return;
+            }
+
+            const udid = (document.getElementById('udid')?.value || deviceId || '').trim();
+            const selected = (udid && list.find((d) => d.id === udid || d.name === udid)) || list[0];
+            const typeLabel = selected.type === 'emulator'
+                ? 'emulator'
+                : selected.type === 'simulator'
+                    ? 'simulator'
+                    : 'device';
+            const name = selected.name || selected.id || 'device';
+            showDummyDeviceMessage({
+                theme: 'info',
+                title: `Connected: ${name} (${typeLabel})`,
+                detail: 'Select an app, then click Launch Application.'
+            });
+        } catch (err) {
+            console.warn('syncDevicePreviewConnectionMessage failed:', err);
+        }
+    }
+    window.syncDevicePreviewConnectionMessage = syncDevicePreviewConnectionMessage;
+
     function resetLaunchPlaceholder(message, theme = 'error') {
         if (!message) {
             showDummyDeviceMessage({ theme: 'info', title: getIdleDummyTitle(), detail: '' });
@@ -1324,8 +1385,16 @@
 
            // Token clear happens once in the launch-mode onDomReady below (protocol-safe)
 
-           if (typeof showDummyDeviceMessage === 'function') {
-               showDummyDeviceMessage({ theme: 'info', title: typeof getIdleDummyTitle === 'function' ? getIdleDummyTitle() : 'Connect a device' });
+           if (typeof syncDevicePreviewConnectionMessage === 'function') {
+               syncDevicePreviewConnectionMessage(connectedDevices || [], { force: true });
+           } else if (typeof showDummyDeviceMessage === 'function') {
+               showDummyDeviceMessage({
+                   theme: 'info',
+                   title: 'No device connected',
+                   detail: process.platform === 'win32'
+                       ? 'Connect an Android device or start an emulator.'
+                       : 'Connect an Android/iOS device, emulator, or simulator.'
+               });
            }
            // Fill table empty rows after shared layout settles (Windows + macOS)
            requestAnimationFrame(() => {
@@ -2041,6 +2110,10 @@
 
         driver = null;
         refreshShouldLaunchApp = true;
+
+        if (typeof syncDevicePreviewConnectionMessage === 'function') {
+            syncDevicePreviewConnectionMessage([], { disconnected: true, force: true });
+        }
     }
     window.setNoDeviceConnectedState = setNoDeviceConnectedState;
 
@@ -2214,6 +2287,9 @@
             }
             if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
                 setLaunchEnabled(canEnableLaunch());
+            }
+            if (typeof syncDevicePreviewConnectionMessage === 'function') {
+                syncDevicePreviewConnectionMessage(platformDevices, { force: !driver });
             }
             if (isStartup && typeof window.switchAppTab === 'function') {
                 window.switchAppTab('home');
@@ -2512,16 +2588,7 @@
                         if (wasEmpty && typeof window.switchAppTab === 'function') {
                             window.switchAppTab('home');
                         }
-                        if (wasEmpty && typeof showDummyDeviceMessage === 'function') {
-                            const first = preferAndroidDevicesFirst(freshDevices)[0];
-                            const label = first
-                                ? `${first.name || first.id} (${first.type || 'device'})`
-                                : 'device';
-                            showDummyDeviceMessage({
-                                theme: 'info',
-                                title: `Connected: ${label}`
-                            });
-                        }
+                        // Preview message is synced inside applyConnectedDevicesToUi / setNoDeviceConnectedState
                     } else {
                         lastKnownDeviceFingerprint = freshFingerprint;
                     }
