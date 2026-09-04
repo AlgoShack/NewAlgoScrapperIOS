@@ -1278,16 +1278,12 @@
 
             setLaunchEnabled(true);
             // Scrape / Download / etc. stay locked until after a successful Launch
-            document.getElementById("Scrape").disabled = true;
-            document.getElementById("Scrape").style.backgroundColor = "#B6B6B4";
-            document.getElementById("download").disabled = true;
-            document.getElementById("download").style.backgroundColor = "#B6B6B4";
-            document.getElementById("reset").disabled = true;
-            document.getElementById("reset").style.backgroundColor = "#B6B6B4";
-            document.getElementById("scrapeUI").disabled = true;
-            document.getElementById("scrapeUI").style.backgroundColor = "#B6B6B4";
-            document.getElementById("algoQA").disabled = true;
-            document.getElementById("algoQA").style.backgroundColor = "#B6B6B4";
+            ['Scrape', 'download', 'reset', 'scrapeUI', 'algoQA'].forEach((id) => {
+                const btn = document.getElementById(id);
+                if (!btn) return;
+                btn.disabled = true;
+                btn.style.backgroundColor = '#B6B6B4';
+            });
         } else {
             // Desktop open: user must paste token before Launch
             if (tokenInput) {
@@ -1659,47 +1655,32 @@
                     toggleMenu();
                 });
             }
+            // Only toggle when clicking empty chip chrome — do not swallow all field clicks
             fieldWrap.addEventListener('click', (e) => {
-                if (e.target === trigger || trigger.contains(e.target) || menu.contains(e.target)) return;
+                if (e.target === trigger || trigger.contains(e.target)) return;
+                if (e.target && e.target.closest && e.target.closest('button, a, input, textarea')) return;
+                if (menu.contains(e.target)) return;
+                if (e.target === label || (label && label.contains(e.target))) return;
                 e.preventDefault();
-                e.stopPropagation();
+                e.stopPropagation(); // must not bubble to document closeAllCustomSelects
                 toggleMenu();
             });
         }
 
-        const mo = new MutationObserver(() => rebuildMenu());
+        // Sync label/menu when options change. NEVER redefine select.value/selectedIndex —
+        // that breaks Electron on Windows and stops Launch / device / app logic.
+        const mo = new MutationObserver(() => {
+            try { rebuildMenu(); } catch (_) {}
+        });
         mo.observe(selectEl, {
             childList: true,
             subtree: true,
             attributes: true,
-            attributeFilter: ['disabled', 'value']
+            attributeFilter: ['disabled']
         });
-
-        const proto = Object.getPrototypeOf(selectEl);
-        const valueDesc = Object.getOwnPropertyDescriptor(proto, 'value');
-        const indexDesc = Object.getOwnPropertyDescriptor(proto, 'selectedIndex');
-        if (valueDesc && valueDesc.set) {
-            Object.defineProperty(selectEl, 'value', {
-                configurable: true,
-                enumerable: true,
-                get() { return valueDesc.get.call(this); },
-                set(v) {
-                    valueDesc.set.call(this, v);
-                    rebuildMenu();
-                }
-            });
-        }
-        if (indexDesc && indexDesc.set) {
-            Object.defineProperty(selectEl, 'selectedIndex', {
-                configurable: true,
-                enumerable: true,
-                get() { return indexDesc.get.call(this); },
-                set(v) {
-                    indexDesc.set.call(this, v);
-                    rebuildMenu();
-                }
-            });
-        }
+        selectEl.addEventListener('change', () => {
+            try { rebuildMenu(); } catch (_) {}
+        });
 
         rebuildMenu();
         selectEl._rebuildCustomSelect = rebuildMenu;
@@ -1720,15 +1701,18 @@
         });
     }
 
-    try {
-        initAllCustomSelects();
-    } catch (err) {
-        console.error('initAllCustomSelects failed:', err);
-    }
-    document.addEventListener('click', () => closeAllCustomSelects());
-    window.addEventListener('resize', () => closeAllCustomSelects());
+    // Delay custom-select chrome until after core IPC/handlers below are registered.
+    // Windows was dying when select.value was monkey-patched during early init.
+    document.addEventListener('click', () => {
+        try { closeAllCustomSelects(); } catch (_) {}
+    });
+    window.addEventListener('resize', () => {
+        try { closeAllCustomSelects(); } catch (_) {}
+    });
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') closeAllCustomSelects();
+        if (e.key === 'Escape') {
+            try { closeAllCustomSelects(); } catch (_) {}
+        }
     });
 
     // ===========================================================================
@@ -2161,6 +2145,25 @@
         }, 2800);
     }
 
+    // Custom dropdown UI after core listeners exist (must not block Launch / device IPC)
+    setTimeout(() => {
+        try {
+            initAllCustomSelects();
+            if (typeof lockPlatformToAndroidOnWindows === 'function') {
+                lockPlatformToAndroidOnWindows();
+            }
+            // Refresh labels after options may already have been filled
+            ['platformname', 'appname', 'devicename'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el && typeof el._rebuildCustomSelect === 'function') {
+                    el._rebuildCustomSelect();
+                }
+            });
+        } catch (err) {
+            console.error('deferred custom select init failed:', err);
+        }
+    }, 0);
+
     function startRealtimeDeviceMonitoring() {
         if (realtimeDeviceMonitorInterval) clearInterval(realtimeDeviceMonitorInterval);
 
@@ -2289,7 +2292,9 @@
         }, 1500);
     }
 
-    document.getElementById('devicename').addEventListener('change', async function() {
+    const deviceNameEl = document.getElementById('devicename');
+    if (deviceNameEl) {
+    deviceNameEl.addEventListener('change', async function() {
         const platformSelect = document.getElementById('platformname');
         const currentPlatform = platformSelect ? platformSelect.value : lastSelectedPlatform;
         const selectedId = this.value;
@@ -2300,7 +2305,8 @@
         if (selectedDevice) {
             deviceId = selectedDevice.id;
             deviceName = selectedDevice.name;
-            document.getElementById('udid').value = selectedDevice.id;
+            const udidEl = document.getElementById('udid');
+            if (udidEl) udidEl.value = selectedDevice.id;
 
             if (normalizePlatformName(selectedDevice.platform) === 'Android') {
                 try {
@@ -2333,6 +2339,7 @@
             ipcRenderer.send("get-installed-apps", selectedDevice);
         }
     });
+    }
 
 //    document.getElementById('platformname').disabled = true;
 
@@ -2412,7 +2419,9 @@
             dropdown.dispatchEvent(new Event('change'));
         });
 
-        document.getElementById("appname").addEventListener("change", function(){
+        const appNameEl = document.getElementById("appname");
+        if (appNameEl) {
+        appNameEl.addEventListener("change", function(){
             const platform = (document.getElementById('platformname') && document.getElementById('platformname').value) || 'Android';
             const platformKey = platform.toLowerCase().includes('ios') ? 'IOS' : 'Android';
 
@@ -2439,17 +2448,20 @@
 
             if (platform === 'Android') {
                 // Fill Android Package
-                document.getElementById("apppackage").value = this.value;
-                document.getElementById("appactivity").value = "Loading Activity...";
+                const pkgEl = document.getElementById("apppackage");
+                const actEl = document.getElementById("appactivity");
+                if (pkgEl) pkgEl.value = this.value;
+                if (actEl) actEl.value = "Loading Activity...";
 
                 // Ask main.js to use ADB to find the exact MainActivity for this package
                 ipcRenderer.send("get-android-activity", {
-                    udid: document.getElementById('udid').value,
+                    udid: (document.getElementById('udid') && document.getElementById('udid').value) || '',
                     pkg: this.value
                 });
             } else {
                 // Fill iOS Bundle ID
-                document.getElementById("bundleID").value = this.value;
+                const bEl = document.getElementById("bundleID");
+                if (bEl) bEl.value = this.value;
             }
 
             if (typeof updateConfigDashboard === 'function') {
@@ -2468,6 +2480,7 @@
                 }
             }
         });
+        }
 
         // Receive the Android Activity from main.js and populate the field
         ipcRenderer.on("receive-android-activity", (event, activity) => {
@@ -2483,23 +2496,22 @@
 
     const homeDirectory = require('os').homedir();
     folderPath = path.join(homeDirectory, 'algoScraperScreenShot');
-    document.getElementById('Scrape').disabled = true;
-    document.getElementById('Scrape').style.backgroundColor = '#B6B6B4'
-    document.getElementById('download').disabled = true;
-    document.getElementById('download').style.backgroundColor = '#B6B6B4'
-        document.getElementById('reset').disabled = true;
-      document.getElementById('reset').style.backgroundColor = '#B6B6B4'
-    document.getElementById('scrapeUI').disabled = true;
-    document.getElementById('scrapeUI').style.backgroundColor = '#B6B6B4';
-
-    document.getElementById('algoQA').disabled = true;
-    document.getElementById('algoQA').style.backgroundColor = '#B6B6B4';
+    ['Scrape', 'download', 'reset', 'scrapeUI', 'algoQA'].forEach((id) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = true;
+        btn.style.backgroundColor = '#B6B6B4';
+    });
 
     // Double-click start: Launch stays off until token (protocol mode enables via IPC)
-    if (!launchedViaProtocol) {
-        setLaunchEnabled(canEnableLaunch());
-    } else if (typeof applyLaunchModeState === 'function') {
-        applyLaunchModeState();
+    try {
+        if (!launchedViaProtocol) {
+            setLaunchEnabled(canEnableLaunch());
+        } else if (typeof applyLaunchModeState === 'function') {
+            applyLaunchModeState();
+        }
+    } catch (err) {
+        console.warn('initial launch gate failed:', err);
     }
 
     let pendingLaunchProjectData = null;
