@@ -10732,5 +10732,273 @@ pre#configJsonPreview::-webkit-scrollbar {
   border-color: #fca5a5 !important;
 }
 
+/* =============================================================================
+ * WINDOWS-ONLY COMPACT CONFIGURATION DASHBOARD (.platform-win #tab-configuration)
+ * Strictly scopes to Windows Configuration tab to ensure all elements fit on a single screen.
+ * ============================================================================= */
+.platform-win #tab-configuration.is-active {
+  padding: 8px 12px 8px !important;
+  overflow-y: auto !important;
+  height: calc(100vh - 46px) !important;
+  max-height: calc(100vh - 46px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+}
+
+.platform-win #tab-configuration .config-page-wrapper {
+  gap: 6px !important;
+  height: 100% !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+}
+
+.platform-win #tab-configuration .config-page-header {
+  padding: 0 2px 2px !important;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.platform-win #tab-configuration .config-header-title {
+  font-size: 13px !important;
+  margin: 0 0 1px !important;
+}
+
+.platform-win #tab-configuration .config-header-desc {
+  font-size: 10px !important;
+}
+
+.platform-win #tab-configuration .config-header-status {
+  padding: 2px 8px !important;
+  font-size: 10px !important;
+}
+
+.platform-win #tab-configuration .config-metrics-row {
+  gap: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+.platform-win #tab-configuration .config-metric-chip {
+  padding: 4px 8px !important;
+  gap: 6px !important;
+  border-radius: 6px !important;
+}
+
+.platform-win #tab-configuration .metric-chip-icon {
+  width: 22px !important;
+  height: 22px !important;
+  border-radius: 4px !important;
+}
+
+.platform-win #tab-configuration .metric-chip-icon svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.platform-win #tab-configuration .metric-chip-label {
+  font-size: 8.5px !important;
+}
+
+.platform-win #tab-configuration .metric-chip-value {
+  font-size: 11px !important;
+}
+
+.platform-win #tab-configuration .config-dashboard-grid {
+  gap: 8px !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+.platform-win #tab-configuration .config-dash-card {
+  border-radius: 6px !important;
+  min-height: 0 !important;
+}
+
+.platform-win #tab-configuration .dash-card-header {
+  padding: 4px 10px !important;
+  flex-shrink: 0 !important;
+}
+
+.platform-win #tab-configuration .dash-icon-box {
+  width: 20px !important;
+  height: 20px !important;
+  border-radius: 4px !important;
+}
+
+.platform-win #tab-configuration .dash-icon-box svg {
+  width: 11px !important;
+  height: 11px !important;
+}
+
+.platform-win #tab-configuration .dash-card-title {
+  font-size: 11px !important;
+}
+
+.platform-win #tab-configuration .dash-card-subtitle {
+  font-size: 9px !important;
+}
+
+.platform-win #tab-configuration .dash-card-body {
+  padding: 6px 10px !important;
+  gap: 4px !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+  justify-content: space-evenly !important;
+}
+
+.platform-win #tab-configuration .dash-spec-item {
+  gap: 1px !important;
+}
+
+.platform-win #tab-configuration .dash-spec-label {
+  font-size: 8.5px !important;
+}
+
+.platform-win #tab-configuration .dash-copy-btn {
+  padding: 1px 5px !important;
+  font-size: 9px !important;
+  border-radius: 3px !important;
+}
+
+.platform-win #tab-configuration .dash-code-pill {
+  padding: 2px 8px !important;
+  border-radius: 4px !important;
+}
+
+.platform-win #tab-configuration .dash-prop-input {
+  font-size: 10.5px !important;
+}
+
+.platform-win #tab-configuration .dash-prop-input.mono {
+  font-size: 10px !important;
+}
+
+.platform-win #tab-configuration .dash-spec-hint {
+  display: none !important;
+}
+
+.platform-win #tab-configuration .vscode-window {
+  min-height: 130px !important;
+  height: 100% !important;
+  border-radius: 4px !important;
+  flex: 1 !important;
+}
+
+.platform-win #tab-configuration .vscode-header {
+  height: 26px !important;
+}
+
+.platform-win #tab-configuration .vscode-tab {
+  height: 26px !important;
+  padding: 0 10px !important;
+  font-size: 10px !important;
+}
+
+.platform-win #tab-configuration .vscode-action-btn {
+  width: 20px !important;
+  height: 20px !important;
+}
+
+.platform-win #tab-configuration .vscode-action-btn svg {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.platform-win #tab-configuration .vscode-body {
+  min-height: 100px !important;
+  height: 100% !important;
+  font-size: 10px !important;
+  line-height: 15px !important;
+}
+
+.platform-win #tab-configuration pre#configJsonPreview.vscode-code,
+.platform-win #tab-configuration .vscode-json-textarea {
+  font-size: 10px !important;
+  line-height: 15px !important;
+  padding: 3px 6px !important;
+}
+
+.platform-win #tab-configuration .vscode-gutter {
+  line-height: 15px !important;
+  font-size: 9.5px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  padding: 3px 3px !important;
+}
+
+.platform-win #tab-configuration .gutter-line {
+  height: 15px !important;
+  line-height: 15px !important;
+}
+
+.platform-win #tab-configuration .vscode-code-area {
+  width: calc(100% - 32px) !important;
+  max-width: calc(100% - 32px) !important;
+}
+
+.platform-win #tab-configuration .config-project-launch-section {
+  margin-top: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+.platform-win #tab-configuration .config-project-launch-card {
+  border-radius: 6px !important;
+}
+
+.platform-win #tab-configuration .config-launch-card-header {
+  padding: 4px 10px !important;
+}
+
+.platform-win #tab-configuration .config-launch-card-body {
+  padding: 5px 10px 6px !important;
+  gap: 3px !important;
+}
+
+.platform-win #tab-configuration .config-project-card-box {
+  padding: 4px 8px !important;
+  gap: 3px !important;
+  border-radius: 5px !important;
+}
+
+.platform-win #tab-configuration .config-project-avatar {
+  width: 22px !important;
+  height: 22px !important;
+  font-size: 10px !important;
+  border-radius: 4px !important;
+}
+
+.platform-win #tab-configuration .config-project-name {
+  font-size: 11px !important;
+}
+
+.platform-win #tab-configuration .config-project-key {
+  font-size: 9px !important;
+}
+
+.platform-win #tab-configuration .config-project-stats-row {
+  margin-top: 2px !important;
+  gap: 8px !important;
+}
+
+.platform-win #tab-configuration .config-project-stat-pill {
+  font-size: 9px !important;
+  padding: 1px 4px !important;
+}
+
+.platform-win #tab-configuration .config-action-btn {
+  padding: 3px 9px !important;
+  font-size: 10px !important;
+  border-radius: 4px !important;
+}
+
+.platform-win #tab-configuration .config-project-hint {
+  font-size: 8.5px !important;
+  margin-top: 1px !important;
+}
+
 
 
