@@ -9023,6 +9023,45 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   white-space: nowrap;
 }
 
+.repo-project-device {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  padding: 1px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-project-device svg {
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.launch-picker-device {
+  font-size: 10px;
+  font-weight: 600;
+  color: #334155;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 1px 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .repo-project-updated {
   font-size: 11px;
   color: #64748b;

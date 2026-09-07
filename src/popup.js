@@ -4038,6 +4038,21 @@
             try {
                 await launchApp(launchParams);
                 restoreProjectDataToHomePage(snapshot);
+                const devInfo = (typeof resolveActiveDeviceInfo === 'function')
+                    ? resolveActiveDeviceInfo(snapshot.platform)
+                    : null;
+                if (devInfo) {
+                    const store = getProjectStore();
+                    const liveKey = window.activeResumedProjectKey;
+                    if (store && store[liveKey]) {
+                        store[liveKey].deviceName = devInfo.name;
+                        store[liveKey].deviceId = devInfo.id;
+                        store[liveKey].deviceType = devInfo.type;
+                        store[liveKey].device = devInfo;
+                        store[liveKey].lastUpdated = Date.now();
+                        persistProjectStore(store);
+                    }
+                }
                 window._resumedProjectSnapshot = snapshot;
             } finally {
                 window._restoringProject = false;
@@ -4173,6 +4188,7 @@
             const platCls = isIos ? 'is-ios' : 'is-android';
             const title = (typeof getProjectCardTitle === 'function') ? getProjectCardTitle(p, item.key) : (p.appName || displayApp);
             const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(p, item.key) : (p.projectId || '');
+            const devLabel = (p.device && p.device.label) || p.deviceName || (p.device && p.device.name) || '';
             const initial = String(title || 'A').charAt(0).toUpperCase();
             const pages = (p.pages || []).length;
             const scens = (p.scenarios || []).length;
@@ -4180,14 +4196,15 @@
             const updated = formatLaunchPickerDate(p.lastUpdated || p.createdAt);
             const isConfigured = (item.key === configuredKey);
             const isSelected = (item.key === selectedKey);
-            const searchBits = `${title} ${shortId} ${item.key}`.toLowerCase();
+            const searchBits = `${title} ${shortId} ${devLabel} ${item.key}`.toLowerCase();
             return `
-                <button type="button" class="launch-picker-card${isSelected ? ' is-selected' : ''}" data-project-key="${esc(item.key)}" data-search="${esc(searchBits)}" title="${esc(title)}${shortId ? ` · ${shortId}` : ''} · Updated ${esc(updated)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}">
+                <button type="button" class="launch-picker-card${isSelected ? ' is-selected' : ''}" data-project-key="${esc(item.key)}" data-search="${esc(searchBits)}" title="${esc(title)}${shortId ? ` · ${shortId}` : ''}${devLabel ? ` · Device: ${esc(devLabel)}` : ''} · Updated ${esc(updated)}" role="option" aria-selected="${isSelected ? 'true' : 'false'}">
                     <span class="launch-picker-radio" aria-hidden="true"></span>
                     <span class="launch-picker-avatar ${platCls}">${esc(initial)}</span>
                     <span class="launch-picker-info">
                         <span class="launch-picker-name">${esc(title)}</span>
                         ${shortId ? `<span class="launch-picker-id">${esc(shortId)}</span>` : ''}
+                        ${devLabel ? `<span class="launch-picker-device" title="Device: ${esc(devLabel)}">${esc(devLabel)}</span>` : ''}
                         ${isConfigured ? `<span class="launch-picker-linked-pill" title="Configured project for this app">Linked</span>` : ''}
                     </span>
                     <span class="launch-picker-stats">
@@ -4451,6 +4468,16 @@
 
             const store = getProjectStore();
             const uniqueInfo = generateUniqueProjectKey(store, activeApp, plateformOption);
+            const devInfo = (typeof resolveActiveDeviceInfo === 'function')
+                ? resolveActiveDeviceInfo(plateformOption)
+                : {
+                    name: initialData[1] || '',
+                    id: initialData[5] || '',
+                    platform: plateformOption,
+                    platformVersion: initialData[2] || '',
+                    type: (/emulator/i.test(initialData[1]) || /^emulator-\d+/i.test(initialData[5])) ? 'emulator' : (/simulator/i.test(initialData[1]) ? 'simulator' : 'device'),
+                    label: initialData[1] || ''
+                };
             window.activeProjectSessionMode = 'new';
             window.activeResumedProjectKey = uniqueInfo.key;
             window.activeResumedAppName = uniqueInfo.appName;
@@ -4463,6 +4490,10 @@
                     projectId: uniqueInfo.projectId || null,
                     appName: uniqueInfo.appName,
                     platform: plateformOption,
+                    deviceName: devInfo ? devInfo.name : '',
+                    deviceId: devInfo ? devInfo.id : '',
+                    deviceType: devInfo ? devInfo.type : '',
+                    device: devInfo || null,
                     createdAt: Date.now(),
                     lastUpdated: Date.now(),
                     lastActivePageName: uniqueInfo.appName,
@@ -4470,6 +4501,12 @@
                     features: [],
                     pages: [buildInitialProjectPage(uniqueInfo.appName, plateformOption)]
                 };
+                persistProjectStore(store);
+            } else if (devInfo) {
+                store[uniqueInfo.key].deviceName = devInfo.name;
+                store[uniqueInfo.key].deviceId = devInfo.id;
+                store[uniqueInfo.key].deviceType = devInfo.type;
+                store[uniqueInfo.key].device = devInfo;
                 persistProjectStore(store);
             }
 
@@ -9861,6 +9898,68 @@ function createProjectId(store, baseAppName, platform) {
     return 'p_' + String(Date.now()).slice(-6);
 }
 
+function resolveActiveDeviceInfo(fallbackPlatform) {
+    const devSelect = document.getElementById('devicename');
+    let selectedText = '';
+    let selectedVal = '';
+    let datasetName = '';
+    let datasetId = '';
+    if (devSelect && devSelect.selectedIndex >= 0) {
+        const opt = devSelect.options[devSelect.selectedIndex];
+        selectedText = (opt?.text || '').trim();
+        selectedVal = (opt?.value || '').trim();
+        datasetName = (opt?.dataset?.deviceName || '').trim();
+        datasetId = (opt?.dataset?.deviceId || '').trim();
+    }
+    const udidEl = document.getElementById('udid');
+    const platformEl = document.getElementById('platformname');
+    const versionEl = document.getElementById('platformversion');
+
+    const cleanPlatform = fallbackPlatform || (platformEl?.value || '').trim() || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android');
+    const normPlatform = (typeof normalizePlatformName === 'function') ? normalizePlatformName(cleanPlatform) : cleanPlatform;
+
+    const rawId = datasetId || (udidEl?.value || '').trim() || (typeof deviceId !== 'undefined' ? deviceId : '') || (selectedVal && selectedVal !== 'No device connected' && selectedVal !== 'Select Device' ? selectedVal : '') || '';
+    const rawName = datasetName || (typeof deviceName !== 'undefined' ? deviceName : '') || (selectedText && selectedText !== 'No device connected' && selectedText !== 'Select Device' ? selectedText : '') || (selectedVal && selectedVal !== 'No device connected' && selectedVal !== 'Select Device' ? selectedVal : '') || '';
+
+    // Check if placeholder
+    if (!rawName || rawName === 'No device connected' || rawName === 'Select Device') {
+        if (!rawId || rawId === 'No device connected' || rawId === 'Select Device') {
+            return null;
+        }
+    }
+
+    let matchedDevice = null;
+    const allDevs = (typeof connectedDevices !== 'undefined' && Array.isArray(connectedDevices)) ? connectedDevices : [];
+    if (allDevs.length > 0) {
+        if (rawId) matchedDevice = allDevs.find(d => d.id === rawId || d.name === rawId);
+        if (!matchedDevice && rawName) matchedDevice = allDevs.find(d => d.name === rawName || d.id === rawName);
+        if (!matchedDevice && selectedText) matchedDevice = allDevs.find(d => d.name === selectedText);
+    }
+
+    const finalName = (matchedDevice && matchedDevice.name) || rawName || rawId;
+    const finalId = (matchedDevice && matchedDevice.id) || rawId || rawName;
+    const finalType = (matchedDevice && matchedDevice.type)
+        || (/emulator/i.test(finalName) || /emulator/i.test(finalId) || /^emulator-\d+/i.test(finalId) ? 'emulator' : (/simulator/i.test(finalName) || /simulator/i.test(finalId) ? 'simulator' : 'device'));
+    const finalVersion = (versionEl?.value || '').trim() || (matchedDevice && matchedDevice.version) || '';
+
+    let cleanLabel = finalName;
+    cleanLabel = cleanLabel.replace(/\s*\((emulator|simulator|device)\)\s*$/i, '');
+    let displayLabel = cleanLabel;
+    if (finalType && finalType !== 'device') {
+        displayLabel = `${cleanLabel} (${finalType})`;
+    }
+
+    return {
+        name: finalName,
+        id: finalId,
+        type: finalType,
+        platform: normPlatform,
+        platformVersion: finalVersion,
+        label: displayLabel
+    };
+}
+window.resolveActiveDeviceInfo = resolveActiveDeviceInfo;
+
 function repoPlatformLabel(platform) {
     return String(platform || 'Android').toLowerCase().includes('ios') ? 'iOS' : 'Android';
 }
@@ -10040,11 +10139,16 @@ window.fetchRepoProjectSnapshot = fetchRepoProjectSnapshot;
 function createFreshRepoProject(baseAppName, platform) {
     const store = getProjectStore();
     const uniqueInfo = generateUniqueProjectKey(store, baseAppName, platform, { forceNew: true });
+    const devInfo = resolveActiveDeviceInfo(platform);
 
     store[uniqueInfo.key] = {
         projectId: uniqueInfo.projectId || null,
         appName: uniqueInfo.appName,
         platform: platform,
+        deviceName: devInfo ? devInfo.name : '',
+        deviceId: devInfo ? devInfo.id : '',
+        deviceType: devInfo ? devInfo.type : '',
+        device: devInfo || null,
         createdAt: Date.now(),
         lastUpdated: Date.now(),
         lastActivePageName: uniqueInfo.appName,
@@ -16789,7 +16893,7 @@ if (platformVersionField) {
         }
     }
 
-    function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform) {
+    function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform, fallbackDevice) {
         const preferredKey = window.activeResumedProjectKey || key;
         const found = (typeof findProjectKeyInStore === 'function')
             ? findProjectKeyInStore(store, preferredKey)
@@ -16803,17 +16907,31 @@ if (platformVersionField) {
                     ? String(found.key).split('::').pop()
                     : createProjectId(store, found.project.appName, found.project.platform);
             }
+            const devInfo = fallbackDevice || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(found.project.platform) : null);
+            if (devInfo) {
+                if (!found.project.deviceName || window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed') {
+                    found.project.deviceName = devInfo.name;
+                    found.project.deviceId = devInfo.id;
+                    found.project.deviceType = devInfo.type;
+                    found.project.device = devInfo;
+                }
+            }
             return found.project;
         }
 
         const targetKey = preferredKey;
         const platform = fallbackPlatform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
         const appName = window.activeResumedAppName || fallbackAppName || resolveActiveAppName();
+        const devInfo = fallbackDevice || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(platform) : null);
 
         store[targetKey] = {
             projectId: (String(targetKey).includes('::') ? String(targetKey).split('::').pop() : createProjectId(store, appName, platform)),
             appName: appName,
             platform: platform,
+            deviceName: devInfo ? devInfo.name : '',
+            deviceId: devInfo ? devInfo.id : '',
+            deviceType: devInfo ? devInfo.type : '',
+            device: devInfo || null,
             createdAt: Date.now(),
             lastUpdated: Date.now(),
             scenarios: [],
@@ -17241,8 +17359,15 @@ if (platformVersionField) {
             const platform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
             const appName = window.activeResumedAppName || resolveActiveAppName();
             const projectKey = window.activeResumedProjectKey || `${appName} (${platform})`;
+            const devInfo = (typeof resolveActiveDeviceInfo === 'function') ? resolveActiveDeviceInfo(platform) : null;
 
-            const project = getOrCreateProject(store, projectKey, appName, platform);
+            const project = getOrCreateProject(store, projectKey, appName, platform, devInfo);
+            if (devInfo) {
+                project.deviceName = devInfo.name;
+                project.deviceId = devInfo.id;
+                project.deviceType = devInfo.type;
+                project.device = devInfo;
+            }
 
             const scenarioPageSet = new Set();
             const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
@@ -17487,9 +17612,18 @@ if (platformVersionField) {
             });
         }
 
+        const devInfo = (meta && meta.device) || (data && data.device) || null;
+        const devName = (meta && meta.deviceName) || (data && data.deviceName) || (data && data.project && data.project.deviceName) || (devInfo && devInfo.name) || '';
+        const devId = (meta && meta.deviceId) || (data && data.deviceId) || (data && data.project && data.project.deviceId) || (devInfo && devInfo.id) || '';
+        const devType = (meta && meta.deviceType) || (data && data.deviceType) || (data && data.project && data.project.deviceType) || (devInfo && devInfo.type) || '';
+
         return {
             appName,
             platform,
+            deviceName: devName,
+            deviceId: devId,
+            deviceType: devType,
+            device: devInfo || (devName ? { name: devName, id: devId, type: devType, platform } : null),
             createdAt: Date.now(),
             lastUpdated: Date.now(),
             lastActivePageName: (pages[0] && pages[0].pageName) || appName,
@@ -18357,6 +18491,7 @@ if (platformVersionField) {
 
                 const displayName = (typeof getProjectCardTitle === 'function') ? getProjectCardTitle(p, k) : (p.appName || k);
                 const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(p, k) : (p.projectId || '');
+                const devLabel = (p.device && p.device.label) || p.deviceName || (p.device && p.device.name) || '';
                 const nameTitle = shortId ? `${displayName} (${shortId})` : displayName;
                 const isLive = (typeof isCurrentlyOpenRepoProject === 'function')
                     ? isCurrentlyOpenRepoProject(k, p)
@@ -18377,6 +18512,7 @@ if (platformVersionField) {
                                 </div>
                                 <div class="repo-project-meta">
                                     ${shortId ? `<span class="repo-project-id" title="Project ID">${escapeDummyHtml(shortId)}</span>` : ''}
+                                    ${devLabel ? `<span class="repo-project-device" title="Device used: ${escapeDummyHtml(devLabel)}"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg><span>${escapeDummyHtml(devLabel)}</span></span>` : ''}
                                     <span class="repo-project-updated">Updated ${formatDate(p.lastUpdated || p.createdAt)}</span>
                                 </div>
                             </div>
@@ -18462,7 +18598,8 @@ if (platformVersionField) {
                 </svg>
                 <span>All Projects</span>`;
         }
-        if (headerDesc) headerDesc.textContent = `Viewing saved assets for ${project.appName} (${project.platform}). Preserved across resets and restarts.`;
+        const devSummary = (project.device && project.device.label) || project.deviceName || (project.device && project.device.name) || '';
+        if (headerDesc) headerDesc.textContent = `Viewing saved assets for ${project.appName} (${project.platform}${devSummary ? ` · ${devSummary}` : ''}). Preserved across resets and restarts.`;
 
         // Update Project-level counters
         const scCount = document.getElementById('repoScenarioCount');
@@ -18786,6 +18923,10 @@ if (platformVersionField) {
                     projectKey: pKey,
                     appName: proj.appName,
                     platform: proj.platform,
+                    deviceName: proj.deviceName || (proj.device && proj.device.name) || '',
+                    deviceId: proj.deviceId || (proj.device && proj.device.id) || '',
+                    deviceType: proj.deviceType || (proj.device && proj.device.type) || '',
+                    device: proj.device || null,
                     exportedAt: new Date().toISOString(),
                     project: proj
                 };
@@ -18847,6 +18988,10 @@ if (platformVersionField) {
                     projectKey: currentSelectedProjectKey,
                     appName: proj.appName,
                     platform: proj.platform,
+                    deviceName: proj.deviceName || (proj.device && proj.device.name) || '',
+                    deviceId: proj.deviceId || (proj.device && proj.device.id) || '',
+                    deviceType: proj.deviceType || (proj.device && proj.device.type) || '',
+                    device: proj.device || null,
                     exportedAt: new Date().toISOString(),
                     project: proj
                 };
