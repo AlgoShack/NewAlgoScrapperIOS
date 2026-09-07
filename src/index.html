@@ -1561,6 +1561,13 @@
     window.formatJsonToHtml = formatJsonToHtml;
 
     function switchAppTab(name) {
+        var currentActiveTab = document.querySelector(".topnav-tab.is-active");
+        var currentTabName = currentActiveTab ? currentActiveTab.getAttribute("data-tab") : "";
+        if (currentTabName === "configuration" && name !== "configuration") {
+            if (typeof window.checkUnsavedConfigJsonGuard === 'function' && !window.checkUnsavedConfigJsonGuard('switch_tab')) {
+                return;
+            }
+        }
         document.querySelectorAll(".topnav-tab").forEach(function (btn) {
             var on = btn.getAttribute("data-tab") === name;
             btn.classList.toggle("is-active", on);
@@ -1585,22 +1592,33 @@
                 window.renderRepositoryView();
             }
         } else if (name === "configuration") {
+            // Refresh Configuration from Home platform — do not change platform selection
             if (typeof updatePlatformUI === 'function') updatePlatformUI();
-            ["udid", "appiumurl", "platformversion", "automationName", "bundleID", "apppackage", "appactivity"].forEach(function(id) {
+            ["udid", "appiumurl", "platformversion", "automationName", "bundleID", "apppackage", "appactivity", "configDeviceName"].forEach(function(id) {
                 var el = document.getElementById(id);
                 if (el) {
                     el.readOnly = true;
                     el.setAttribute('readonly', 'readonly');
                 }
             });
-            updateConfigDashboard();
+            if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
         }
     }
     window.switchAppTab = switchAppTab;
     document.addEventListener("click", function (e) {
         var btn = e.target.closest(".topnav-tab");
         if (!btn) return;
-        switchAppTab(btn.getAttribute("data-tab"));
+        var targetTab = btn.getAttribute("data-tab");
+        var currentActiveTab = document.querySelector(".topnav-tab.is-active");
+        var currentTabName = currentActiveTab ? currentActiveTab.getAttribute("data-tab") : "";
+        if (currentTabName === "configuration" && targetTab !== "configuration") {
+            if (typeof window.checkUnsavedConfigJsonGuard === 'function' && !window.checkUnsavedConfigJsonGuard('switch_tab')) {
+                e.preventDefault();
+                e.stopPropagation();
+                return;
+            }
+        }
+        switchAppTab(targetTab);
     });
 })();
 </script>

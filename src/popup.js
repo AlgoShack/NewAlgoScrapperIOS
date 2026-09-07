@@ -2487,25 +2487,47 @@
             deviceSelect.appendChild(option);
         });
 
-        deviceId = ordered[0].id;
-        deviceName = ordered[0].name;
-        deviceSelect.value = ordered[0].id || ordered[0].name;
+        // Preserve currently selected device if still connected and in ordered list
+        const currentActiveId = (document.getElementById('udid')?.value || deviceId || deviceSelect.value || '').trim();
+        let targetDevice = null;
+        if (currentActiveId) {
+            targetDevice = ordered.find((d) => d.id === currentActiveId || d.name === currentActiveId);
+        }
+        if (!targetDevice) {
+            try {
+                const savedId = localStorage.getItem('algo_active_selected_device_id') || '';
+                if (savedId) {
+                    targetDevice = ordered.find((d) => d.id === savedId || d.name === savedId);
+                }
+            } catch (_) {}
+        }
+        if (!targetDevice) {
+            targetDevice = ordered[0];
+        }
+
+        deviceId = targetDevice.id;
+        deviceName = targetDevice.name;
+        deviceSelect.value = targetDevice.id || targetDevice.name;
         const udidInput = document.getElementById('udid');
         if (udidInput) udidInput.value = deviceId;
+        try {
+            localStorage.setItem('algo_active_selected_device_id', deviceId);
+            localStorage.setItem('algo_active_selected_device_name', deviceName);
+        } catch (_) {}
 
-        if (normalizePlatformName(ordered[0].platform) === 'Android') {
-            ipcRenderer.invoke("get-android-version", ordered[0].id).then((ver) => {
+        if (normalizePlatformName(targetDevice.platform) === 'Android') {
+            ipcRenderer.invoke("get-android-version", targetDevice.id).then((ver) => {
                 if (ver) {
                     const pv = document.getElementById('platformversion');
                     if (pv) { pv.value = ver; pv.dataset.userEdited = 'true'; }
                 }
             }).catch(() => {});
         } else {
-            if (ordered[0].version) {
+            if (targetDevice.version) {
                 const pv = document.getElementById('platformversion');
-                if (pv) { pv.value = ordered[0].version; pv.dataset.userEdited = 'true'; }
+                if (pv) { pv.value = targetDevice.version; pv.dataset.userEdited = 'true'; }
             } else {
-                ipcRenderer.invoke("get-ios-version", ordered[0].id).then((ver) => {
+                ipcRenderer.invoke("get-ios-version", targetDevice.id).then((ver) => {
                     if (ver) {
                         const pv = document.getElementById('platformversion');
                         if (pv) { pv.value = ver; pv.dataset.userEdited = 'true'; }
@@ -2517,7 +2539,7 @@
         if (typeof deviceSelect._rebuildCustomSelect === 'function') {
             deviceSelect._rebuildCustomSelect();
         }
-        return ordered[0];
+        return targetDevice;
     }
 
     async function refreshConnectedDevicesList() {
@@ -3048,6 +3070,13 @@
             deviceName = selectedDevice.name;
             const udidEl = document.getElementById('udid');
             if (udidEl) udidEl.value = selectedDevice.id;
+            try {
+                localStorage.setItem('algo_active_selected_device_id', selectedDevice.id);
+                localStorage.setItem('algo_active_selected_device_name', selectedDevice.name);
+            } catch (_) {}
+            if (typeof updateConfigDashboard === 'function') {
+                updateConfigDashboard();
+            }
 
             if (normalizePlatformName(selectedDevice.platform) === 'Android') {
                 try {
@@ -3379,9 +3408,28 @@
     }
     window.setGlobalLastConfiguredProject = setGlobalLastConfiguredProject;
 
+    function projectMatchesDeviceHint(project, deviceHint) {
+        if (!project) return false;
+        const dev = deviceHint || null;
+        const activeDevId = String((dev && (dev.id || dev.deviceId)) || '').trim().toLowerCase();
+        const activeDevName = String((dev && (dev.name || dev.deviceName)) || '').trim().toLowerCase();
+        if (!activeDevId && !activeDevName) return true;
+        const pDevName = String(project.deviceName || (project.device && project.device.name) || '').trim().toLowerCase();
+        const pDevId = String(project.deviceId || (project.device && project.device.id) || '').trim().toLowerCase();
+        // Legacy / unbound projects do not match a specific connected device
+        if (!pDevName && !pDevId) return false;
+        if (activeDevId && pDevId && activeDevId === pDevId) return true;
+        if (activeDevName && pDevName && activeDevName === pDevName) return true;
+        return false;
+    }
+    window.projectMatchesDeviceHint = projectMatchesDeviceHint;
+
     function getGlobalLastConfiguredProject(platform, deviceHint) {
         try {
             const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
+            const dev = deviceHint || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(platform) : null);
+            const hasDevice = !!(dev && (dev.id || dev.name));
+
             let key = null;
             if (platform) {
                 const plat = String(platform).toLowerCase().includes('ios') ? 'ios' : 'android';
@@ -3392,14 +3440,20 @@
             }
             if (key) {
                 const found = typeof findProjectKeyInStore === 'function' ? findProjectKeyInStore(store, key) : null;
-                if (found && found.project) return { key: found.key || key, project: found.project };
-                if (store[key]) return { key: key, project: store[key] };
+                const hit = (found && found.project)
+                    ? { key: found.key || key, project: found.project }
+                    : (store[key] ? { key: key, project: store[key] } : null);
+                if (hit) {
+                    if (!hasDevice || projectMatchesDeviceHint(hit.project, dev)) {
+                        return hit;
+                    }
+                    // Stored last project belongs to another device — fall through to device-filtered scan
+                }
             }
             // Fallback: Pick the most recently updated project from the store matching device
             const storeKeys = Object.keys(store);
             if (storeKeys.length > 0) {
                 let candidates = [];
-                const dev = deviceHint || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(platform) : null);
                 const activeDevId = (dev?.id || '').trim().toLowerCase();
                 const activeDevName = (dev?.name || '').trim().toLowerCase();
 
@@ -3409,14 +3463,10 @@
                         const platNorm = String(pr.platform || k).toLowerCase().includes('ios') ? 'iOS' : 'Android';
                         if (!platform || platNorm === (platform.toLowerCase().includes('ios') ? 'iOS' : 'Android')) {
                             if (activeDevId || activeDevName) {
-                                const pDevName = String(pr.deviceName || (pr.device && pr.device.name) || '').trim().toLowerCase();
-                                const pDevId = String(pr.deviceId || (pr.device && pr.device.id) || '').trim().toLowerCase();
-                                if (pDevName || pDevId) {
-                                    if ((activeDevId && pDevId === activeDevId) || (activeDevName && pDevName === activeDevName)) {
-                                        candidates.push({ key: k, project: pr });
-                                    }
-                                    return;
+                                if (projectMatchesDeviceHint(pr, dev)) {
+                                    candidates.push({ key: k, project: pr });
                                 }
+                                return;
                             }
                             candidates.push({ key: k, project: pr });
                         }
@@ -3483,6 +3533,10 @@
     };
 
     window.launchConfiguredProject = async function() {
+        if (typeof checkUnsavedConfigJsonGuard === 'function' && !checkUnsavedConfigJsonGuard('launch_project')) {
+            return;
+        }
+
         if (typeof canEnableLaunch === 'function' && !canEnableLaunch()) {
             if (typeof showCustomAlert === 'function') {
                 showAppPopup('auth_required');
@@ -3491,13 +3545,20 @@
         }
 
         const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
-        const configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
-            ? getGlobalLastConfiguredProject()
-            : null;
-        const key = window.activeConfiguredProjectKey || (configuredInfo ? configuredInfo.key : null);
-        const project = key ? store[key] : (configuredInfo ? configuredInfo.project : null);
-
         const currentPlatform = (typeof getSelectedPlatform === 'function') ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
+        const activeDevice = (typeof resolveActiveDeviceInfo === 'function') ? resolveActiveDeviceInfo(currentPlatform) : null;
+        const configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
+            ? getGlobalLastConfiguredProject(currentPlatform, activeDevice)
+            : null;
+        // Do not fall back to another device's project when a device is connected
+        const key = (configuredInfo && configuredInfo.key)
+            || (activeDevice ? null : (window.activeConfiguredProjectKey || null));
+        let project = (configuredInfo && configuredInfo.project) || (key ? store[key] : null);
+        if (!project && key && typeof findProjectKeyInStore === 'function') {
+            const found = findProjectKeyInStore(store, key);
+            if (found && found.project) project = found.project;
+        }
+
         const projPlatform = project ? (String(project.platform || '').toLowerCase().includes('ios') ? 'IOS' : 'Android') : currentPlatform;
         const isIos = projPlatform === 'IOS' || projPlatform === 'iOS';
 
@@ -4110,10 +4171,25 @@
             window.activeResumedAppName = snapshot.appName || resolveActiveAppName();
 
             if (typeof setAppConfiguredProject === 'function') {
-                setAppConfiguredProject(snapshot.appName || resolveActiveAppName(), snapshot.platform || (launchParams && launchParams[0]), window.activeResumedProjectKey);
+                const resumeDev = snapshot.device || {
+                    id: snapshot.deviceId,
+                    name: snapshot.deviceName,
+                    type: snapshot.deviceType
+                };
+                setAppConfiguredProject(
+                    snapshot.appName || resolveActiveAppName(),
+                    snapshot.platform || (launchParams && launchParams[0]),
+                    window.activeResumedProjectKey,
+                    resumeDev
+                );
             }
             if (typeof setGlobalLastConfiguredProject === 'function') {
-                setGlobalLastConfiguredProject(window.activeResumedProjectKey, snapshot);
+                const resumeDev = snapshot.device || {
+                    id: snapshot.deviceId,
+                    name: snapshot.deviceName,
+                    type: snapshot.deviceType
+                };
+                setGlobalLastConfiguredProject(window.activeResumedProjectKey, snapshot, resumeDev);
             }
 
             pendingLaunchProjectData = null;
@@ -4138,10 +4214,9 @@
                     const store = getProjectStore();
                     const liveKey = window.activeResumedProjectKey;
                     if (store && store[liveKey]) {
-                        store[liveKey].deviceName = devInfo.name;
-                        store[liveKey].deviceId = devInfo.id;
-                        store[liveKey].deviceType = devInfo.type;
-                        store[liveKey].device = devInfo;
+                        if (typeof bindOrPreserveProjectDevice === 'function') {
+                            bindOrPreserveProjectDevice(store[liveKey], devInfo);
+                        }
                         store[liveKey].lastUpdated = Date.now();
                         persistProjectStore(store);
                     }
@@ -4383,6 +4458,9 @@
     const runBtnEl = document.getElementById("Run");
     if (runBtnEl) {
     runBtnEl.addEventListener('click', async () => {
+            if (typeof checkUnsavedConfigJsonGuard === 'function' && !checkUnsavedConfigJsonGuard('launch_project')) {
+                return;
+            }
             if (!canEnableLaunch()) {
                 showAppPopup('auth_required');
                 return;
@@ -4600,11 +4678,14 @@
                 };
                 persistProjectStore(store);
             } else if (devInfo) {
-                store[uniqueInfo.key].deviceName = devInfo.name;
-                store[uniqueInfo.key].deviceId = devInfo.id;
-                store[uniqueInfo.key].deviceType = devInfo.type;
-                store[uniqueInfo.key].device = devInfo;
+                if (typeof bindOrPreserveProjectDevice === 'function') {
+                    bindOrPreserveProjectDevice(store[uniqueInfo.key], devInfo);
+                }
                 persistProjectStore(store);
+            }
+
+            if (typeof setGlobalLastConfiguredProject === 'function') {
+                setGlobalLastConfiguredProject(uniqueInfo.key, store[uniqueInfo.key], devInfo);
             }
 
             triggerScreenshotLoader();
@@ -4708,6 +4789,9 @@
 
     async function launchApp(initialData) {
             window.launchApp = launchApp;
+            if (typeof checkUnsavedConfigJsonGuard === 'function' && !checkUnsavedConfigJsonGuard('launch_project')) {
+                return;
+            }
             window._resettingHome = false;
             if (typeof lockLaunchForm === 'function') {
                 lockLaunchForm();
@@ -6768,20 +6852,24 @@ function markSessionInterrupted(err, opts) {
     }
 
     const currentTarget = typeof normalizePlatformName === 'function' ? normalizePlatformName(platform) : platform;
-    const alternateTarget = currentTarget === 'Android' ? 'IOS' : 'Android';
-    const alternateDevices = Array.isArray(connectedDevices) ? devicesForPlatform(alternateTarget, connectedDevices) : [];
+    const samePlatformDevices = Array.isArray(connectedDevices) ? devicesForPlatform(currentTarget, connectedDevices) : [];
 
-    if (alternateDevices.length > 0 && process.platform !== 'win32') {
+    // Stay on the Home-selected platform. Only offer another device if it matches that platform.
+    if (samePlatformDevices.length > 0) {
         const platformSelect = document.getElementById('platformname');
-        if (platformSelect) {
-            applyingPlatformFromDevice = true;
-            platformSelect.value = alternateTarget;
-            lastSelectedPlatform = alternateTarget;
-            if (typeof updatePlatformUI === 'function') updatePlatformUI();
-            if (typeof platformSelect._rebuildCustomSelect === 'function') platformSelect._rebuildCustomSelect();
-            applyingPlatformFromDevice = false;
+        if (platformSelect && typeof normalizePlatformName === 'function') {
+            const want = normalizePlatformName(currentTarget);
+            if (normalizePlatformName(platformSelect.value) !== want) {
+                applyingPlatformFromDevice = true;
+                platformSelect.value = want === 'IOS' ? 'IOS' : 'Android';
+                lastSelectedPlatform = platformSelect.value;
+                try { localStorage.setItem('algo_active_selected_platform', platformSelect.value); } catch (_) {}
+                if (typeof updatePlatformUI === 'function') updatePlatformUI();
+                if (typeof platformSelect._rebuildCustomSelect === 'function') platformSelect._rebuildCustomSelect();
+                applyingPlatformFromDevice = false;
+            }
         }
-        const selectedAlt = populateDeviceDropdown(alternateDevices);
+        const selectedAlt = populateDeviceDropdown(samePlatformDevices);
         if (selectedAlt) {
             if (typeof requestInstalledAppsForDevice === 'function') {
                 requestInstalledAppsForDevice(selectedAlt);
@@ -10211,11 +10299,12 @@ function generateUniqueProjectKey(store, baseAppName, platform, options) {
     };
 
     const matchesDevice = (proj) => {
-        if (!proj) return true;
+        if (!proj) return false;
         if (!activeDevId && !activeDevName) return true;
         const projDevName = String(proj.deviceName || (proj.device && proj.device.name) || '').trim().toLowerCase();
         const projDevId = String(proj.deviceId || (proj.device && proj.device.id) || '').trim().toLowerCase();
-        if (!projDevName && !projDevId) return true;
+        // Legacy projects with no device metadata do NOT match a specific connected device
+        if (!projDevName && !projDevId) return false;
         if (activeDevId && projDevId && activeDevId === projDevId) return true;
         if (activeDevName && projDevName && activeDevName === projDevName) return true;
         return false;
@@ -12497,7 +12586,11 @@ function updateRowEyeButtonState() {
                 window.pendingExportAction = null;
 
                 const uniqueInfo = (typeof createFreshRepoProject === 'function')
-                    ? createFreshRepoProject(activeApp, plateformOption)
+                    ? createFreshRepoProject(
+                        activeApp,
+                        plateformOption,
+                        (typeof resolveActiveDeviceInfo === 'function') ? resolveActiveDeviceInfo(plateformOption) : null
+                    )
                     : { key: `${activeApp} (${plateformOption})::${Date.now().toString(36)}`, appName: activeApp };
 
                 if (typeof window.clearAllPagesAndScrapedDataForNewScenario === 'function') {
@@ -16709,11 +16802,130 @@ function updatePlatformUI() {
     }
 }
 
+/** iOS simulator/device UDID shape (UUID). Android serials are different. */
+function looksLikeIosUdid(value) {
+    return /^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$/.test(String(value || '').trim());
+}
+
+/**
+ * Build live W3C capabilities from Home platform + device + app fields.
+ * Always platform-correct (Android package/activity vs iOS bundleId).
+ */
+function buildLiveCapabilitiesFromHome(isIos, fields) {
+    fields = fields || {};
+    var udidVal = String(fields.udid || '').trim();
+    var osVersion = String(fields.platformVersion || '').trim();
+    var pkgVal = String(fields.appPackage || '').trim();
+    var actVal = String(fields.appActivity || '').trim();
+    var bndlVal = String(fields.bundleId || '').trim();
+    var deviceNameVal = String(fields.deviceName || '').trim();
+    var autoEngine = String(fields.automationName || '').trim();
+    if (isIos) {
+        if (!autoEngine || /uiautomator/i.test(autoEngine)) autoEngine = 'XCUITest';
+    } else {
+        if (!autoEngine || /xcuitest/i.test(autoEngine)) autoEngine = 'UiAutomator2';
+    }
+
+    // Reject cross-platform UDID bleed (e.g. iOS UUID stuck under Android)
+    if (!isIos && looksLikeIosUdid(udidVal)) udidVal = '';
+    if (isIos && udidVal && !looksLikeIosUdid(udidVal) && /^[a-z0-9]+$/i.test(udidVal) && udidVal.length <= 16) {
+        // Likely an Android serial on iOS — drop it
+        udidVal = '';
+    }
+
+    var hasTarget = !!(udidVal || (isIos ? bndlVal : (pkgVal || actVal)) || deviceNameVal);
+    var caps;
+    if (!hasTarget) {
+        caps = {
+            status: 'No device or application connected',
+            platformName: isIos ? 'iOS' : 'Android',
+            'appium:automationName': autoEngine,
+            'appium:udid': '',
+            'appium:platformVersion': osVersion || ''
+        };
+    } else {
+        caps = {
+            platformName: isIos ? 'iOS' : 'Android',
+            'appium:automationName': autoEngine,
+            'appium:udid': udidVal,
+            'appium:platformVersion': osVersion || ''
+        };
+        if (deviceNameVal) caps['appium:deviceName'] = deviceNameVal;
+    }
+    if (isIos) {
+        caps['appium:bundleId'] = bndlVal || '';
+        delete caps['appium:appPackage'];
+        delete caps['appium:appActivity'];
+        delete caps.appPackage;
+        delete caps.appActivity;
+    } else {
+        caps['appium:appPackage'] = pkgVal || '';
+        caps['appium:appActivity'] = actVal || '';
+        delete caps['appium:bundleId'];
+        delete caps.bundleId;
+    }
+    return caps;
+}
+
+/**
+ * Merge user custom caps on top of live Home caps.
+ * Identity fields always come from live Home/platform — extras (timeouts, flags) kept from custom.
+ */
+function mergeCustomCapsWithLive(liveCaps, customCaps, isIos) {
+    var live = liveCaps && typeof liveCaps === 'object' ? Object.assign({}, liveCaps) : {};
+    if (!customCaps || typeof customCaps !== 'object' || Array.isArray(customCaps)) return live;
+
+    var identityKeys = {
+        platformName: true,
+        'appium:automationName': true,
+        automationName: true,
+        'appium:udid': true,
+        udid: true,
+        'appium:deviceName': true,
+        deviceName: true,
+        'appium:platformVersion': true,
+        platformVersion: true,
+        'appium:appPackage': true,
+        appPackage: true,
+        'appium:appActivity': true,
+        appActivity: true,
+        'appium:bundleId': true,
+        bundleId: true,
+        status: true
+    };
+
+    Object.keys(customCaps).forEach(function (key) {
+        if (identityKeys[key]) return;
+        live[key] = customCaps[key];
+    });
+
+    // Optional: allow custom automationName only if it matches platform family
+    var customAuto = customCaps['appium:automationName'] || customCaps.automationName;
+    if (customAuto) {
+        if (isIos && /xcuitest/i.test(customAuto)) live['appium:automationName'] = customAuto;
+        if (!isIos && /uiautomator/i.test(customAuto)) live['appium:automationName'] = customAuto;
+    }
+
+    return live;
+}
+window.buildLiveCapabilitiesFromHome = buildLiveCapabilitiesFromHome;
+window.mergeCustomCapsWithLive = mergeCustomCapsWithLive;
+
 function updateConfigDashboard(forceAuto) {
+    // Home platform dropdown is the single source of truth — never overwrite it from storage here
     var isIos = false;
-    var pSelect = document.getElementById("platformname");
-    if (pSelect && (pSelect.value === "IOS" || pSelect.value === "iOS")) isIos = true;
-    else if (typeof getSelectedPlatform === 'function' && getSelectedPlatform() === 'IOS') isIos = true;
+    if (typeof getSelectedPlatform === 'function') {
+        isIos = (getSelectedPlatform() === 'IOS' || getSelectedPlatform() === 'iOS');
+    } else {
+        var pSelect = document.getElementById("platformname");
+        if (pSelect && (pSelect.value === "IOS" || pSelect.value === "iOS")) isIos = true;
+    }
+    // Keep lastSelectedPlatform + persistence in sync with Home (display only)
+    try {
+        var homePlat = isIos ? 'IOS' : 'Android';
+        if (typeof lastSelectedPlatform !== 'undefined') lastSelectedPlatform = homePlat;
+        localStorage.setItem('algo_active_selected_platform', homePlat);
+    } catch (_) {}
 
     var storageKey = 'algo_custom_appium_json_' + (isIos ? 'IOS' : 'Android');
     var storedUserJson = localStorage.getItem(storageKey);
@@ -16722,15 +16934,17 @@ function updateConfigDashboard(forceAuto) {
         try {
             var maybeParsed = JSON.parse(storedUserJson);
             if (maybeParsed && typeof maybeParsed === 'object' && !Array.isArray(maybeParsed)) {
-                var pName = String(maybeParsed.platformName || '').toLowerCase();
-                var hasBundle = !!(maybeParsed['appium:bundleId'] || maybeParsed.bundleId);
-                var hasPkg = !!(maybeParsed['appium:appPackage'] || maybeParsed.appPackage);
-                if (isIos && (pName === 'android' || hasPkg)) {
-                    // Mismatched
-                } else if (!isIos && (pName === 'ios' || pName.includes('ios') || hasBundle)) {
-                    // Mismatched - stale iOS caps in Android storage key
-                } else {
+                var pName = String(maybeParsed.platformName || '').toLowerCase().trim();
+                var savedUdid = String(maybeParsed['appium:udid'] || maybeParsed.udid || '').trim();
+                var wrongPlatform = isIos
+                    ? (pName === 'android' || (!!savedUdid && !looksLikeIosUdid(savedUdid) && /^[a-z0-9]+$/i.test(savedUdid) && savedUdid.length <= 16))
+                    : (pName === 'ios' || pName === 'iphone os' || pName.indexOf('ios') === 0 || looksLikeIosUdid(savedUdid));
+                if (!wrongPlatform) {
                     customParsed = maybeParsed;
+                } else {
+                    // Stale cross-platform caps under this key — clear so live Android/iOS rebuilds
+                    try { localStorage.removeItem(storageKey); } catch (_) {}
+                    customParsed = null;
                 }
             }
         } catch (_) {}
@@ -16741,6 +16955,9 @@ function updateConfigDashboard(forceAuto) {
     var engineText = isIos ? "XCUITest" : "UiAutomator2";
     var osVersion = (document.getElementById("platformversion") && document.getElementById("platformversion").value) || "";
     var udidVal = (document.getElementById("udid") && document.getElementById("udid").value) || "";
+    if (!udidVal && typeof deviceId !== 'undefined' && deviceId) {
+        udidVal = deviceId;
+    }
     var pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
     var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || "";
     var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
@@ -16758,77 +16975,76 @@ function updateConfigDashboard(forceAuto) {
     if (activeDevName === 'No device connected' || activeDevName === 'Select Device' || activeDevName.toLowerCase() === 'loading...') {
         activeDevName = '';
     }
+    if (!activeDevName && typeof deviceName !== 'undefined' && deviceName) {
+        activeDevName = deviceName;
+    }
 
-    // Overlay custom capabilities onto dashboard metrics and active inputs
+    // Metrics always follow live Home platform engine (custom may tweak display name if valid)
+    var displayEngine = engineText;
+    var displayOsVersion = osVersion;
     if (customParsed) {
-        if (customParsed['appium:automationName'] || customParsed['automationName']) {
-            engineText = customParsed['appium:automationName'] || customParsed['automationName'];
+        var cAuto = customParsed['appium:automationName'] || customParsed['automationName'];
+        if (cAuto && ((isIos && /xcuitest/i.test(cAuto)) || (!isIos && /uiautomator/i.test(cAuto)))) {
+            displayEngine = cAuto;
         }
         if (customParsed['appium:platformVersion'] || customParsed['platformVersion']) {
-            osVersion = String(customParsed['appium:platformVersion'] || customParsed['platformVersion']);
-        }
-        if (customParsed['appium:deviceName'] || customParsed['deviceName']) {
-            activeDevName = String(customParsed['appium:deviceName'] || customParsed['deviceName']);
-        }
-        if (customParsed['appium:udid'] || customParsed['udid']) {
-            udidVal = String(customParsed['appium:udid'] || customParsed['udid']);
-        }
-        if (isIos && (customParsed['appium:bundleId'] || customParsed['bundleId'])) {
-            bndlVal = String(customParsed['appium:bundleId'] || customParsed['bundleId']);
-        }
-        if (!isIos) {
-            if (customParsed['appium:appPackage'] || customParsed['appPackage']) {
-                pkgVal = String(customParsed['appium:appPackage'] || customParsed['appPackage']);
-            }
-            if (customParsed['appium:appActivity'] || customParsed['appActivity']) {
-                actVal = String(customParsed['appium:appActivity'] || customParsed['appActivity']);
+            // Prefer live Home version when present
+            if (!osVersion) {
+                displayOsVersion = String(customParsed['appium:platformVersion'] || customParsed['platformVersion']);
             }
         }
     }
 
     if (isIos) {
-        if (!engineText || /uiautomator/i.test(engineText)) engineText = 'XCUITest';
+        if (!displayEngine || /uiautomator/i.test(displayEngine)) displayEngine = 'XCUITest';
     } else {
-        if (!engineText || /xcuitest/i.test(engineText)) engineText = 'UiAutomator2';
+        if (!displayEngine || /xcuitest/i.test(displayEngine)) displayEngine = 'UiAutomator2';
     }
 
     var confDevNameInput = document.getElementById('configDeviceName');
-    if (confDevNameInput && activeDevName) {
-        confDevNameInput.value = activeDevName;
+    if (confDevNameInput) {
+        confDevNameInput.value = activeDevName || '';
     }
 
     var mPlatform = document.getElementById("configMetricPlatform");
     if (mPlatform) mPlatform.textContent = platformText;
 
     var mEngine = document.getElementById("configMetricEngine");
-    if (mEngine) mEngine.textContent = engineText;
+    if (mEngine) mEngine.textContent = displayEngine;
 
     var mVersion = document.getElementById("configMetricVersion");
     if (mVersion) {
-        mVersion.textContent = osVersion ? (isIos ? ("iOS " + osVersion) : ("Android " + osVersion)) : (platformShort + " (Auto)");
+        mVersion.textContent = displayOsVersion
+            ? (isIos ? ("iOS " + displayOsVersion) : ("Android " + displayOsVersion))
+            : (platformShort + " (Auto)");
     }
 
-    // Sync underlying form inputs
-    var inUdid = document.getElementById('udid');
-    if (inUdid && udidVal) inUdid.value = udidVal;
-    var inPkg = document.getElementById('apppackage');
-    if (inPkg && !isIos && pkgVal) inPkg.value = pkgVal;
-    var inAct = document.getElementById('appactivity');
-    if (inAct && !isIos && actVal) inAct.value = actVal;
-    var inBndl = document.getElementById('bundleID');
-    if (inBndl && isIos && bndlVal) inBndl.value = bndlVal;
-    var inPv = document.getElementById('platformversion');
-    if (inPv && osVersion) inPv.value = osVersion;
+    // Keep Home automationName aligned with platform (safe; does not flip platform)
     var inAuto = document.getElementById('automationName');
-    if (inAuto && engineText) inAuto.value = engineText;
+    if (inAuto) {
+        var expectedAuto = isIos ? 'XCUITest' : 'UiAutomator2';
+        if (!inAuto.value || (isIos && /uiautomator/i.test(inAuto.value)) || (!isIos && /xcuitest/i.test(inAuto.value))) {
+            inAuto.value = expectedAuto;
+        }
+    }
 
-    // Toggle platform-specific field rows
+    // Toggle platform-specific field rows from Home platform only
     var appPkgRow = document.getElementById('appPkg');
     var appActRow = document.getElementById('appActvty');
     var bndlRow = document.getElementById('bndlID');
     if (appPkgRow) appPkgRow.style.display = isIos ? 'none' : 'flex';
     if (appActRow) appActRow.style.display = isIos ? 'none' : 'flex';
     if (bndlRow) bndlRow.style.display = isIos ? 'flex' : 'none';
+
+    var udidLabel = document.getElementById('udidLabel');
+    if (udidLabel) {
+        udidLabel.textContent = isIos ? 'Device Identifier (UDID)' : 'Device Identifier (Serial / ID)';
+    }
+
+    var statPlatform = document.getElementById('configStatPlatform');
+    var statEngine = document.getElementById('configStatEngine');
+    if (statPlatform) statPlatform.textContent = isIos ? 'iOS' : 'Android';
+    if (statEngine) statEngine.textContent = isIos ? 'XCUITest' : 'UiAutomator2';
 
     // --- Active App & Linked Project Resolution ---
     var appSelect = document.getElementById('appname');
@@ -16861,9 +17077,12 @@ function updateConfigDashboard(forceAuto) {
 
     var store = typeof getProjectStore === 'function' ? getProjectStore() : {};
 
-    // Resolve Last Configured Project globally / per platform (persisted, not driven by volatile Home dropdown changes)
+    // Resolve last configured project for THIS Home platform (+ current device when known)
+    var activeDeviceHint = (typeof resolveActiveDeviceInfo === 'function')
+        ? resolveActiveDeviceInfo(isIos ? 'IOS' : 'Android')
+        : null;
     var configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
-        ? getGlobalLastConfiguredProject(platformShort)
+        ? getGlobalLastConfiguredProject(platformShort, activeDeviceHint)
         : null;
     var configuredKey = configuredInfo ? configuredInfo.key : null;
     var linkedProject = configuredKey ? store[configuredKey] : (configuredInfo ? configuredInfo.project : null);
@@ -16973,59 +17192,53 @@ function updateConfigDashboard(forceAuto) {
     var editIcon = document.getElementById("configJsonEditIcon");
 
     var platform = isIos ? 'iOS' : 'Android';
+    var homePlatKey = isIos ? 'IOS' : 'Android';
+    var platformChangedForCaps = (window._configCapsShownPlatform !== homePlatKey);
+    window._configCapsShownPlatform = homePlatKey;
 
-    var rawJson = "";
-    if (forceAuto || !customParsed) {
-        var caps;
-        if (!udidVal && !pkgVal && !bndlVal && !currentAppName) {
-            caps = {
-                "status": "No device or application connected",
-                "platformName": isIos ? "iOS" : "Android",
-                "appium:automationName": engineText,
-                "appium:udid": "",
-                "appium:platformVersion": osVersion || ""
-            };
-            if (isIos) {
-                caps["appium:bundleId"] = "";
-            } else {
-                caps["appium:appPackage"] = "";
-                caps["appium:appActivity"] = "";
-            }
-        } else {
-            caps = {
-                "platformName": isIos ? "iOS" : "Android",
-                "appium:automationName": engineText,
-                "appium:udid": udidVal,
-                "appium:platformVersion": osVersion || ""
-            };
-            if (isIos) {
-                caps["appium:bundleId"] = bndlVal;
-            } else {
-                caps["appium:appPackage"] = pkgVal;
-                caps["appium:appActivity"] = actVal;
+    var autoEngineLive = (document.getElementById('automationName') && document.getElementById('automationName').value)
+        || (isIos ? 'XCUITest' : 'UiAutomator2');
+    var liveCaps = buildLiveCapabilitiesFromHome(isIos, {
+        udid: udidVal,
+        platformVersion: osVersion,
+        appPackage: pkgVal,
+        appActivity: actVal,
+        bundleId: bndlVal,
+        deviceName: activeDevName,
+        automationName: autoEngineLive
+    });
+
+    var capsForView = (forceAuto || !customParsed)
+        ? liveCaps
+        : mergeCustomCapsWithLive(liveCaps, customParsed, isIos);
+
+    // Keep per-platform storage healed to current live identity (so stale iOS UUID cannot stick on Android)
+    try {
+        if (!window._isConfigJsonInEditMode) {
+            var healedJson = JSON.stringify(capsForView, null, 2);
+            if (forceAuto) {
+                localStorage.removeItem(storageKey);
+            } else if (customParsed) {
+                localStorage.setItem(storageKey, healedJson);
             }
         }
-        rawJson = JSON.stringify(caps, null, 2);
-    } else {
-        rawJson = JSON.stringify(customParsed, null, 2);
-    }
+    } catch (_) {}
+
+    var rawJson = JSON.stringify(capsForView, null, 2);
 
     var editSaveBtn = document.getElementById('configJsonEditSaveBtn');
 
-    if (window._isConfigJsonInEditMode && editorEl) {
-        // In edit mode (Save icon)
+    // While editing, do not clobber the textarea (unless platform switched or Reset)
+    if (window._isConfigJsonInEditMode && editorEl && !forceAuto && !platformChangedForCaps) {
         if (editSaveBtn) {
             editSaveBtn.className = 'vscode-action-btn btn-save';
             editSaveBtn.title = 'Save capabilities';
             editSaveBtn.innerHTML = '<svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
         }
         editorEl.style.display = 'block';
-        if (forceAuto) {
-            editorEl.value = rawJson;
-        }
         if (previewEl) {
             previewEl.style.display = 'block';
-            var currentText = editorEl.value || rawJson;
+            var currentText = editorEl.value || '';
             var htmlText = currentText.endsWith('\n') ? (currentText + ' ') : currentText;
             if (typeof formatJsonToHtml === 'function') {
                 previewEl.innerHTML = formatJsonToHtml(htmlText);
@@ -17034,8 +17247,32 @@ function updateConfigDashboard(forceAuto) {
             }
         }
         validateAndSyncConfigJson(false);
+        return;
+    }
+
+    if (window._isConfigJsonInEditMode && editorEl && (forceAuto || platformChangedForCaps)) {
+        editorEl.value = rawJson;
+    }
+
+    if (window._isConfigJsonInEditMode && editorEl) {
+        if (editSaveBtn) {
+            editSaveBtn.className = 'vscode-action-btn btn-save';
+            editSaveBtn.title = 'Save capabilities';
+            editSaveBtn.innerHTML = '<svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
+        }
+        editorEl.style.display = 'block';
+        if (previewEl) {
+            previewEl.style.display = 'block';
+            var editTextNow = editorEl.value || rawJson;
+            var editHtml = editTextNow.endsWith('\n') ? (editTextNow + ' ') : editTextNow;
+            if (typeof formatJsonToHtml === 'function') {
+                previewEl.innerHTML = formatJsonToHtml(editHtml);
+            } else {
+                previewEl.textContent = editTextNow;
+            }
+        }
+        validateAndSyncConfigJson(false);
     } else {
-        // In normal / non-edit mode (Edit icon)
         if (editSaveBtn) {
             editSaveBtn.className = 'vscode-action-btn btn-edit';
             editSaveBtn.title = 'Edit capabilities JSON';
@@ -17242,6 +17479,29 @@ function validateAndSyncConfigJson(isUserInput) {
     }
 }
 
+function sanitizeCapsForHomePlatform(parsed) {
+    var isIos = false;
+    if (typeof getSelectedPlatform === 'function') {
+        isIos = (getSelectedPlatform() === 'IOS' || getSelectedPlatform() === 'iOS');
+    } else {
+        var pSelect = document.getElementById('platformname');
+        isIos = !!(pSelect && (pSelect.value === 'IOS' || pSelect.value === 'iOS'));
+    }
+    if (!parsed || typeof parsed !== 'object') return parsed;
+
+    var live = buildLiveCapabilitiesFromHome(isIos, {
+        udid: (document.getElementById('udid') && document.getElementById('udid').value) || '',
+        platformVersion: (document.getElementById('platformversion') && document.getElementById('platformversion').value) || '',
+        appPackage: (document.getElementById('apppackage') && document.getElementById('apppackage').value) || '',
+        appActivity: (document.getElementById('appactivity') && document.getElementById('appactivity').value) || '',
+        bundleId: (document.getElementById('bundleID') && document.getElementById('bundleID').value) || '',
+        deviceName: (document.getElementById('configDeviceName') && document.getElementById('configDeviceName').value) || '',
+        automationName: (document.getElementById('automationName') && document.getElementById('automationName').value) || ''
+    });
+    return mergeCustomCapsWithLive(live, parsed, isIos);
+}
+window.sanitizeCapsForHomePlatform = sanitizeCapsForHomePlatform;
+
 function handleConfigJsonEditSave() {
     hideSuggestWidget();
     var editSaveBtn = document.getElementById('configJsonEditSaveBtn');
@@ -17260,12 +17520,14 @@ function handleConfigJsonEditSave() {
 
         if (editorEl) {
             editorEl.style.display = 'block';
-            var storageKey = getConfigJsonStorageKey();
-            var saved = localStorage.getItem(storageKey);
-            if (saved) {
-                editorEl.value = saved;
-            } else if (previewEl && previewEl.textContent) {
-                editorEl.value = previewEl.textContent;
+            // Prefer current live preview (platform-correct) over stale storage
+            var fromPreview = (previewEl && (previewEl.textContent || '').trim()) || '';
+            if (fromPreview) {
+                editorEl.value = fromPreview;
+            } else {
+                var storageKey = getConfigJsonStorageKey();
+                var saved = localStorage.getItem(storageKey);
+                if (saved) editorEl.value = saved;
             }
             if (previewEl) {
                 previewEl.style.display = 'block';
@@ -17280,10 +17542,13 @@ function handleConfigJsonEditSave() {
         }
         syncConfigGutterScroll();
     } else {
-        // --- SAVE CAPABILITIES ---
+        // --- SAVE CAPABILITIES (platform stays locked to Home selection) ---
         if (!editorEl) return;
         var rawText = editorEl.value.trim();
         var storageKey = getConfigJsonStorageKey();
+        var homePlatformLocked = (typeof getSelectedPlatform === 'function')
+            ? getSelectedPlatform()
+            : (document.getElementById('platformname')?.value || 'Android');
 
         if (!rawText) {
             updateConfigJsonGutter(editorEl.value, { line: 1, message: 'JSON cannot be empty' });
@@ -17296,47 +17561,53 @@ function handleConfigJsonEditSave() {
                 throw new Error('Capabilities must be a JSON object {...}');
             }
 
+            parsed = sanitizeCapsForHomePlatform(parsed);
             var formattedSaved = JSON.stringify(parsed, null, 2);
 
-            // Valid JSON -> commit & switch to normal mode
             localStorage.setItem(storageKey, formattedSaved);
             window._activeCustomParsedCaps = parsed;
             window._isConfigJsonInEditMode = false;
 
-            // Sync form inputs & platform UI
-            if (parsed.platformName) {
-                var pSelect = document.getElementById('platformname');
-                var pIsIos = String(parsed.platformName).toLowerCase().includes('ios');
-                if (pSelect) pSelect.value = pIsIos ? 'IOS' : 'Android';
-                if (typeof updatePlatformUI === 'function') updatePlatformUI();
+            // Never change Home platform from Save — re-assert lock
+            var pSelect = document.getElementById('platformname');
+            if (pSelect && homePlatformLocked) {
+                pSelect.value = homePlatformLocked;
+                try {
+                    localStorage.setItem('algo_active_selected_platform', homePlatformLocked);
+                    if (typeof lastSelectedPlatform !== 'undefined') lastSelectedPlatform = homePlatformLocked;
+                } catch (_) {}
+                if (typeof pSelect._rebuildCustomSelect === 'function') {
+                    try { pSelect._rebuildCustomSelect(); } catch (_) {}
+                }
             }
+
+            // Apply only non-platform fields that match Home platform
+            var isIosHome = String(homePlatformLocked).toLowerCase().includes('ios');
             if (parsed['appium:automationName'] || parsed.automationName) {
                 var aIn = document.getElementById('automationName');
                 if (aIn) aIn.value = parsed['appium:automationName'] || parsed.automationName;
             }
             if (parsed['appium:platformVersion'] || parsed.platformVersion) {
                 var pvIn = document.getElementById('platformversion');
-                if (pvIn) pvIn.value = String(parsed['appium:platformVersion'] || parsed.platformVersion);
+                if (pvIn) {
+                    pvIn.value = String(parsed['appium:platformVersion'] || parsed.platformVersion);
+                    pvIn.dataset.userEdited = 'true';
+                }
             }
-            if (parsed['appium:udid'] || parsed.udid) {
-                var uIn = document.getElementById('udid');
-                if (uIn) uIn.value = parsed['appium:udid'] || parsed.udid;
-            }
-            if (parsed['appium:bundleId'] || parsed.bundleId) {
+            // Do not overwrite connected device udid/name from JSON on save — Home device stays authoritative
+            if (isIosHome && (parsed['appium:bundleId'] || parsed.bundleId)) {
                 var bIn = document.getElementById('bundleID');
                 if (bIn) bIn.value = parsed['appium:bundleId'] || parsed.bundleId;
             }
-            if (parsed['appium:appPackage'] || parsed.appPackage) {
-                var apIn = document.getElementById('apppackage');
-                if (apIn) apIn.value = parsed['appium:appPackage'] || parsed.appPackage;
-            }
-            if (parsed['appium:appActivity'] || parsed.appActivity) {
-                var aaIn = document.getElementById('appactivity');
-                if (aaIn) aaIn.value = parsed['appium:appActivity'] || parsed.appActivity;
-            }
-            if (parsed['appium:deviceName'] || parsed.deviceName) {
-                var cdIn = document.getElementById('configDeviceName');
-                if (cdIn) cdIn.value = parsed['appium:deviceName'] || parsed.deviceName;
+            if (!isIosHome) {
+                if (parsed['appium:appPackage'] || parsed.appPackage) {
+                    var apIn = document.getElementById('apppackage');
+                    if (apIn) apIn.value = parsed['appium:appPackage'] || parsed.appPackage;
+                }
+                if (parsed['appium:appActivity'] || parsed.appActivity) {
+                    var aaIn = document.getElementById('appactivity');
+                    if (aaIn) aaIn.value = parsed['appium:appActivity'] || parsed.appActivity;
+                }
             }
 
             if (editSaveBtn) {
@@ -17361,12 +17632,13 @@ function handleConfigJsonEditSave() {
             updateConfigJsonGutter(formattedSaved, null);
             syncConfigGutterScroll();
 
+            if (typeof updatePlatformUI === 'function') updatePlatformUI();
             if (typeof updateConfigDashboard === 'function') {
                 updateConfigDashboard();
             }
 
             if (typeof showCustomToast === 'function') {
-                showCustomToast('Capabilities saved & applied to Appium session', 'success');
+                showCustomToast('Capabilities saved for ' + (isIosHome ? 'iOS' : 'Android'), 'success');
             }
 
         } catch (err) {
@@ -17379,6 +17651,32 @@ window.handleConfigJsonEditSave = handleConfigJsonEditSave;
 window.enterConfigJsonEditMode = handleConfigJsonEditSave;
 window.saveConfigJson = handleConfigJsonEditSave;
 window.toggleConfigJsonEditMode = handleConfigJsonEditSave;
+
+function checkUnsavedConfigJsonGuard(action) {
+    if (window._isConfigJsonInEditMode) {
+        if (typeof showStructuredAlert === 'function') {
+            showStructuredAlert(
+                "Unsaved Capabilities",
+                {
+                    lead: "New capabilities not saved, please save.",
+                    hint: "Click the Save button in the capabilities editor to save your changes before proceeding."
+                },
+                "warning"
+            );
+        } else if (typeof showCustomAlert === 'function') {
+            showCustomAlert(
+                "Unsaved Capabilities",
+                "New capabilities not saved, please save.",
+                "warning"
+            );
+        } else {
+            alert("New capabilities not saved, please save.");
+        }
+        return false;
+    }
+    return true;
+}
+window.checkUnsavedConfigJsonGuard = checkUnsavedConfigJsonGuard;
 
 function resetConfigJson() {
     hideSuggestWidget();
@@ -17889,6 +18187,7 @@ function getDeviceDimensions() {
         // Programmatic switch from device load/selection — skip device gate
         if (typeof applyingPlatformFromDevice !== 'undefined' && applyingPlatformFromDevice) {
             lastSelectedPlatform = nextPlatform;
+            try { localStorage.setItem('algo_active_selected_platform', nextPlatform); } catch (_) {}
             updatePlatformUI();
             if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
                 lockSecondaryLaunchFields();
@@ -17905,6 +18204,7 @@ function getDeviceDimensions() {
         // Same platform re-selected
         if (normalizePlatformName(nextPlatform) === normalizePlatformName(previousPlatform)) {
             lastSelectedPlatform = nextPlatform;
+            try { localStorage.setItem('algo_active_selected_platform', nextPlatform); } catch (_) {}
             updatePlatformUI();
             if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
                 lockSecondaryLaunchFields();
@@ -17970,6 +18270,7 @@ function getDeviceDimensions() {
             applyingPlatformFromDevice = true;
             platformSelect.value = nextPlatform;
             lastSelectedPlatform = nextPlatform;
+            try { localStorage.setItem('algo_active_selected_platform', nextPlatform); } catch (_) {}
             applyingPlatformFromDevice = false;
 
             const selected = populateDeviceDropdown(matching);
@@ -18076,6 +18377,38 @@ if (platformVersionField) {
         }
     }
 
+    /**
+     * Bind device on create / fill empty only.
+     * Never replace an existing different device binding (repo projects stay per-device).
+     */
+    function bindOrPreserveProjectDevice(project, devInfo) {
+        if (!project || !devInfo) return false;
+        const existingId = String(project.deviceId || (project.device && project.device.id) || '').trim().toLowerCase();
+        const existingName = String(project.deviceName || (project.device && project.device.name) || '').trim().toLowerCase();
+        const nextId = String(devInfo.id || '').trim().toLowerCase();
+        const nextName = String(devInfo.name || '').trim().toLowerCase();
+
+        if (!existingId && !existingName) {
+            project.deviceName = devInfo.name || '';
+            project.deviceId = devInfo.id || '';
+            project.deviceType = devInfo.type || '';
+            project.device = devInfo;
+            return true;
+        }
+        const same = (existingId && nextId && existingId === nextId)
+            || (existingName && nextName && existingName === nextName);
+        if (same) {
+            // Refresh label/type metadata for same device only
+            project.deviceName = devInfo.name || project.deviceName;
+            project.deviceId = devInfo.id || project.deviceId;
+            project.deviceType = devInfo.type || project.deviceType;
+            project.device = Object.assign({}, project.device || {}, devInfo);
+            return true;
+        }
+        return false;
+    }
+    window.bindOrPreserveProjectDevice = bindOrPreserveProjectDevice;
+
     function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform, fallbackDevice) {
         const preferredKey = window.activeResumedProjectKey || key;
         const found = (typeof findProjectKeyInStore === 'function')
@@ -18092,12 +18425,7 @@ if (platformVersionField) {
             }
             const devInfo = fallbackDevice || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(found.project.platform) : null);
             if (devInfo) {
-                if (!found.project.deviceName || window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed') {
-                    found.project.deviceName = devInfo.name;
-                    found.project.deviceId = devInfo.id;
-                    found.project.deviceType = devInfo.type;
-                    found.project.device = devInfo;
-                }
+                bindOrPreserveProjectDevice(found.project, devInfo);
             }
             return found.project;
         }
@@ -18545,11 +18873,8 @@ if (platformVersionField) {
             const devInfo = (typeof resolveActiveDeviceInfo === 'function') ? resolveActiveDeviceInfo(platform) : null;
 
             const project = getOrCreateProject(store, projectKey, appName, platform, devInfo);
-            if (devInfo) {
-                project.deviceName = devInfo.name;
-                project.deviceId = devInfo.id;
-                project.deviceType = devInfo.type;
-                project.device = devInfo;
+            if (devInfo && typeof bindOrPreserveProjectDevice === 'function') {
+                bindOrPreserveProjectDevice(project, devInfo);
             }
 
             const scenarioPageSet = new Set();
