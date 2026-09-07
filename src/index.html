@@ -264,7 +264,7 @@
                 </div>
 
                 <div class="dash-card-body" style="padding: 10px 12px 12px; display: flex; flex-direction: column;">
-                    <div class="vscode-window">
+                    <div class="vscode-window" id="configVscodeWindow">
                         <!-- VS Code Title Bar -->
                         <div class="vscode-header">
                             <div class="vscode-mac-dots">
@@ -276,28 +276,34 @@
                                 <svg viewBox="0 0 24 24" class="vscode-json-icon"><path fill="#fbc02d" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h2v6H7v2h6v-2h-2V9h2V7H7z"/></svg>
                                 <span>capabilities.json</span>
                             </div>
-                            <div class="vscode-actions">
-                                <button type="button" class="vscode-copy-btn" onclick="copyConfigJson(this)">
-                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    <span>Copy</span>
+                            <div class="vscode-actions" id="configVscodeActions">
+                                <button type="button" class="vscode-action-btn btn-edit" id="configJsonEditSaveBtn" onclick="handleConfigJsonEditSave()" title="Edit capabilities JSON">
+                                    <svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 14.59l4.89-2.13.22-.16 8.25-8.25V2.46L13.23 1zM4.74 12.63l-2.07.9.9-2.07 7.7-7.7 1.17 1.17-7.7 7.7zm8.38-8.38l-1.17-1.17 1.05-1.05 1.17 1.17-1.05 1.05z"/></svg>
+                                </button>
+                                <button type="button" class="vscode-action-btn btn-reset" id="configJsonResetBtn" onclick="resetConfigJson()" title="Reset to auto-detected default capabilities">
+                                    <svg id="configJsonResetIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                </button>
+                                <button type="button" class="vscode-action-btn btn-copy" id="configJsonCopyBtn" onclick="copyConfigJson(this)" title="Copy JSON to clipboard">
+                                    <svg id="configJsonCopyIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M4 4v9h9V4H4zm1 1h7v7H5V5z"/><path d="M2 2v9h1V3h8V2H2z"/></svg>
                                 </button>
                             </div>
                         </div>
 
                         <!-- VS Code Editor Canvas -->
-                        <div class="vscode-body">
+                        <div class="vscode-body" id="vscodeBody">
                             <div class="vscode-gutter" id="configJsonGutter">
                                 <span>1</span>
-                                <span>2</span>
-                                <span>3</span>
-                                <span>4</span>
-                                <span>5</span>
-                                <span>6</span>
-                                <span>7</span>
-                                <span>8</span>
                             </div>
                             <div class="vscode-code-area">
                                 <pre id="configJsonPreview" class="vscode-code"></pre>
+                                <textarea id="configJsonEditor" class="vscode-json-textarea" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="// Type or paste your W3C Appium capabilities JSON here..." style="display: none;"></textarea>
+                                <div id="vscodeSuggestWidget" class="vscode-suggest-widget" style="display: none;">
+                                    <div class="vscode-suggest-list" id="vscodeSuggestList"></div>
+                                    <div class="vscode-suggest-details" id="vscodeSuggestDetails">
+                                        <span class="suggest-detail-type" id="vscodeSuggestDetailType"></span>
+                                        <span class="suggest-detail-desc" id="vscodeSuggestDetailDesc"></span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -1336,6 +1342,8 @@
     </div>
 </div>
 
+
+
 <div class="custom-modal" id="editScenarioModal" style="display: none; width: 380px; background: #ffffff; border: 2px solid #2F8BCC; border-radius: 8px; overflow: visible; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 100000 !important; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
     <div style="background: #000000; border-bottom: 2px solid #2F8BCC; padding: 10px 16px; display: flex; align-items: center; border-radius: 6px 6px 0 0;">
         <span style="color: #ffffff; font-size: 14px; font-weight: 600;">Edit Scenario</span>
@@ -1514,106 +1522,43 @@
 
     function formatJsonToHtml(jsonStr) {
         if (!jsonStr) return '';
-        var escaped = jsonStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-        return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
-            var cls = 'json-number';
+        var escaped = jsonStr
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}\[\]]|,|\/\/.*|\/\*[\s\S]*?\*\/)/g, function (match) {
+            if (/^\/\//.test(match) || /^\/\*/.test(match)) {
+                return '<span class="json-comment">' + match + '</span>';
+            }
             if (/^"/.test(match)) {
                 if (/:$/.test(match)) {
-                    cls = 'json-key';
-                } else {
-                    cls = 'json-string';
+                    var colonIdx = match.lastIndexOf(':');
+                    var keyStr = match.substring(0, colonIdx);
+                    var colonStr = match.substring(colonIdx);
+                    return '<span class="json-key">' + keyStr + '</span><span class="json-colon">' + colonStr + '</span>';
                 }
-            } else if (/true|false/.test(match)) {
-                cls = 'json-boolean';
-            } else if (/null/.test(match)) {
-                cls = 'json-null';
+                return '<span class="json-string">' + match + '</span>';
             }
-            return '<span class="' + cls + '">' + match + '</span>';
+            if (/^(true|false)$/.test(match)) {
+                return '<span class="json-boolean">' + match + '</span>';
+            }
+            if (/^null$/.test(match)) {
+                return '<span class="json-null">' + match + '</span>';
+            }
+            if (/^-?\d/.test(match)) {
+                return '<span class="json-number">' + match + '</span>';
+            }
+            if (/^[{}\[\]]$/.test(match)) {
+                return '<span class="json-bracket">' + match + '</span>';
+            }
+            if (match === ',') {
+                return '<span class="json-comma">,</span>';
+            }
+            return match;
         });
     }
     window.formatJsonToHtml = formatJsonToHtml;
-
-    var lastRawConfigJson = "";
-
-    function copyConfigJson(btn) {
-        var val = lastRawConfigJson || (document.getElementById('configJsonPreview') ? document.getElementById('configJsonPreview').textContent : '');
-        if (val && navigator.clipboard) {
-            navigator.clipboard.writeText(val.trim());
-            var original = btn.innerHTML;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied</span>';
-            setTimeout(function() { btn.innerHTML = original; }, 1500);
-        }
-    }
-    window.copyConfigJson = copyConfigJson;
-
-    function updateConfigDashboard() {
-        var isIos = false;
-        var pSelect = document.getElementById("platformname");
-        if (pSelect && pSelect.value === "IOS") isIos = true;
-
-        var platformText = isIos ? "Apple iOS" : "Android";
-        var engineText = isIos ? "XCUITest" : "UiAutomator2";
-        var osVersion = (document.getElementById("platformversion") && document.getElementById("platformversion").value) || "";
-        var udidVal = (document.getElementById("udid") && document.getElementById("udid").value) || "";
-        var pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
-        var actVal = (document.getElementById("appactivity") && document.getElementById("appactivity").value) || "";
-        var bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
-
-        var mPlatform = document.getElementById("configMetricPlatform");
-        if (mPlatform) mPlatform.textContent = platformText;
-
-        var mEngine = document.getElementById("configMetricEngine");
-        if (mEngine) mEngine.textContent = engineText;
-
-        var mVersion = document.getElementById("configMetricVersion");
-        if (mVersion) mVersion.textContent = osVersion ? (isIos ? ("iOS " + osVersion) : ("Android " + osVersion)) : "Not Connected";
-
-        var jsonPreview = document.getElementById("configJsonPreview");
-        if (jsonPreview) {
-            var caps = {};
-            if (!udidVal && !pkgVal && !bndlVal) {
-                caps = {
-                    "status": "No device or application connected",
-                    "platformName": isIos ? "iOS" : "Android",
-                    "appium:automationName": engineText,
-                    "appium:udid": "",
-                    "appium:platformVersion": osVersion || ""
-                };
-                if (isIos) {
-                    caps["appium:bundleId"] = "";
-                } else {
-                    caps["appium:appPackage"] = "";
-                    caps["appium:appActivity"] = "";
-                }
-            } else {
-                caps = {
-                    "platformName": isIos ? "iOS" : "Android",
-                    "appium:automationName": engineText,
-                    "appium:udid": udidVal,
-                    "appium:platformVersion": osVersion || ""
-                };
-                if (isIos) {
-                    caps["appium:bundleId"] = bndlVal;
-                } else {
-                    caps["appium:appPackage"] = pkgVal;
-                    caps["appium:appActivity"] = actVal;
-                }
-            }
-            lastRawConfigJson = JSON.stringify(caps, null, 2);
-            jsonPreview.innerHTML = formatJsonToHtml(lastRawConfigJson);
-
-            var lineCount = lastRawConfigJson.split('\n').length;
-            var gutterEl = document.getElementById('configJsonGutter');
-            if (gutterEl) {
-                var linesHtml = '';
-                for (var i = 1; i <= lineCount; i++) {
-                    linesHtml += '<span>' + i + '</span>';
-                }
-                gutterEl.innerHTML = linesHtml;
-            }
-        }
-    }
-    window.updateConfigDashboard = updateConfigDashboard;
 
     function switchAppTab(name) {
         document.querySelectorAll(".topnav-tab").forEach(function (btn) {

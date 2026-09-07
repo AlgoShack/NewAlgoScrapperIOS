@@ -4896,6 +4896,55 @@
                 caps["appium:wdaConnectionTimeout"] = 90000;
             }
 
+            // Merge custom user capabilities from inline JSON editor / storage with highest priority
+            try {
+                var platformKey = isAndroid ? 'Android' : 'IOS';
+                var storageKey = 'algo_custom_appium_json_' + platformKey;
+                var savedCapsStr = localStorage.getItem(storageKey);
+                var inlineEditorEl = document.getElementById('configJsonEditor');
+                var sourceCapsStr = savedCapsStr || (inlineEditorEl && inlineEditorEl.value && inlineEditorEl.value.trim());
+
+                if (sourceCapsStr) {
+                    try {
+                        var parsedCustom = JSON.parse(sourceCapsStr);
+                        if (parsedCustom && typeof parsedCustom === 'object' && !Array.isArray(parsedCustom)) {
+                            // Strip temporary status message if present
+                            delete parsedCustom.status;
+
+                            // Apply all user custom capabilities on top of base caps
+                            Object.assign(caps, parsedCustom);
+
+                            // Sync local variables from custom caps
+                            if (parsedCustom['appium:appPackage'] || parsedCustom['appPackage']) {
+                                appPackage = parsedCustom['appium:appPackage'] || parsedCustom['appPackage'];
+                            }
+                            if (parsedCustom['appium:appActivity'] || parsedCustom['appActivity']) {
+                                appActivity = parsedCustom['appium:appActivity'] || parsedCustom['appActivity'];
+                            }
+                            if (parsedCustom['appium:bundleId'] || parsedCustom['bundleId']) {
+                                bundleID = parsedCustom['appium:bundleId'] || parsedCustom['bundleId'];
+                            }
+                            if (parsedCustom['appium:udid'] || parsedCustom['udid']) {
+                                udid = parsedCustom['appium:udid'] || parsedCustom['udid'];
+                            }
+                            if (parsedCustom['appium:deviceName'] || parsedCustom['deviceName']) {
+                                deviceName = parsedCustom['appium:deviceName'] || parsedCustom['deviceName'];
+                            }
+                            if (parsedCustom['appium:automationName'] || parsedCustom['automationName']) {
+                                automationName = parsedCustom['appium:automationName'] || parsedCustom['automationName'];
+                            }
+                            if (parsedCustom['appium:platformVersion'] || parsedCustom['platformVersion']) {
+                                platformVersion = String(parsedCustom['appium:platformVersion'] || parsedCustom['platformVersion']);
+                            }
+                        }
+                    } catch (syntaxErr) {
+                        console.warn("Syntax error in saved custom capabilities JSON:", syntaxErr);
+                    }
+                }
+            } catch (capMergeErr) {
+                console.warn('Failed to merge custom capabilities:', capMergeErr);
+            }
+
             try {
                 console.log("Building Appium driver with capabilities:", caps);
 
@@ -16658,11 +16707,25 @@ function updatePlatformUI() {
     }
 }
 
-function updateConfigDashboard() {
+function updateConfigDashboard(forceAuto) {
     var isIos = false;
     var pSelect = document.getElementById("platformname");
     if (pSelect && pSelect.value === "IOS") isIos = true;
     if (typeof getSelectedPlatform === 'function' && getSelectedPlatform() === 'IOS') isIos = true;
+
+    var storageKey = 'algo_custom_appium_json_' + (isIos ? 'IOS' : 'Android');
+    var storedUserJson = localStorage.getItem(storageKey);
+    var customParsed = null;
+    if (!forceAuto && storedUserJson) {
+        try {
+            customParsed = JSON.parse(storedUserJson);
+            if (customParsed && typeof customParsed === 'object' && !Array.isArray(customParsed)) {
+                if (customParsed.platformName) {
+                    isIos = String(customParsed.platformName).toLowerCase().includes('ios');
+                }
+            }
+        } catch (_) {}
+    }
 
     var platformText = isIos ? "Apple iOS" : "Android";
     var platformShort = isIos ? "iOS" : "Android";
@@ -16686,14 +16749,35 @@ function updateConfigDashboard() {
     if (activeDevName === 'No device connected' || activeDevName === 'Select Device' || activeDevName.toLowerCase() === 'loading...') {
         activeDevName = '';
     }
-    var confDevNameInput = document.getElementById('configDeviceName');
-    if (confDevNameInput) {
-        confDevNameInput.value = activeDevName;
+
+    // Overlay custom capabilities onto dashboard metrics and active inputs
+    if (customParsed) {
+        if (customParsed['appium:automationName'] || customParsed['automationName']) {
+            engineText = customParsed['appium:automationName'] || customParsed['automationName'];
+        }
+        if (customParsed['appium:platformVersion'] || customParsed['platformVersion']) {
+            osVersion = String(customParsed['appium:platformVersion'] || customParsed['platformVersion']);
+        }
+        if (customParsed['appium:deviceName'] || customParsed['deviceName']) {
+            activeDevName = String(customParsed['appium:deviceName'] || customParsed['deviceName']);
+        }
+        if (customParsed['appium:udid'] || customParsed['udid']) {
+            udidVal = String(customParsed['appium:udid'] || customParsed['udid']);
+        }
+        if (customParsed['appium:bundleId'] || customParsed['bundleId']) {
+            bndlVal = String(customParsed['appium:bundleId'] || customParsed['bundleId']);
+        }
+        if (customParsed['appium:appPackage'] || customParsed['appPackage']) {
+            pkgVal = String(customParsed['appium:appPackage'] || customParsed['appPackage']);
+        }
+        if (customParsed['appium:appActivity'] || customParsed['appActivity']) {
+            actVal = String(customParsed['appium:appActivity'] || customParsed['appActivity']);
+        }
     }
 
-    if (!isDeviceConnectedNow) {
-        bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
-        pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
+    var confDevNameInput = document.getElementById('configDeviceName');
+    if (confDevNameInput && activeDevName) {
+        confDevNameInput.value = activeDevName;
     }
 
     var mPlatform = document.getElementById("configMetricPlatform");
@@ -16706,6 +16790,28 @@ function updateConfigDashboard() {
     if (mVersion) {
         mVersion.textContent = osVersion ? (isIos ? ("iOS " + osVersion) : ("Android " + osVersion)) : (platformShort + " (Auto)");
     }
+
+    // Sync underlying form inputs
+    var inUdid = document.getElementById('udid');
+    if (inUdid && udidVal) inUdid.value = udidVal;
+    var inPkg = document.getElementById('apppackage');
+    if (inPkg && pkgVal) inPkg.value = pkgVal;
+    var inAct = document.getElementById('appactivity');
+    if (inAct && actVal) inAct.value = actVal;
+    var inBndl = document.getElementById('bundleID');
+    if (inBndl && bndlVal) inBndl.value = bndlVal;
+    var inPv = document.getElementById('platformversion');
+    if (inPv && osVersion) inPv.value = osVersion;
+    var inAuto = document.getElementById('automationName');
+    if (inAuto && engineText) inAuto.value = engineText;
+
+    // Toggle platform-specific field rows
+    var appPkgRow = document.getElementById('appPkg');
+    var appActRow = document.getElementById('appActvty');
+    var bndlRow = document.getElementById('bndlID');
+    if (appPkgRow) appPkgRow.style.display = isIos ? 'none' : 'flex';
+    if (appActRow) appActRow.style.display = isIos ? 'none' : 'flex';
+    if (bndlRow) bndlRow.style.display = isIos ? 'flex' : 'none';
 
     // --- Active App & Linked Project Resolution ---
     var appSelect = document.getElementById('appname');
@@ -16830,7 +16936,6 @@ function updateConfigDashboard() {
             projAvatarEl.textContent = '—';
             projAvatarEl.className = 'config-project-avatar ' + (isIos ? 'is-ios' : 'is-android');
         }
-        if (projStatsRow) projStatsRow.style.display = 'none';
         if (openRepoBtn) openRepoBtn.style.display = 'none';
         if (hintEl) hintEl.textContent = 'Launch Application on the Home tab will create and link a new project workspace';
 
@@ -16841,9 +16946,19 @@ function updateConfigDashboard() {
         }
     }
 
-    // --- W3C Capabilities JSON Preview ---
-    var jsonPreview = document.getElementById("configJsonPreview");
-    if (jsonPreview) {
+    // --- W3C Capabilities Section (Non-Edit vs Edit Mode) ---
+    var previewEl = document.getElementById("configJsonPreview");
+    var editorEl = document.getElementById("configJsonEditor");
+    var editBtn = document.getElementById("configJsonEditBtn");
+    var editText = document.getElementById("configJsonEditText");
+    var editIcon = document.getElementById("configJsonEditIcon");
+
+    var platform = isIos ? 'iOS' : 'Android';
+    var storageKey = 'algo_custom_appium_json_' + (isIos ? 'IOS' : 'Android');
+    var storedUserJson = localStorage.getItem(storageKey);
+
+    var rawJson = "";
+    if (forceAuto || !storedUserJson) {
         var caps;
         if (!udidVal && !pkgVal && !bndlVal && !currentAppName) {
             caps = {
@@ -16873,21 +16988,825 @@ function updateConfigDashboard() {
                 caps["appium:appActivity"] = actVal;
             }
         }
-        var rawJson = JSON.stringify(caps, null, 2);
-        jsonPreview.innerHTML = (typeof formatJsonToHtml === 'function') ? formatJsonToHtml(rawJson) : rawJson;
+        rawJson = JSON.stringify(caps, null, 2);
+    } else {
+        rawJson = storedUserJson;
+    }
 
-        var lineCount = rawJson.split('\n').length;
-        var gutterEl = document.getElementById('configJsonGutter');
-        if (gutterEl) {
-            var linesHtml = '';
-            for (var i = 1; i <= lineCount; i++) {
-                linesHtml += '<span>' + i + '</span>';
-            }
-            gutterEl.innerHTML = linesHtml;
+    var editSaveBtn = document.getElementById('configJsonEditSaveBtn');
+
+    if (window._isConfigJsonInEditMode && editorEl) {
+        // In edit mode (Save icon)
+        if (editSaveBtn) {
+            editSaveBtn.className = 'vscode-action-btn btn-save';
+            editSaveBtn.title = 'Save capabilities';
+            editSaveBtn.innerHTML = '<svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
         }
+        editorEl.style.display = 'block';
+        if (forceAuto) {
+            editorEl.value = rawJson;
+        }
+        if (previewEl) {
+            previewEl.style.display = 'block';
+            var currentText = editorEl.value || rawJson;
+            var htmlText = currentText.endsWith('\n') ? (currentText + ' ') : currentText;
+            if (typeof formatJsonToHtml === 'function') {
+                previewEl.innerHTML = formatJsonToHtml(htmlText);
+            } else {
+                previewEl.textContent = currentText;
+            }
+        }
+        validateAndSyncConfigJson(false);
+    } else {
+        // In normal / non-edit mode (Edit icon)
+        if (editSaveBtn) {
+            editSaveBtn.className = 'vscode-action-btn btn-edit';
+            editSaveBtn.title = 'Edit capabilities JSON';
+            editSaveBtn.innerHTML = '<svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 14.59l4.89-2.13.22-.16 8.25-8.25V2.46L13.23 1zM4.74 12.63l-2.07.9.9-2.07 7.7-7.7 1.17 1.17-7.7 7.7zm8.38-8.38l-1.17-1.17 1.05-1.05 1.17 1.17-1.05 1.05z"/></svg>';
+        }
+        if (editorEl) {
+            editorEl.style.display = 'none';
+            editorEl.value = rawJson;
+        }
+        if (previewEl) {
+            previewEl.style.display = 'block';
+            if (typeof formatJsonToHtml === 'function') {
+                previewEl.innerHTML = formatJsonToHtml(rawJson);
+            } else {
+                previewEl.textContent = rawJson;
+            }
+        }
+        updateConfigJsonGutter(rawJson, null);
     }
 }
 window.updateConfigDashboard = updateConfigDashboard;
+
+// ==========================================
+// INLINE JSON CAPABILITIES CONTROLLER & ERROR POPOVER
+// ==========================================
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function formatJsonToHtml(jsonStr) {
+    if (!jsonStr) return '';
+    var escaped = jsonStr
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    return escaped.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?|[{}\[\]]|,|\/\/.*|\/\*[\s\S]*?\*\/)/g, function (match) {
+        if (/^\/\//.test(match) || /^\/\*/.test(match)) {
+            return '<span class="json-comment">' + match + '</span>';
+        }
+        if (/^"/.test(match)) {
+            if (/:$/.test(match)) {
+                var colonIdx = match.lastIndexOf(':');
+                var keyStr = match.substring(0, colonIdx);
+                var colonStr = match.substring(colonIdx);
+                return '<span class="json-key">' + keyStr + '</span><span class="json-colon">' + colonStr + '</span>';
+            }
+            return '<span class="json-string">' + match + '</span>';
+        }
+        if (/^(true|false)$/.test(match)) {
+            return '<span class="json-boolean">' + match + '</span>';
+        }
+        if (/^null$/.test(match)) {
+            return '<span class="json-null">' + match + '</span>';
+        }
+        if (/^-?\d/.test(match)) {
+            return '<span class="json-number">' + match + '</span>';
+        }
+        if (/^[{}\[\]]$/.test(match)) {
+            return '<span class="json-bracket">' + match + '</span>';
+        }
+        if (match === ',') {
+            return '<span class="json-comma">,</span>';
+        }
+        return match;
+    });
+}
+window.formatJsonToHtml = formatJsonToHtml;
+
+function getActivePlatformForCaps() {
+    var isIos = false;
+    var pSelect = document.getElementById("platformname");
+    if (pSelect && (pSelect.value === "IOS" || pSelect.value === "iOS")) {
+        isIos = true;
+    } else if (typeof getSelectedPlatform === 'function') {
+        isIos = (getSelectedPlatform() === 'IOS');
+    }
+    return isIos ? 'iOS' : 'Android';
+}
+
+function getConfigJsonStorageKey() {
+    var platform = getActivePlatformForCaps();
+    return 'algo_custom_appium_json_' + (platform === 'iOS' ? 'IOS' : 'Android');
+}
+
+function extractJsonErrorLine(errorMsg, rawText) {
+    if (!errorMsg || !rawText) return null;
+    try {
+        var lineMatch = errorMsg.match(/line\s+(\d+)/i);
+        if (lineMatch) {
+            return parseInt(lineMatch[1], 10);
+        }
+        var posMatch = errorMsg.match(/position\s+(\d+)/i);
+        if (posMatch) {
+            var pos = parseInt(posMatch[1], 10);
+            var upToPos = rawText.substring(0, pos);
+            return upToPos.split('\n').length;
+        }
+        var charMatch = errorMsg.match(/char\s+(\d+)/i);
+        if (charMatch) {
+            var charIdx = parseInt(charMatch[1], 10);
+            var upToChar = rawText.substring(0, charIdx);
+            return upToChar.split('\n').length;
+        }
+
+        var lines = rawText.split('\n');
+        for (var i = 1; i <= lines.length; i++) {
+            var partial = lines.slice(0, i).join('\n');
+            try {
+                JSON.parse(partial);
+            } catch (e) {
+                if (!e.message.includes('Unexpected end of JSON')) {
+                    return i;
+                }
+            }
+        }
+        return lines.length;
+    } catch (_) {
+        return 1;
+    }
+}
+
+function syncConfigGutterScroll() {
+    var gutterEl = document.getElementById('configJsonGutter');
+    var editorEl = document.getElementById('configJsonEditor');
+    var previewEl = document.getElementById('configJsonPreview');
+    if (!gutterEl) return;
+    var offset = 0;
+    if (window._isConfigJsonInEditMode && editorEl) {
+        offset = editorEl.scrollTop || 0;
+    } else if (previewEl) {
+        offset = previewEl.scrollTop || 0;
+    }
+    gutterEl.style.transform = 'translateY(' + (-offset) + 'px)';
+}
+
+function updateConfigJsonGutter(text, errorInfo) {
+    var gutterEl = document.getElementById('configJsonGutter');
+    if (!gutterEl) return;
+    var content = text || '';
+    var lines = content.split('\n');
+    var lineCount = Math.max(lines.length, 1);
+    var errLine = (errorInfo && typeof errorInfo.line === 'number') ? errorInfo.line : null;
+    var errMsg = (errorInfo && errorInfo.message) ? errorInfo.message : '';
+
+    var errorIconSvg = '<svg viewBox="0 0 16 16" width="11" height="11" fill="#f14c4c"><path d="M8 1a7 7 0 1 0 7 7A7 7 0 0 0 8 1zm3.354 9.646l-.708.708L8 8.707l-2.646 2.647-.708-.708L7.293 8 4.646 5.354l.708-.708L8 7.293l2.646-2.647.708.708L8.707 8l2.647 2.646z"/></svg>';
+
+    var linesHtml = '';
+    for (var i = 1; i <= lineCount; i++) {
+        if (errLine && i === errLine) {
+            var isLower = (i >= 4);
+            linesHtml += '<span class="gutter-line has-error" data-line="' + i + '">' +
+                '<span class="gutter-glyph">' + errorIconSvg + '</span>' +
+                '<span class="gutter-line-num">' + i + '</span>' +
+                '<div class="vscode-hover-widget' + (isLower ? ' is-lower' : '') + '">' +
+                    '<div class="vscode-hover-header">' +
+                        errorIconSvg +
+                        '<span>JSON Problem (line ' + i + ')</span>' +
+                    '</div>' +
+                    '<div class="vscode-hover-body">' + escapeHtml(errMsg) + '</div>' +
+                '</div>' +
+            '</span>';
+        } else {
+            linesHtml += '<span class="gutter-line" data-line="' + i + '">' +
+                '<span class="gutter-glyph"></span>' +
+                '<span class="gutter-line-num">' + i + '</span>' +
+            '</span>';
+        }
+    }
+    gutterEl.innerHTML = linesHtml;
+    syncConfigGutterScroll();
+}
+
+function validateAndSyncConfigJson(isUserInput) {
+    var editor = document.getElementById('configJsonEditor');
+    if (!editor) return null;
+
+    var rawText = editor.value.trim();
+    var storageKey = getConfigJsonStorageKey();
+
+    if (!rawText) {
+        updateConfigJsonGutter(editor.value, { line: 1, message: 'JSON cannot be empty' });
+        return null;
+    }
+
+    try {
+        var parsed = JSON.parse(rawText);
+        if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+            throw new Error('Capabilities must be a JSON object {...}');
+        }
+
+        updateConfigJsonGutter(editor.value, null);
+        return parsed;
+    } catch (err) {
+        var errLine = extractJsonErrorLine(err.message, editor.value) || 1;
+        updateConfigJsonGutter(editor.value, { line: errLine, message: err.message });
+        return null;
+    }
+}
+
+function handleConfigJsonEditSave() {
+    hideSuggestWidget();
+    var editSaveBtn = document.getElementById('configJsonEditSaveBtn');
+    var editorEl = document.getElementById('configJsonEditor');
+    var previewEl = document.getElementById('configJsonPreview');
+
+    if (!window._isConfigJsonInEditMode) {
+        // --- ENTER EDIT MODE ---
+        window._isConfigJsonInEditMode = true;
+
+        if (editSaveBtn) {
+            editSaveBtn.className = 'vscode-action-btn btn-save';
+            editSaveBtn.title = 'Save capabilities';
+            editSaveBtn.innerHTML = '<svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
+        }
+
+        if (editorEl) {
+            editorEl.style.display = 'block';
+            var storageKey = getConfigJsonStorageKey();
+            var saved = localStorage.getItem(storageKey);
+            if (saved) {
+                editorEl.value = saved;
+            } else if (previewEl && previewEl.textContent) {
+                editorEl.value = previewEl.textContent;
+            }
+            if (previewEl) {
+                previewEl.style.display = 'block';
+                var textToFormat = editorEl.value || '';
+                var htmlText = textToFormat.endsWith('\n') ? (textToFormat + ' ') : textToFormat;
+                if (typeof formatJsonToHtml === 'function') {
+                    previewEl.innerHTML = formatJsonToHtml(htmlText);
+                }
+            }
+            editorEl.focus();
+            validateAndSyncConfigJson(false);
+        }
+        syncConfigGutterScroll();
+    } else {
+        // --- SAVE CAPABILITIES ---
+        if (!editorEl) return;
+        var rawText = editorEl.value.trim();
+        var storageKey = getConfigJsonStorageKey();
+
+        if (!rawText) {
+            updateConfigJsonGutter(editorEl.value, { line: 1, message: 'JSON cannot be empty' });
+            return;
+        }
+
+        try {
+            var parsed = JSON.parse(rawText);
+            if (typeof parsed !== 'object' || Array.isArray(parsed) || parsed === null) {
+                throw new Error('Capabilities must be a JSON object {...}');
+            }
+
+            var formattedSaved = JSON.stringify(parsed, null, 2);
+
+            // Valid JSON -> commit & switch to normal mode
+            localStorage.setItem(storageKey, formattedSaved);
+            window._activeCustomParsedCaps = parsed;
+            window._isConfigJsonInEditMode = false;
+
+            // Sync form inputs & platform UI
+            if (parsed.platformName) {
+                var pSelect = document.getElementById('platformname');
+                var pIsIos = String(parsed.platformName).toLowerCase().includes('ios');
+                if (pSelect) pSelect.value = pIsIos ? 'IOS' : 'Android';
+                if (typeof updatePlatformUI === 'function') updatePlatformUI();
+            }
+            if (parsed['appium:automationName'] || parsed.automationName) {
+                var aIn = document.getElementById('automationName');
+                if (aIn) aIn.value = parsed['appium:automationName'] || parsed.automationName;
+            }
+            if (parsed['appium:platformVersion'] || parsed.platformVersion) {
+                var pvIn = document.getElementById('platformversion');
+                if (pvIn) pvIn.value = String(parsed['appium:platformVersion'] || parsed.platformVersion);
+            }
+            if (parsed['appium:udid'] || parsed.udid) {
+                var uIn = document.getElementById('udid');
+                if (uIn) uIn.value = parsed['appium:udid'] || parsed.udid;
+            }
+            if (parsed['appium:bundleId'] || parsed.bundleId) {
+                var bIn = document.getElementById('bundleID');
+                if (bIn) bIn.value = parsed['appium:bundleId'] || parsed.bundleId;
+            }
+            if (parsed['appium:appPackage'] || parsed.appPackage) {
+                var apIn = document.getElementById('apppackage');
+                if (apIn) apIn.value = parsed['appium:appPackage'] || parsed.appPackage;
+            }
+            if (parsed['appium:appActivity'] || parsed.appActivity) {
+                var aaIn = document.getElementById('appactivity');
+                if (aaIn) aaIn.value = parsed['appium:appActivity'] || parsed.appActivity;
+            }
+            if (parsed['appium:deviceName'] || parsed.deviceName) {
+                var cdIn = document.getElementById('configDeviceName');
+                if (cdIn) cdIn.value = parsed['appium:deviceName'] || parsed.deviceName;
+            }
+
+            if (editSaveBtn) {
+                editSaveBtn.className = 'vscode-action-btn btn-edit';
+                editSaveBtn.title = 'Edit capabilities JSON';
+                editSaveBtn.innerHTML = '<svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 14.59l4.89-2.13.22-.16 8.25-8.25V2.46L13.23 1zM4.74 12.63l-2.07.9.9-2.07 7.7-7.7 1.17 1.17-7.7 7.7zm8.38-8.38l-1.17-1.17 1.05-1.05 1.17 1.17-1.05 1.05z"/></svg>';
+            }
+
+            if (editorEl) {
+                editorEl.style.display = 'none';
+                editorEl.value = formattedSaved;
+            }
+            if (previewEl) {
+                previewEl.style.display = 'block';
+                if (typeof formatJsonToHtml === 'function') {
+                    previewEl.innerHTML = formatJsonToHtml(formattedSaved);
+                } else {
+                    previewEl.textContent = formattedSaved;
+                }
+            }
+
+            updateConfigJsonGutter(formattedSaved, null);
+            syncConfigGutterScroll();
+
+            if (typeof updateConfigDashboard === 'function') {
+                updateConfigDashboard();
+            }
+
+            if (typeof showCustomToast === 'function') {
+                showCustomToast('Capabilities saved & applied to Appium session', 'success');
+            }
+
+        } catch (err) {
+            var errLine = extractJsonErrorLine(err.message, editorEl.value) || 1;
+            updateConfigJsonGutter(editorEl.value, { line: errLine, message: err.message });
+        }
+    }
+}
+window.handleConfigJsonEditSave = handleConfigJsonEditSave;
+window.enterConfigJsonEditMode = handleConfigJsonEditSave;
+window.saveConfigJson = handleConfigJsonEditSave;
+window.toggleConfigJsonEditMode = handleConfigJsonEditSave;
+
+function resetConfigJson() {
+    hideSuggestWidget();
+    var storageKey = getConfigJsonStorageKey();
+
+    localStorage.removeItem(storageKey);
+    window._activeCustomParsedCaps = null;
+
+    if (typeof updateConfigDashboard === 'function') {
+        updateConfigDashboard(true); // Force auto-regeneration
+    }
+
+    var editorEl = document.getElementById('configJsonEditor');
+    var previewEl = document.getElementById('configJsonPreview');
+    if (editorEl && previewEl) {
+        editorEl.value = previewEl.textContent || '';
+    }
+    updateConfigJsonGutter(editorEl ? editorEl.value : '', null);
+
+    // Provide visual pulse
+    var resetBtn = document.getElementById('configJsonResetBtn');
+    if (resetBtn) {
+        resetBtn.style.transform = 'rotate(-180deg)';
+        setTimeout(function() {
+            if (resetBtn) resetBtn.style.transform = '';
+        }, 300);
+    }
+}
+window.resetConfigJson = resetConfigJson;
+
+function copyConfigJson(btn) {
+    var previewEl = document.getElementById('configJsonPreview');
+    var editorEl = document.getElementById('configJsonEditor');
+    var val = '';
+    if (window._isConfigJsonInEditMode && editorEl) {
+        val = editorEl.value;
+    } else if (previewEl) {
+        val = previewEl.textContent || (editorEl ? editorEl.value : '');
+    }
+    if (val && navigator.clipboard) {
+        navigator.clipboard.writeText(val.trim());
+        var copyBtn = btn || document.getElementById('configJsonCopyBtn');
+        if (copyBtn) {
+            var origSvg = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<svg viewBox="0 0 16 16" width="12" height="12" fill="#22c55e"><path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/></svg>';
+            setTimeout(function() { if (copyBtn) copyBtn.innerHTML = origSvg; }, 1200);
+        }
+    }
+}
+window.copyConfigJson = copyConfigJson;
+
+// ==========================================
+// APPIUM CAPABILITIES INTELLISENSE AUTOCOMPLETE
+// ==========================================
+var APPIUM_CAPABILITY_SUGGESTIONS = [
+    // Cross Platform
+    { key: "platformName", defaultVal: '"Android"', type: "string", platform: "all", desc: "Target OS platform (Android or iOS)" },
+    { key: "appium:automationName", defaultVal: '"UiAutomator2"', type: "string", platform: "all", desc: "Automation engine (UiAutomator2, XCUITest, Espresso)" },
+    { key: "appium:udid", defaultVal: '""', type: "string", platform: "all", desc: "Target device serial / identifier" },
+    { key: "appium:platformVersion", defaultVal: '"14"', type: "string", platform: "all", desc: "OS version of the mobile device" },
+    { key: "appium:deviceName", defaultVal: '"Mobile Device"', type: "string", platform: "all", desc: "Display name of device or emulator" },
+    { key: "appium:app", defaultVal: '"/path/to/app.apk"', type: "string", platform: "all", desc: "Path or URL to application binary (.apk, .ipa, .app)" },
+    { key: "appium:noReset", defaultVal: 'true', type: "boolean", platform: "all", desc: "Do not reset application state/data before session" },
+    { key: "appium:fullReset", defaultVal: 'false', type: "boolean", platform: "all", desc: "Completely uninstall app and clear data on teardown" },
+    { key: "appium:newCommandTimeout", defaultVal: '3600', type: "number", platform: "all", desc: "Timeout in seconds to wait for a new client command" },
+    { key: "appium:autoGrantPermissions", defaultVal: 'true', type: "boolean", platform: "all", desc: "Automatically grant runtime Android/iOS app permissions" },
+    { key: "appium:autoAcceptAlerts", defaultVal: 'true', type: "boolean", platform: "all", desc: "Automatically accept OS dialogs & permission alerts" },
+    { key: "appium:autoDismissAlerts", defaultVal: 'false', type: "boolean", platform: "all", desc: "Automatically dismiss system alerts and dialogs" },
+    { key: "appium:orientation", defaultVal: '"PORTRAIT"', type: "string", platform: "all", desc: "Device orientation (PORTRAIT or LANDSCAPE)" },
+    { key: "appium:clearDeviceLogsOnStart", defaultVal: 'true', type: "boolean", platform: "all", desc: "Clear device logcat/syslog on session start" },
+    { key: "appium:eventTimings", defaultVal: 'true', type: "boolean", platform: "all", desc: "Track detailed timestamp metrics for Appium operations" },
+
+    // Android Specific (Windows & Mac Appium)
+    { key: "appium:appPackage", defaultVal: '"com.example.app"', type: "string", platform: "Android", desc: "Android application package ID" },
+    { key: "appium:appActivity", defaultVal: '"com.example.app.MainActivity"', type: "string", platform: "Android", desc: "Main activity to launch" },
+    { key: "appium:appWaitActivity", defaultVal: '"*"', type: "string", platform: "Android", desc: "Activity name(s) to wait for on startup (wildcards supported)" },
+    { key: "appium:appWaitPackage", defaultVal: '""', type: "string", platform: "Android", desc: "Package name to wait for on startup" },
+    { key: "appium:appWaitDuration", defaultVal: '20000', type: "number", platform: "Android", desc: "Timeout in ms for splash/startup activity" },
+    { key: "appium:chromedriverExecutable", defaultVal: '"/path/to/chromedriver"', type: "string", platform: "Android", desc: "Path to specific ChromeDriver executable for WebView" },
+    { key: "appium:chromedriverAutodownload", defaultVal: 'true', type: "boolean", platform: "Android", desc: "Automatically download matching Chromedriver version" },
+    { key: "appium:systemPort", defaultVal: '8200', type: "number", platform: "Android", desc: "Port for UiAutomator2 server on device" },
+    { key: "appium:adbExecTimeout", defaultVal: '20000', type: "number", platform: "Android", desc: "Timeout in ms for ADB shell commands" },
+    { key: "appium:androidInstallTimeout", defaultVal: '90000', type: "number", platform: "Android", desc: "Timeout in ms for APK installation on device" },
+    { key: "appium:skipServerInstallation", defaultVal: 'false', type: "boolean", platform: "Android", desc: "Skip UiAutomator2 server APK reinstall if present" },
+    { key: "appium:skipDeviceInitialization", defaultVal: 'false', type: "boolean", platform: "Android", desc: "Skip device initialization and settings APK installation" },
+    { key: "appium:ignoreUnimportantViews", defaultVal: 'true', type: "boolean", platform: "Android", desc: "Compress layout hierarchy to accelerate element searches" },
+    { key: "appium:disableWindowAnimation", defaultVal: 'true', type: "boolean", platform: "Android", desc: "Disable OS window animations for stable element lookups" },
+    { key: "appium:nativeWebScreenshot", defaultVal: 'true', type: "boolean", platform: "Android", desc: "Capture screenshot using native pipeline instead of Chrome" },
+    { key: "appium:ensureWebviewsHavePages", defaultVal: 'true', type: "boolean", platform: "Android", desc: "Ensure webview context has pages ready before connecting" },
+    { key: "appium:uiautomator2ServerInstallTimeout", defaultVal: '40000', type: "number", platform: "Android", desc: "Timeout in ms to install UiAutomator2 server" },
+    { key: "appium:enforceAppInstall", defaultVal: 'false', type: "boolean", platform: "Android", desc: "Always re-install the app even if already present" },
+
+    // iOS Specific (Mac & Windows Appium)
+    { key: "appium:bundleId", defaultVal: '"com.apple.mobilecal"', type: "string", platform: "iOS", desc: "Bundle identifier of the iOS app under test" },
+    { key: "appium:wdaLocalPort", defaultVal: '8100', type: "number", platform: "iOS", desc: "Local port for WebDriverAgent communication" },
+    { key: "appium:wdaLaunchTimeout", defaultVal: '60000', type: "number", platform: "iOS", desc: "Timeout in ms for WebDriverAgent to launch" },
+    { key: "appium:wdaConnectionTimeout", defaultVal: '60000', type: "number", platform: "iOS", desc: "Timeout in ms for connecting to WDA server" },
+    { key: "appium:useNewWDA", defaultVal: 'false', type: "boolean", platform: "iOS", desc: "Rebuild and reinstall WebDriverAgent on session start" },
+    { key: "appium:usePrebuiltWDA", defaultVal: 'true', type: "boolean", platform: "iOS", desc: "Use pre-built WebDriverAgentRunner application" },
+    { key: "appium:showXcodeLog", defaultVal: 'false', type: "boolean", platform: "iOS", desc: "Stream Xcodebuild output logs into Appium log" },
+    { key: "appium:clearSystemFiles", defaultVal: 'true', type: "boolean", platform: "iOS", desc: "Clear derived data and temporary simulator files" },
+    { key: "appium:xcodeOrgId", defaultVal: '"XXXXXXXXXX"', type: "string", platform: "iOS", desc: "Apple 10-character Team ID for code signing" },
+    { key: "appium:xcodeSigningId", defaultVal: '"iPhone Developer"', type: "string", platform: "iOS", desc: "Code signing identity for physical iOS devices" },
+    { key: "appium:updatedWDABundleId", defaultVal: '"com.example.WebDriverAgentRunner"', type: "string", platform: "iOS", desc: "Custom bundle ID for WebDriverAgentRunner signing" },
+    { key: "appium:locationServicesEnabled", defaultVal: 'true', type: "boolean", platform: "iOS", desc: "Enable location services in iOS simulator" },
+    { key: "appium:locationServicesAuthorized", defaultVal: 'true', type: "boolean", platform: "iOS", desc: "Pre-authorize location services for test app" },
+    { key: "appium:includeSafariInWebviews", defaultVal: 'true', type: "boolean", platform: "iOS", desc: "Detect Safari webviews when inspecting hybrid apps" },
+    { key: "appium:webviewConnectTimeout", defaultVal: '20000', type: "number", platform: "iOS", desc: "Timeout in ms for connecting to iOS webview" },
+    { key: "appium:simpleIsVisibleCheck", defaultVal: 'true', type: "boolean", platform: "iOS", desc: "Use fast visibility check in WebDriverAgent" },
+    { key: "appium:maxTypingFrequency", defaultVal: '60', type: "number", platform: "iOS", desc: "Max keystrokes per minute for simulated keyboard typing" },
+    { key: "appium:simulatorStartupTimeout", defaultVal: '120000', type: "number", platform: "iOS", desc: "Timeout in ms for iOS simulator to boot completely" }
+];
+
+var _activeSuggestions = [];
+var _selectedSuggestionIdx = 0;
+
+function hideSuggestWidget() {
+    var widget = document.getElementById('vscodeSuggestWidget');
+    if (widget) {
+        widget.classList.remove('is-visible');
+        widget.style.display = 'none';
+    }
+    _activeSuggestions = [];
+    _selectedSuggestionIdx = 0;
+}
+
+function renderSuggestions(matches, query) {
+    var widget = document.getElementById('vscodeSuggestWidget');
+    var listEl = document.getElementById('vscodeSuggestList');
+    if (!widget || !listEl) return;
+
+    if (!matches || matches.length === 0) {
+        hideSuggestWidget();
+        return;
+    }
+
+    _activeSuggestions = matches;
+    _selectedSuggestionIdx = 0;
+
+    var propIconSvg = '<svg viewBox="0 0 16 16" width="12" height="12" fill="#9cdcfe"><path d="M14 4.5l-6-3.5-6 3.5v7l6 3.5 6-3.5v-7zm-6-2.3l4.8 2.8L8 7.8 3.2 5 8 2.2zM2.8 5.8l4.7 2.7v5.6L2.8 11.4V5.8zm5.7 8.3V8.5l4.7-2.7v5.6l-4.7 2.7z"/></svg>';
+
+    var html = '';
+    matches.forEach(function(item, idx) {
+        var isSel = (idx === 0) ? ' is-selected' : '';
+        var keyDisplay = item.key;
+        if (query) {
+            var qIdx = keyDisplay.toLowerCase().indexOf(query.toLowerCase());
+            if (qIdx >= 0) {
+                keyDisplay = keyDisplay.substring(0, qIdx) + '<span class="match-highlight">' + keyDisplay.substring(qIdx, qIdx + query.length) + '</span>' + keyDisplay.substring(qIdx + query.length);
+            }
+        }
+        var platformBadge = item.platform === 'all' ? 'All' : item.platform;
+        html += '<div class="vscode-suggest-item' + isSel + '" data-idx="' + idx + '">' +
+            '<div class="suggest-item-main">' +
+                '<span class="suggest-item-icon">' + propIconSvg + '</span>' +
+                '<span class="suggest-item-label">' + keyDisplay + '</span>' +
+            '</div>' +
+            '<span class="suggest-item-badge">' + platformBadge + '</span>' +
+        '</div>';
+    });
+
+    listEl.innerHTML = html;
+
+    listEl.querySelectorAll('.vscode-suggest-item').forEach(function(row) {
+        row.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            var idx = parseInt(row.getAttribute('data-idx'), 10);
+            acceptSuggestion(idx);
+        });
+        row.addEventListener('mouseenter', function() {
+            var idx = parseInt(row.getAttribute('data-idx'), 10);
+            selectSuggestionItem(idx);
+        });
+    });
+
+    selectSuggestionItem(0);
+
+    var editor = document.getElementById('configJsonEditor');
+    if (editor) {
+        var textBeforeCaret = editor.value.substring(0, editor.selectionStart);
+        var currentLineIdx = textBeforeCaret.split('\n').length - 1;
+        var topPx = (currentLineIdx + 1) * 18 + 8 - editor.scrollTop;
+        if (topPx + 140 > 166) {
+            topPx = Math.max(0, currentLineIdx * 18 - 140 + 8 - editor.scrollTop);
+        }
+        widget.style.top = topPx + 'px';
+        widget.style.left = '36px';
+    }
+
+    widget.classList.add('is-visible');
+    widget.style.display = 'flex';
+}
+
+function selectSuggestionItem(idx) {
+    _selectedSuggestionIdx = idx;
+    var listEl = document.getElementById('vscodeSuggestList');
+    var typeEl = document.getElementById('vscodeSuggestDetailType');
+    var descEl = document.getElementById('vscodeSuggestDetailDesc');
+    if (!listEl) return;
+
+    var rows = listEl.querySelectorAll('.vscode-suggest-item');
+    rows.forEach(function(r, i) {
+        r.classList.toggle('is-selected', i === idx);
+        if (i === idx) {
+            r.scrollIntoView({ block: 'nearest' });
+        }
+    });
+
+    var item = _activeSuggestions[idx];
+    if (item) {
+        if (typeEl) typeEl.textContent = '(' + item.type + ')';
+        if (descEl) descEl.textContent = item.desc || item.key;
+    }
+}
+
+function acceptSuggestion(idx) {
+    var item = _activeSuggestions[idx !== undefined ? idx : _selectedSuggestionIdx];
+    if (!item) {
+        hideSuggestWidget();
+        return;
+    }
+
+    var editor = document.getElementById('configJsonEditor');
+    if (!editor) return;
+
+    var fullText = editor.value;
+    var caretPos = editor.selectionStart;
+
+    var lines = fullText.split('\n');
+    var upToCaret = fullText.substring(0, caretPos);
+    var lineIdx = upToCaret.split('\n').length - 1;
+    var currentLine = lines[lineIdx] || '';
+
+    var indentMatch = currentLine.match(/^\s*/);
+    var indent = (indentMatch && indentMatch[0]) ? indentMatch[0] : '  ';
+    if (!indent) indent = '  ';
+
+    var snippet = indent + '"' + item.key + '": ' + item.defaultVal + ',';
+
+    lines[lineIdx] = snippet;
+    editor.value = lines.join('\n');
+
+    var newCaretPos = 0;
+    for (var i = 0; i < lineIdx; i++) {
+        newCaretPos += lines[i].length + 1;
+    }
+    newCaretPos += snippet.length - 1;
+    editor.selectionStart = editor.selectionEnd = newCaretPos;
+
+    hideSuggestWidget();
+    validateAndSyncConfigJson(true);
+    if (typeof syncEditorWithHighlight === 'function') {
+        syncEditorWithHighlight();
+    }
+}
+
+function checkAndTriggerSuggestions() {
+    var editor = document.getElementById('configJsonEditor');
+    if (!editor || !window._isConfigJsonInEditMode) {
+        hideSuggestWidget();
+        return;
+    }
+
+    var caretPos = editor.selectionStart;
+    var fullText = editor.value;
+    var lineText = fullText.substring(0, caretPos).split('\n').pop();
+
+    var match = lineText.match(/["']?([a-zA-Z0-9_\-:]+)$/);
+    var query = (match && match[1]) ? match[1] : '';
+
+    if (!query || query.trim().length === 0) {
+        hideSuggestWidget();
+        return;
+    }
+
+    var activePlatform = getActivePlatformForCaps();
+    var cleanQ = query.toLowerCase().replace(/^(appium:|appium|app|plat)/, '');
+
+    var matches = APPIUM_CAPABILITY_SUGGESTIONS.filter(function(item) {
+        var k = item.key.toLowerCase();
+        var q = query.toLowerCase();
+        return k.includes(q) || (cleanQ && cleanQ.length >= 2 && k.includes(cleanQ));
+    });
+
+    matches.sort(function(a, b) {
+        var aP = (a.platform === activePlatform || a.platform === 'all') ? 0 : 1;
+        var bP = (b.platform === activePlatform || b.platform === 'all') ? 0 : 1;
+        if (aP !== bP) return aP - bP;
+        return a.key.localeCompare(b.key);
+    });
+
+    if (matches.length > 0) {
+        renderSuggestions(matches, query);
+    } else {
+        hideSuggestWidget();
+    }
+}
+
+function setupConfigJsonEditorListeners() {
+    var editor = document.getElementById('configJsonEditor');
+    var preview = document.getElementById('configJsonPreview');
+    var gutter = document.getElementById('configJsonGutter');
+
+    function syncEditorWithHighlight() {
+        if (!editor || !preview) return;
+        var val = editor.value || '';
+        var htmlText = val.endsWith('\n') ? (val + ' ') : val;
+        if (typeof formatJsonToHtml === 'function') {
+            preview.innerHTML = formatJsonToHtml(htmlText);
+        }
+        preview.scrollTop = editor.scrollTop;
+        preview.scrollLeft = editor.scrollLeft;
+        syncConfigGutterScroll();
+    }
+    window.syncEditorWithHighlight = syncEditorWithHighlight;
+
+    if (!window._suggestGlobalClickBound) {
+        window._suggestGlobalClickBound = true;
+        document.addEventListener('mousedown', function(e) {
+            var widget = document.getElementById('vscodeSuggestWidget');
+            if (widget && (widget.classList.contains('is-visible') || widget.style.display !== 'none')) {
+                if (!widget.contains(e.target) && e.target !== document.getElementById('configJsonEditor')) {
+                    hideSuggestWidget();
+                }
+            }
+        });
+    }
+
+    if (editor && !editor._boundEvents) {
+        editor._boundEvents = true;
+
+        editor.addEventListener('input', function() {
+            validateAndSyncConfigJson(true);
+            syncEditorWithHighlight();
+            checkAndTriggerSuggestions();
+        });
+
+        editor.addEventListener('paste', function() {
+            setTimeout(function() {
+                if (editor) {
+                    validateAndSyncConfigJson(true);
+                    syncEditorWithHighlight();
+                    checkAndTriggerSuggestions();
+                }
+            }, 10);
+        });
+
+        editor.addEventListener('scroll', function() {
+            if (preview) {
+                preview.scrollTop = editor.scrollTop;
+                preview.scrollLeft = editor.scrollLeft;
+            }
+            syncConfigGutterScroll();
+            hideSuggestWidget();
+        });
+
+        editor.addEventListener('click', function() {
+            hideSuggestWidget();
+        });
+
+        editor.addEventListener('blur', function() {
+            setTimeout(hideSuggestWidget, 250);
+        });
+
+        // Tab completion & Suggestion Keyboard Navigation
+        editor.addEventListener('keydown', function(e) {
+            var widget = document.getElementById('vscodeSuggestWidget');
+            var isSuggestOpen = widget && widget.classList.contains('is-visible') && _activeSuggestions.length > 0;
+
+            if (isSuggestOpen) {
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    var nextIdx = (_selectedSuggestionIdx + 1) % _activeSuggestions.length;
+                    selectSuggestionItem(nextIdx);
+                    return;
+                }
+                if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    var prevIdx = (_selectedSuggestionIdx - 1 + _activeSuggestions.length) % _activeSuggestions.length;
+                    selectSuggestionItem(prevIdx);
+                    return;
+                }
+                if (e.key === 'Tab' || e.key === 'Enter') {
+                    e.preventDefault();
+                    acceptSuggestion(_selectedSuggestionIdx);
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    hideSuggestWidget();
+                    return;
+                }
+            }
+
+            // Normal Tab indentation when suggest box is not open
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                var start = this.selectionStart;
+                var end = this.selectionEnd;
+                var spaces = '  ';
+                this.value = this.value.substring(0, start) + spaces + this.value.substring(end);
+                this.selectionStart = this.selectionEnd = start + spaces.length;
+                validateAndSyncConfigJson(true);
+                syncEditorWithHighlight();
+            }
+        });
+    }
+
+    if (preview && !preview._boundEvents) {
+        preview._boundEvents = true;
+        preview.addEventListener('scroll', function() {
+            if (editor) {
+                editor.scrollTop = preview.scrollTop;
+                editor.scrollLeft = preview.scrollLeft;
+            }
+            syncConfigGutterScroll();
+        });
+    }
+
+    if (gutter && !gutter._boundEvents) {
+        gutter._boundEvents = true;
+        gutter.addEventListener('wheel', function(e) {
+            var activeTarget = (window._isConfigJsonInEditMode && editor) ? editor : preview;
+            if (activeTarget) {
+                activeTarget.scrollTop += e.deltaY;
+                syncEditorWithHighlight();
+            }
+            e.preventDefault();
+        }, { passive: false });
+    }
+}
+
+window.toggleConfigJsonEditMode = toggleConfigJsonEditMode;
+window.copyConfigJson = copyConfigJson;
+window.setupConfigJsonEditorListeners = setupConfigJsonEditorListeners;
+window.syncConfigGutterScroll = syncConfigGutterScroll;
+window.hideSuggestWidget = hideSuggestWidget;
+
+// Initialize editor listeners on load
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', setupConfigJsonEditorListeners);
+} else {
+    setupConfigJsonEditorListeners();
+}
 
 // Bind live input listeners to all configuration fields so UI and JSON stay in sync
 ['udid', 'apppackage', 'appactivity', 'bundleID', 'platformversion', 'automationName', 'appiumurl'].forEach(function(id) {
