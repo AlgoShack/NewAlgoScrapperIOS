@@ -5213,7 +5213,7 @@ html.platform-win .split-div2 #imageToolbarmain {
 /* 2-COLUMN DASHBOARD GRID */
 .config-dashboard-grid {
   display: grid;
-  grid-template-columns: 1.1fr 0.9fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
   align-items: stretch;
 }
@@ -5624,9 +5624,8 @@ html.platform-win .split-div2 #imageToolbarmain {
   min-width: 0 !important;
   box-sizing: border-box !important;
   flex: 1 !important;
-  height: 200px !important;
-  max-height: 200px !important;
-  min-height: 200px !important;
+  height: 100% !important;
+  min-height: 250px !important;
 }
 
 .vscode-header {
@@ -5695,22 +5694,11 @@ html.platform-win .split-div2 #imageToolbarmain {
   margin-left: 4px !important;
 }
 
-.vscode-header-right {
-  display: flex !important;
-  align-items: center !important;
-  gap: 8px !important;
-  flex-shrink: 0 !important;
-}
-
 .vscode-actions {
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
   flex-shrink: 0 !important;
-}
-
-.vscode-win-controls {
-  display: none !important;
 }
 
 /* =============================================================================
@@ -5723,7 +5711,7 @@ html.platform-win .split-div2 #imageToolbarmain {
 
 .platform-win .vscode-header {
   height: 30px !important;
-  padding: 0 0 0 0 !important;
+  padding: 0 10px 0 0 !important;
   background: #252526 !important;
 }
 
@@ -5741,39 +5729,8 @@ html.platform-win .split-div2 #imageToolbarmain {
   font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
 
-.platform-win .vscode-header-right {
-  display: inline-flex !important;
-  align-items: center !important;
-  gap: 4px !important;
-  height: 30px !important;
-}
-
-.platform-win .vscode-win-controls {
-  display: inline-flex !important;
-  align-items: center !important;
-  height: 30px !important;
-  margin-left: 4px !important;
-}
-
-.platform-win .win-btn {
-  width: 32px !important;
-  height: 30px !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  color: #999999 !important;
-  cursor: default !important;
-  transition: background 0.15s, color 0.15s !important;
-}
-
-.platform-win .win-btn:hover {
-  background: #383838 !important;
-  color: #ffffff !important;
-}
-
-.platform-win .win-btn.win-close:hover {
-  background: #e81123 !important;
-  color: #ffffff !important;
+.platform-win .vscode-actions {
+  padding-right: 2px !important;
 }
 
 .vscode-action-group {
@@ -5921,9 +5878,8 @@ html.platform-win .split-div2 #imageToolbarmain {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace !important;
   font-size: 11px !important;
   flex: 1 !important;
-  height: 166px !important;
-  min-height: 166px !important;
-  max-height: 166px !important;
+  height: 100% !important;
+  min-height: 210px !important;
   width: 100% !important;
   max-width: 100% !important;
   min-width: 0 !important;

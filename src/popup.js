@@ -16712,18 +16712,25 @@ function updatePlatformUI() {
 function updateConfigDashboard(forceAuto) {
     var isIos = false;
     var pSelect = document.getElementById("platformname");
-    if (pSelect && pSelect.value === "IOS") isIos = true;
-    if (typeof getSelectedPlatform === 'function' && getSelectedPlatform() === 'IOS') isIos = true;
+    if (pSelect && (pSelect.value === "IOS" || pSelect.value === "iOS")) isIos = true;
+    else if (typeof getSelectedPlatform === 'function' && getSelectedPlatform() === 'IOS') isIos = true;
 
     var storageKey = 'algo_custom_appium_json_' + (isIos ? 'IOS' : 'Android');
     var storedUserJson = localStorage.getItem(storageKey);
     var customParsed = null;
     if (!forceAuto && storedUserJson) {
         try {
-            customParsed = JSON.parse(storedUserJson);
-            if (customParsed && typeof customParsed === 'object' && !Array.isArray(customParsed)) {
-                if (customParsed.platformName) {
-                    isIos = String(customParsed.platformName).toLowerCase().includes('ios');
+            var maybeParsed = JSON.parse(storedUserJson);
+            if (maybeParsed && typeof maybeParsed === 'object' && !Array.isArray(maybeParsed)) {
+                var pName = String(maybeParsed.platformName || '').toLowerCase();
+                var hasBundle = !!(maybeParsed['appium:bundleId'] || maybeParsed.bundleId);
+                var hasPkg = !!(maybeParsed['appium:appPackage'] || maybeParsed.appPackage);
+                if (isIos && (pName === 'android' || hasPkg)) {
+                    // Mismatched
+                } else if (!isIos && (pName === 'ios' || pName.includes('ios') || hasBundle)) {
+                    // Mismatched - stale iOS caps in Android storage key
+                } else {
+                    customParsed = maybeParsed;
                 }
             }
         } catch (_) {}
@@ -16766,15 +16773,23 @@ function updateConfigDashboard(forceAuto) {
         if (customParsed['appium:udid'] || customParsed['udid']) {
             udidVal = String(customParsed['appium:udid'] || customParsed['udid']);
         }
-        if (customParsed['appium:bundleId'] || customParsed['bundleId']) {
+        if (isIos && (customParsed['appium:bundleId'] || customParsed['bundleId'])) {
             bndlVal = String(customParsed['appium:bundleId'] || customParsed['bundleId']);
         }
-        if (customParsed['appium:appPackage'] || customParsed['appPackage']) {
-            pkgVal = String(customParsed['appium:appPackage'] || customParsed['appPackage']);
+        if (!isIos) {
+            if (customParsed['appium:appPackage'] || customParsed['appPackage']) {
+                pkgVal = String(customParsed['appium:appPackage'] || customParsed['appPackage']);
+            }
+            if (customParsed['appium:appActivity'] || customParsed['appActivity']) {
+                actVal = String(customParsed['appium:appActivity'] || customParsed['appActivity']);
+            }
         }
-        if (customParsed['appium:appActivity'] || customParsed['appActivity']) {
-            actVal = String(customParsed['appium:appActivity'] || customParsed['appActivity']);
-        }
+    }
+
+    if (isIos) {
+        if (!engineText || /uiautomator/i.test(engineText)) engineText = 'XCUITest';
+    } else {
+        if (!engineText || /xcuitest/i.test(engineText)) engineText = 'UiAutomator2';
     }
 
     var confDevNameInput = document.getElementById('configDeviceName');
@@ -16797,11 +16812,11 @@ function updateConfigDashboard(forceAuto) {
     var inUdid = document.getElementById('udid');
     if (inUdid && udidVal) inUdid.value = udidVal;
     var inPkg = document.getElementById('apppackage');
-    if (inPkg && pkgVal) inPkg.value = pkgVal;
+    if (inPkg && !isIos && pkgVal) inPkg.value = pkgVal;
     var inAct = document.getElementById('appactivity');
-    if (inAct && actVal) inAct.value = actVal;
+    if (inAct && !isIos && actVal) inAct.value = actVal;
     var inBndl = document.getElementById('bundleID');
-    if (inBndl && bndlVal) inBndl.value = bndlVal;
+    if (inBndl && isIos && bndlVal) inBndl.value = bndlVal;
     var inPv = document.getElementById('platformversion');
     if (inPv && osVersion) inPv.value = osVersion;
     var inAuto = document.getElementById('automationName');
@@ -16850,18 +16865,20 @@ function updateConfigDashboard(forceAuto) {
     var configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
         ? getGlobalLastConfiguredProject(platformShort)
         : null;
-    var configuredKey = window.activeConfiguredProjectKey || (configuredInfo ? configuredInfo.key : null);
+    var configuredKey = configuredInfo ? configuredInfo.key : null;
     var linkedProject = configuredKey ? store[configuredKey] : (configuredInfo ? configuredInfo.project : null);
 
-    if (!linkedProject && configuredKey && typeof findProjectKeyInStore === 'function') {
-        var foundInfo = findProjectKeyInStore(store, configuredKey);
-        if (foundInfo && foundInfo.project) {
-            linkedProject = foundInfo.project;
-            configuredKey = foundInfo.key;
+    if (linkedProject && configuredKey) {
+        var pIsIos = String(linkedProject.platform || '').toLowerCase().includes('ios');
+        if (pIsIos !== isIos) {
+            linkedProject = null;
+            configuredKey = null;
         }
     }
     if (linkedProject && configuredKey) {
         window.activeConfiguredProjectKey = configuredKey;
+    } else {
+        window.activeConfiguredProjectKey = null;
     }
 
     var mProject = document.getElementById("configMetricProject");
@@ -16956,11 +16973,9 @@ function updateConfigDashboard(forceAuto) {
     var editIcon = document.getElementById("configJsonEditIcon");
 
     var platform = isIos ? 'iOS' : 'Android';
-    var storageKey = 'algo_custom_appium_json_' + (isIos ? 'IOS' : 'Android');
-    var storedUserJson = localStorage.getItem(storageKey);
 
     var rawJson = "";
-    if (forceAuto || !storedUserJson) {
+    if (forceAuto || !customParsed) {
         var caps;
         if (!udidVal && !pkgVal && !bndlVal && !currentAppName) {
             caps = {
@@ -16992,7 +17007,7 @@ function updateConfigDashboard(forceAuto) {
         }
         rawJson = JSON.stringify(caps, null, 2);
     } else {
-        rawJson = storedUserJson;
+        rawJson = JSON.stringify(customParsed, null, 2);
     }
 
     var editSaveBtn = document.getElementById('configJsonEditSaveBtn');
@@ -17848,147 +17863,152 @@ function getDeviceDimensions() {
         return;
     }
     platformSelect.addEventListener('change', async function() {
-    const platformSelect = this;
-    const nextPlatform = platformSelect.value;
-    const previousPlatform = (typeof lastSelectedPlatform !== 'undefined' && lastSelectedPlatform)
-        ? lastSelectedPlatform
-        : nextPlatform;
+        const platformSelect = this;
+        const nextPlatform = platformSelect.value;
+        const previousPlatform = (typeof lastSelectedPlatform !== 'undefined' && lastSelectedPlatform)
+            ? lastSelectedPlatform
+            : nextPlatform;
 
-    // Programmatic switch from device load/selection — skip device gate
-    if (typeof applyingPlatformFromDevice !== 'undefined' && applyingPlatformFromDevice) {
-        lastSelectedPlatform = nextPlatform;
-        updatePlatformUI();
-        if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
-            lockSecondaryLaunchFields();
-        }
-        return;
-    }
-
-    if (platformSwitchInProgress) {
-        platformSelect.value = previousPlatform;
-        return;
-    }
-
-    // Same platform re-selected
-    if (normalizePlatformName(nextPlatform) === normalizePlatformName(previousPlatform)) {
-        lastSelectedPlatform = nextPlatform;
-        updatePlatformUI();
-        if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
-            lockSecondaryLaunchFields();
-        }
-        return;
-    }
-
-    // Windows packages have no XCUITest — block iOS platform selection
-    if (process.platform === 'win32' && normalizePlatformName(nextPlatform) === 'IOS') {
-        platformSelect.value = previousPlatform;
-        showStructuredAlert(
-            "iOS Not Available",
-            {
-                lead: "This Windows build scrapes Android only.",
-                hint: "Use the macOS app for iOS Simulator or iPhone."
-            },
-            "warning"
-        );
-        return;
-    }
-
-    // Do NOT switch UI yet — revert dropdown, show blur loader, then check
-    platformSwitchInProgress = true;
-    platformSelect.value = previousPlatform;
-    platformSelect.disabled = true;
-    showPlatformSwitchLoader(
-        normalizePlatformName(nextPlatform) === 'IOS'
-            ? 'Checking for iOS Simulator / iPhone...'
-            : 'Checking for Android emulator / device...'
-    );
-
-    try {
-        const allDevices = await refreshConnectedDevicesList();
-        const matching = devicesForPlatform(nextPlatform, allDevices);
-
-        if (!matching.length) {
-            lastSelectedPlatform = previousPlatform;
+        // Programmatic switch from device load/selection — skip device gate
+        if (typeof applyingPlatformFromDevice !== 'undefined' && applyingPlatformFromDevice) {
+            lastSelectedPlatform = nextPlatform;
             updatePlatformUI();
             if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
                 lockSecondaryLaunchFields();
             }
+            if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
+            return;
+        }
 
-            const isTargetIos = normalizePlatformName(nextPlatform) === 'IOS';
-            const toLabel = isTargetIos ? 'iOS' : 'Android';
-            const deviceHint = isTargetIos
-                ? 'Please open an iOS Simulator or connect an iPhone, then try again.'
-                : 'Please launch an Android emulator or connect a physical device, then try again.';
+        if (platformSwitchInProgress) {
+            platformSelect.value = previousPlatform;
+            return;
+        }
 
-            hidePlatformSwitchLoader();
+        // Same platform re-selected
+        if (normalizePlatformName(nextPlatform) === normalizePlatformName(previousPlatform)) {
+            lastSelectedPlatform = nextPlatform;
+            updatePlatformUI();
+            if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
+                lockSecondaryLaunchFields();
+            }
+            if (typeof updateConfigDashboard === 'function') updateConfigDashboard();
+            return;
+        }
+
+        // Windows packages have no XCUITest — block iOS platform selection
+        if (process.platform === 'win32' && normalizePlatformName(nextPlatform) === 'IOS') {
+            platformSelect.value = previousPlatform;
             showStructuredAlert(
-                "No Device Connected",
+                "iOS Not Available",
                 {
-                    lead: `No active <b>${toLabel}</b> emulator or device was detected.`,
-                    hint: deviceHint
+                    lead: "This Windows build scrapes Android only.",
+                    hint: "Use the macOS app for iOS Simulator or iPhone."
                 },
                 "warning"
             );
             return;
         }
 
-        // Check passed — now apply the platform switch
-        applyingPlatformFromDevice = true;
-        platformSelect.value = nextPlatform;
-        lastSelectedPlatform = nextPlatform;
-        applyingPlatformFromDevice = false;
-
-        const selected = populateDeviceDropdown(matching);
-        updatePlatformUI();
-        if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
-            lockSecondaryLaunchFields();
-        }
-
-        if (selected) {
-            if (normalizePlatformName(nextPlatform) === 'Android') {
-                try {
-                    const ver = await ipcRenderer.invoke("get-android-version", selected.id);
-                    if (ver) {
-                        const pv = document.getElementById('platformversion');
-                        if (pv) {
-                            pv.value = ver;
-                            pv.dataset.userEdited = 'true';
-                        }
-                    }
-                } catch (_) {}
-            }
-            setAppDropdownPlaceholder('Loading apps...');
-            ipcRenderer.send("get-installed-apps", selected);
-        }
-    } catch (err) {
-        console.error("Platform switch device check failed:", err);
+        // Validate that target platform has connected devices before switching
+        platformSwitchInProgress = true;
         platformSelect.value = previousPlatform;
-        lastSelectedPlatform = previousPlatform;
-        updatePlatformUI();
-        showStructuredAlert(
-            "Device Check Failed",
-            {
-                lead: "Could not verify connected devices.",
-                hint: "Staying on the previous platform. Try again in a moment."
-            },
-            "warning"
+        platformSelect.disabled = true;
+        showPlatformSwitchLoader(
+            normalizePlatformName(nextPlatform) === 'IOS'
+                ? 'Checking for iOS Simulator / iPhone...'
+                : 'Checking for Android emulator / device...'
         );
-    } finally {
-        hidePlatformSwitchLoader();
-        platformSwitchInProgress = false;
-        // Keep platform editable when there is no active session
-        if (!driver) {
-            platformSelect.disabled = false;
+
+        try {
+            const allDevices = await refreshConnectedDevicesList();
+            const matching = devicesForPlatform(nextPlatform, allDevices);
+
+            if (!matching.length) {
+                lastSelectedPlatform = previousPlatform;
+                updatePlatformUI();
+                if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
+                    lockSecondaryLaunchFields();
+                }
+
+                const isTargetIos = normalizePlatformName(nextPlatform) === 'IOS';
+                const toLabel = isTargetIos ? 'iOS' : 'Android';
+                const deviceHint = isTargetIos
+                    ? 'Please open an iOS Simulator or connect an iPhone, then try again.'
+                    : 'Please launch an Android emulator or connect a physical device, then try again.';
+
+                hidePlatformSwitchLoader();
+                showStructuredAlert(
+                    "No Device Connected",
+                    {
+                        lead: `No active <b>${toLabel}</b> emulator or device was detected.`,
+                        hint: deviceHint
+                    },
+                    "warning"
+                );
+                return;
+            }
+
+            // Validation passed — apply the platform switch
+            applyingPlatformFromDevice = true;
+            platformSelect.value = nextPlatform;
+            lastSelectedPlatform = nextPlatform;
+            applyingPlatformFromDevice = false;
+
+            const selected = populateDeviceDropdown(matching);
+            updatePlatformUI();
             if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
-                ["platformname", "appname", "devicename"].forEach((id) => {
-                    const el = document.getElementById(id);
-                    if (el) el.disabled = false;
-                });
                 lockSecondaryLaunchFields();
             }
+
+            if (selected) {
+                if (normalizePlatformName(nextPlatform) === 'Android') {
+                    try {
+                        const ver = await ipcRenderer.invoke("get-android-version", selected.id);
+                        if (ver) {
+                            const pv = document.getElementById('platformversion');
+                            if (pv) {
+                                pv.value = ver;
+                                pv.dataset.userEdited = 'true';
+                            }
+                        }
+                    } catch (_) {}
+                }
+                setAppDropdownPlaceholder('Loading apps...');
+                ipcRenderer.send("get-installed-apps", selected);
+            }
+
+            if (typeof updateConfigDashboard === 'function') {
+                updateConfigDashboard();
+            }
+        } catch (err) {
+            console.error("Platform switch device check failed:", err);
+            platformSelect.value = previousPlatform;
+            lastSelectedPlatform = previousPlatform;
+            updatePlatformUI();
+            showStructuredAlert(
+                "Device Check Failed",
+                {
+                    lead: "Could not verify connected devices.",
+                    hint: "Staying on the previous platform. Try again in a moment."
+                },
+                "warning"
+            );
+        } finally {
+            hidePlatformSwitchLoader();
+            platformSwitchInProgress = false;
+            if (!driver) {
+                platformSelect.disabled = false;
+                if (typeof resetFormLockActive !== 'undefined' && resetFormLockActive) {
+                    ["platformname", "appname", "devicename"].forEach((id) => {
+                        const el = document.getElementById(id);
+                        if (el) el.disabled = false;
+                    });
+                    lockSecondaryLaunchFields();
+                }
+            }
         }
-    }
-});
+    });
 })();
 
 const platformVersionField = document.getElementById('platformversion');

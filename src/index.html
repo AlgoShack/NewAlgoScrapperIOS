@@ -276,23 +276,16 @@
                                 <svg viewBox="0 0 24 24" class="vscode-json-icon"><path fill="#fbc02d" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h2v6H7v2h6v-2h-2V9h2V7H7z"/></svg>
                                 <span>capabilities.json</span>
                             </div>
-                            <div class="vscode-header-right">
-                                <div class="vscode-actions" id="configVscodeActions">
-                                    <button type="button" class="vscode-action-btn btn-edit" id="configJsonEditSaveBtn" onclick="handleConfigJsonEditSave()" title="Edit capabilities JSON">
-                                        <svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 14.59l4.89-2.13.22-.16 8.25-8.25V2.46L13.23 1zM4.74 12.63l-2.07.9.9-2.07 7.7-7.7 1.17 1.17-7.7 7.7zm8.38-8.38l-1.17-1.17 1.05-1.05 1.17 1.17-1.05 1.05z"/></svg>
-                                    </button>
-                                    <button type="button" class="vscode-action-btn btn-reset" id="configJsonResetBtn" onclick="resetConfigJson()" title="Reset to auto-detected default capabilities">
-                                        <svg id="configJsonResetIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
-                                    </button>
-                                    <button type="button" class="vscode-action-btn btn-copy" id="configJsonCopyBtn" onclick="copyConfigJson(this)" title="Copy JSON to clipboard">
-                                        <svg id="configJsonCopyIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M4 4v9h9V4H4zm1 1h7v7H5V5z"/><path d="M2 2v9h1V3h8V2H2z"/></svg>
-                                    </button>
-                                </div>
-                                <div class="vscode-win-controls" id="configVscodeWinControls">
-                                    <span class="win-btn win-min" title="Minimize"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></span>
-                                    <span class="win-btn win-max" title="Maximize"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M0 0v10h10V0H0zm9 9H1V1h8v8z" fill="currentColor"/></svg></span>
-                                    <span class="win-btn win-close" title="Close"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M1 0L0 1l4 4-4 4 1 1 4-4 4 4 1-1-4-4 4-4-1-1-4 4-4-4z" fill="currentColor"/></svg></span>
-                                </div>
+                            <div class="vscode-actions" id="configVscodeActions">
+                                <button type="button" class="vscode-action-btn btn-edit" id="configJsonEditSaveBtn" onclick="handleConfigJsonEditSave()" title="Edit capabilities JSON">
+                                    <svg id="configJsonEditSaveIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M13.23 1h-1.46L3.52 9.25l-.16.22L1 14.59l4.89-2.13.22-.16 8.25-8.25V2.46L13.23 1zM4.74 12.63l-2.07.9.9-2.07 7.7-7.7 1.17 1.17-7.7 7.7zm8.38-8.38l-1.17-1.17 1.05-1.05 1.17 1.17-1.05 1.05z"/></svg>
+                                </button>
+                                <button type="button" class="vscode-action-btn btn-reset" id="configJsonResetBtn" onclick="resetConfigJson()" title="Reset to auto-detected default capabilities">
+                                    <svg id="configJsonResetIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/></svg>
+                                </button>
+                                <button type="button" class="vscode-action-btn btn-copy" id="configJsonCopyBtn" onclick="copyConfigJson(this)" title="Copy JSON to clipboard">
+                                    <svg id="configJsonCopyIcon" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M4 4v9h9V4H4zm1 1h7v7H5V5z"/><path d="M2 2v9h1V3h8V2H2z"/></svg>
+                                </button>
                             </div>
                         </div>
 
