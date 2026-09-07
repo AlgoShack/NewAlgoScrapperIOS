@@ -17810,6 +17810,23 @@ function setupConfigJsonEditorListeners() {
             e.preventDefault();
         }, { passive: false });
     }
+
+    var winEl = document.getElementById('configVscodeWindow');
+    if (winEl && !winEl._boundWheel) {
+        winEl._boundWheel = true;
+        winEl.addEventListener('wheel', function(e) {
+            var activeTarget = (window._isConfigJsonInEditMode && editor) ? editor : preview;
+            if (activeTarget && e.target !== activeTarget) {
+                activeTarget.scrollTop += e.deltaY;
+                activeTarget.scrollLeft += e.deltaX;
+                syncConfigGutterScroll();
+                if (typeof syncEditorWithHighlight === 'function') {
+                    syncEditorWithHighlight();
+                }
+                e.preventDefault();
+            }
+        }, { passive: false });
+    }
 }
 
 window.toggleConfigJsonEditMode = toggleConfigJsonEditMode;
