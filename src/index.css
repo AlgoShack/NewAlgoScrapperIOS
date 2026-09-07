@@ -5695,11 +5695,85 @@ html.platform-win .split-div2 #imageToolbarmain {
   margin-left: 4px !important;
 }
 
+.vscode-header-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  flex-shrink: 0 !important;
+}
+
 .vscode-actions {
   display: flex !important;
   align-items: center !important;
   gap: 6px !important;
   flex-shrink: 0 !important;
+}
+
+.vscode-win-controls {
+  display: none !important;
+}
+
+/* =============================================================================
+ * WINDOWS OS SPECIFIC VS CODE STYLING (.platform-win)
+ * ============================================================================= */
+.platform-win .vscode-window {
+  border-radius: 4px !important;
+  border: 1px solid #333333 !important;
+}
+
+.platform-win .vscode-header {
+  height: 30px !important;
+  padding: 0 0 0 0 !important;
+  background: #252526 !important;
+}
+
+.platform-win .vscode-mac-dots {
+  display: none !important;
+}
+
+.platform-win .vscode-tab {
+  border-radius: 0 !important;
+  height: 30px !important;
+  padding: 0 14px !important;
+  background: #1e1e1e !important;
+  border-top: 2px solid #007acc !important;
+  border-right: 1px solid #2d2d2d !important;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+.platform-win .vscode-header-right {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px !important;
+  height: 30px !important;
+}
+
+.platform-win .vscode-win-controls {
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 30px !important;
+  margin-left: 4px !important;
+}
+
+.platform-win .win-btn {
+  width: 32px !important;
+  height: 30px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #999999 !important;
+  cursor: default !important;
+  transition: background 0.15s, color 0.15s !important;
+}
+
+.platform-win .win-btn:hover {
+  background: #383838 !important;
+  color: #ffffff !important;
+}
+
+.platform-win .win-btn.win-close:hover {
+  background: #e81123 !important;
+  color: #ffffff !important;
 }
 
 .vscode-action-group {

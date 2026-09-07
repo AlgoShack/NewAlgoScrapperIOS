@@ -100,8 +100,10 @@
         console.error('AlgoScraper require failed:', reqErr);
     }
 
-    // Windows: compact left-form density (html.platform-win) so the table gets more height.
-    if (typeof process !== 'undefined' && process.platform === 'win32') {
+    // Windows: compact density & native Windows VS Code window styling (html.platform-win)
+    const isWinOS = (typeof process !== 'undefined' && process.platform === 'win32') ||
+        (typeof navigator !== 'undefined' && ((navigator.platform && navigator.platform.toLowerCase().includes('win')) || (navigator.userAgent && navigator.userAgent.toLowerCase().includes('windows'))));
+    if (isWinOS) {
         document.documentElement.classList.add('platform-win');
         if (document.body) document.body.classList.add('platform-win');
     }
