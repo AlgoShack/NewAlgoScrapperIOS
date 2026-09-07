@@ -17915,7 +17915,21 @@ function acceptSuggestion(idx) {
     var indent = (indentMatch && indentMatch[0]) ? indentMatch[0] : '  ';
     if (!indent) indent = '  ';
 
-    var snippet = indent + '"' + item.key + '": ' + item.defaultVal + ',';
+    // Windows = Android only; Mac = Home Android/iOS
+    var suggestPlatform = (typeof process !== 'undefined' && process.platform === 'win32')
+        ? 'Android'
+        : ((typeof getActivePlatformForCaps === 'function') ? getActivePlatformForCaps() : 'Android');
+    var defaultVal = item.defaultVal;
+    if (item.key === 'platformName') {
+        defaultVal = suggestPlatform === 'iOS' ? '"iOS"' : '"Android"';
+    } else if (item.key === 'appium:automationName') {
+        defaultVal = suggestPlatform === 'iOS' ? '"XCUITest"' : '"UiAutomator2"';
+    } else if (item.key === 'appium:app') {
+        defaultVal = suggestPlatform === 'iOS' ? '"/path/to/app.ipa"' : '"/path/to/app.apk"';
+    } else if (item.key === 'appium:platformVersion') {
+        defaultVal = suggestPlatform === 'iOS' ? '"17.0"' : '"14"';
+    }
+    var snippet = indent + '"' + item.key + '": ' + defaultVal + ',';
 
     lines[lineIdx] = snippet;
     editor.value = lines.join('\n');
@@ -17953,18 +17967,22 @@ function checkAndTriggerSuggestions() {
         return;
     }
 
-    var activePlatform = getActivePlatformForCaps();
+    // Windows host → Android caps only. Mac host → Home platform (Android or iOS).
+    var activePlatform = (typeof process !== 'undefined' && process.platform === 'win32')
+        ? 'Android'
+        : getActivePlatformForCaps();
     var cleanQ = query.toLowerCase().replace(/^(appium:|appium|app|plat)/, '');
 
     var matches = APPIUM_CAPABILITY_SUGGESTIONS.filter(function(item) {
+        if (item.platform !== 'all' && item.platform !== activePlatform) return false;
         var k = item.key.toLowerCase();
         var q = query.toLowerCase();
         return k.includes(q) || (cleanQ && cleanQ.length >= 2 && k.includes(cleanQ));
     });
 
     matches.sort(function(a, b) {
-        var aP = (a.platform === activePlatform || a.platform === 'all') ? 0 : 1;
-        var bP = (b.platform === activePlatform || b.platform === 'all') ? 0 : 1;
+        var aP = (a.platform === activePlatform) ? 0 : 1;
+        var bP = (b.platform === activePlatform) ? 0 : 1;
         if (aP !== bP) return aP - bP;
         return a.key.localeCompare(b.key);
     });
