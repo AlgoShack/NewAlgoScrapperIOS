@@ -171,6 +171,21 @@
 
                 <div class="dash-card-body">
                     
+                    <!-- Target Device Name Item -->
+                    <div id="configDeviceNameItem" class="dash-spec-item">
+                        <div class="dash-spec-label-row">
+                            <span class="dash-spec-label">Target Device Name</span>
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('configDeviceName', this)">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                <span>Copy</span>
+                            </button>
+                        </div>
+                        <div class="dash-code-pill">
+                            <input type="text" id="configDeviceName" name="configDeviceName" class="dash-prop-input" readonly value="" placeholder="No device connected">
+                        </div>
+                        <span class="dash-spec-hint">Connected target hardware or simulator model name</span>
+                    </div>
+
                     <!-- UDID / Serial Item -->
                     <div class="dash-spec-item">
                         <div class="dash-spec-label-row">
@@ -318,7 +333,7 @@
                         </button>
                         <button type="button" class="config-action-btn primary" id="configLaunchProjectBtn" onclick="launchConfiguredProject()" title="Launch Application with this project">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
-                            <span>Launch Application</span>
+                            <span>Launch Project</span>
                         </button>
                     </div>
                 </div>
@@ -332,15 +347,18 @@
                                     <div class="config-project-name-row">
                                         <span class="config-project-name" id="configProjectName">No Linked Project</span>
                                         <span class="config-project-id-badge" id="configProjectIdBadge" style="display:none;"></span>
+                                        <span class="config-project-device-badge" id="configProjectDeviceBadge" style="display:none;"></span>
                                     </div>
                                     <span class="config-project-key-label mono" id="configProjectKey">No saved project configured for this app</span>
                                 </div>
                             </div>
                         </div>
                         <div class="config-project-stats-row" id="configProjectStatsRow" style="display:none;">
-                            <span class="config-pstat is-scen" id="configStatScen" title="Recorded Scenarios">0s</span>
-                            <span class="config-pstat is-feat" id="configStatFeat" title="Features">0f</span>
-                            <span class="config-pstat is-page" id="configStatPage" title="Scraped Pages">0p</span>
+                            <div class="config-stats-left">
+                                <span class="config-pstat is-scen" id="configStatScen" title="Recorded Scenarios">0s</span>
+                                <span class="config-pstat is-feat" id="configStatFeat" title="Features">0f</span>
+                                <span class="config-pstat is-page" id="configStatPage" title="Scraped Pages">0p</span>
+                            </div>
                             <span class="config-pstat is-updated" id="configStatUpdated" title="Last Updated">—</span>
                         </div>
                     </div>

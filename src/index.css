@@ -5359,9 +5359,9 @@ html.platform-win .split-div2 #imageToolbarmain {
   color: #94a3b8;
 }
 
-/* CONFIG DASHBOARD SEPARATE LAST PROJECT & LAUNCH SECTION */
+/* CONFIG DASHBOARD LAST PROJECT & LAUNCH SECTION */
 .config-project-launch-section {
-  margin-top: 14px;
+  margin-top: 10px;
   width: 100%;
 }
 
@@ -5369,7 +5369,7 @@ html.platform-win .split-div2 #imageToolbarmain {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -5379,7 +5379,7 @@ html.platform-win .split-div2 #imageToolbarmain {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
+  padding: 8px 14px;
   border-bottom: 1px solid #f1f5f9;
   background: #fafbfc;
   gap: 12px;
@@ -5397,7 +5397,7 @@ html.platform-win .split-div2 #imageToolbarmain {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 14px;
+  padding: 5px 13px;
   font-size: 11.5px;
   font-weight: 600;
   border-radius: 6px;
@@ -5442,37 +5442,21 @@ html.platform-win .split-div2 #imageToolbarmain {
   transform: scale(0.98);
 }
 
-.config-action-btn.primary.is-disabled {
-  background: #cbd5e1 !important;
-  border-color: #cbd5e1 !important;
-  color: #94a3b8 !important;
-  cursor: not-allowed !important;
-  box-shadow: none !important;
-  transform: none !important;
-}
-
 .config-launch-card-body {
-  padding: 12px 16px 14px;
+  padding: 10px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-
-.config-switch-label {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #64748b;
-  margin-right: 6px;
+  gap: 6px;
 }
 
 .config-project-card-box {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   transition: all 0.15s ease;
 }
 
@@ -5528,6 +5512,7 @@ html.platform-win .split-div2 #imageToolbarmain {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-wrap: wrap;
 }
 
 .config-project-name {
@@ -5551,54 +5536,50 @@ html.platform-win .split-div2 #imageToolbarmain {
   letter-spacing: 0.02em;
 }
 
+.config-project-device-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #0369a1;
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+}
+
 .config-project-key-label {
   font-size: 10.5px;
   color: #64748b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  margin-top: 2px;
-}
-
-.config-project-switch-wrap {
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.config-project-select {
-  padding: 3px 8px;
-  font-size: 10.5px;
-  font-weight: 600;
-  color: #1e293b;
-  background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 5px;
-  outline: none;
-  cursor: pointer;
-  max-width: 160px;
-}
-
-.config-project-select:focus {
-  border-color: #2F8BCC;
-  box-shadow: 0 0 0 2px rgba(47, 139, 204, 0.15);
+  margin-top: 1px;
 }
 
 .config-project-stats-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
-  padding-top: 6px;
+  padding-top: 5px;
   border-top: 1px dashed #e2e8f0;
+}
+
+.config-stats-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .config-pstat {
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
+  padding: 1.5px 6px;
   border-radius: 4px;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
 }
 
@@ -5608,8 +5589,8 @@ html.platform-win .split-div2 #imageToolbarmain {
 }
 
 .config-pstat.is-feat {
-  background: #fdf4ff;
-  color: #a21caf;
+  background: #faf5ff;
+  color: #7e22ce;
 }
 
 .config-pstat.is-page {
@@ -5618,10 +5599,10 @@ html.platform-win .split-div2 #imageToolbarmain {
 }
 
 .config-pstat.is-updated {
-  background: #f8fafc;
+  background: transparent;
   color: #64748b;
-  margin-left: auto;
   font-weight: 500;
+  font-size: 10px;
 }
 
 /* =============================================================================

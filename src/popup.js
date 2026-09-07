@@ -3559,6 +3559,33 @@
             return;
         }
 
+        // 3b. Bound Device validation (Ensure connected device matches the configured project)
+        if (project && (project.deviceId || project.deviceName || (project.device && (project.device.id || project.device.name || project.device.label)))) {
+            const pDevId = String(project.deviceId || project.device?.id || '').trim().toLowerCase();
+            const pDevName = String(project.deviceName || project.device?.name || project.device?.label || '').trim().toLowerCase();
+            const curDevId = udidName.toLowerCase();
+            const curDevName = devName.toLowerCase();
+
+            const isMatch = (!pDevId && !pDevName)
+                || (pDevId && (curDevId === pDevId || curDevName === pDevId))
+                || (pDevName && (curDevName === pDevName || curDevId === pDevName));
+
+            if (!isMatch) {
+                const targetDevLabel = project.deviceName || project.device?.label || project.device?.name || project.deviceId || project.device?.id || 'configured device';
+                if (typeof showStructuredAlert === 'function') {
+                    showStructuredAlert(
+                        "Different Device Connected",
+                        {
+                            lead: `This project is configured for "${targetDevLabel}".`,
+                            hint: `Please connect "${targetDevLabel}" (currently connected: "${devName}") to launch this project.`
+                        },
+                        "warning"
+                    );
+                }
+                return;
+            }
+        }
+
         // 4. Application package / bundle validation
         if (!appName || appName === 'No device connected' || appName === 'Select App' || appName === 'Loading Apps...') {
             if (typeof showStructuredAlert === 'function') {
@@ -16649,6 +16676,21 @@ function updateConfigDashboard() {
     var devSelect = document.getElementById('devicename');
     var isDeviceConnectedNow = !!(udidVal && devSelect && devSelect.value && devSelect.value !== 'No device connected' && devSelect.value !== 'Select Device');
 
+    var activeDevName = '';
+    if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
+        var opt = devSelect.selectedOptions[0];
+        activeDevName = (opt.dataset && opt.dataset.deviceName) || opt.text || opt.innerText || opt.value || '';
+    } else if (devSelect) {
+        activeDevName = devSelect.value || '';
+    }
+    if (activeDevName === 'No device connected' || activeDevName === 'Select Device' || activeDevName.toLowerCase() === 'loading...') {
+        activeDevName = '';
+    }
+    var confDevNameInput = document.getElementById('configDeviceName');
+    if (confDevNameInput) {
+        confDevNameInput.value = activeDevName;
+    }
+
     if (!isDeviceConnectedNow) {
         bndlVal = (document.getElementById("bundleID") && document.getElementById("bundleID").value) || "";
         pkgVal = (document.getElementById("apppackage") && document.getElementById("apppackage").value) || "";
@@ -16736,6 +16778,17 @@ function updateConfigDashboard() {
         var pFeats = (typeof countProjectFeatures === 'function') ? countProjectFeatures(linkedProject) : ((linkedProject.features || []).length);
         var pPages = (linkedProject.pages || []).length;
         var pUpdated = (typeof formatLaunchPickerDate === 'function') ? formatLaunchPickerDate(linkedProject.lastUpdated || linkedProject.createdAt) : 'Recently';
+        var pDevLabel = (linkedProject.device && linkedProject.device.label) || linkedProject.deviceName || (linkedProject.device && linkedProject.device.name) || (linkedProject.device && linkedProject.device.id) || linkedProject.deviceId || '';
+
+        var projDevBadgeEl = document.getElementById("configProjectDeviceBadge");
+        if (projDevBadgeEl) {
+            if (pDevLabel) {
+                projDevBadgeEl.textContent = pDevLabel;
+                projDevBadgeEl.style.display = 'inline-flex';
+            } else {
+                projDevBadgeEl.style.display = 'none';
+            }
+        }
 
         if (mProject) mProject.textContent = pShortId ? `${pTitle} · ${pShortId}` : pTitle;
         if (projNameEl) projNameEl.textContent = pTitle;
@@ -16754,7 +16807,11 @@ function updateConfigDashboard() {
         if (statPageEl) statPageEl.textContent = `${pPages}p`;
         if (statUpdatedEl) statUpdatedEl.textContent = `Updated ${pUpdated}`;
         if (openRepoBtn) openRepoBtn.style.display = 'inline-flex';
-        if (hintEl) hintEl.textContent = `Launch Project will link and open "${pTitle}" (${pShortId || 'Saved'})`;
+        if (hintEl) {
+            hintEl.textContent = pDevLabel
+                ? `Launch Project opens "${pTitle}" on device "${pDevLabel}" (must be connected)`
+                : `Launch Project will link and open "${pTitle}" (${pShortId || 'Saved'})`;
+        }
 
         var launchBtn = document.getElementById("configLaunchProjectBtn");
         if (launchBtn) {
@@ -16762,6 +16819,9 @@ function updateConfigDashboard() {
             launchBtn.title = 'Launch Application and open "' + (linkedProject.appName || pTitle) + '"';
         }
     } else {
+        var projDevBadgeElNo = document.getElementById("configProjectDeviceBadge");
+        if (projDevBadgeElNo) projDevBadgeElNo.style.display = 'none';
+
         if (mProject) mProject.textContent = 'No Linked Project';
         if (projNameEl) projNameEl.textContent = 'No Configured Project';
         if (projIdBadgeEl) projIdBadgeEl.style.display = 'none';
