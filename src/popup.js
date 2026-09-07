@@ -3775,10 +3775,25 @@
                     ? xpField
                     : (typeof xpField === 'string' && xpField.trim()
                         ? xpField
-                        : (el.ControlId != null ? el.ControlId : ''));
+                        : (el.ControlId != null ? el.ControlId : (el.xpaths || el.allXpaths || '')));
                 let xpaths = Array.isArray(xpRaw)
                     ? xpRaw.map((xp) => String(xp == null ? '' : xp).trim()).filter(Boolean)
                     : (String(xpRaw || '').trim() ? [String(xpRaw).trim()] : []);
+                if (!xpaths.length && el['XPATH']) {
+                    xpaths = Array.isArray(el['XPATH']) ? el['XPATH'].map(x => String(x || '').trim()).filter(Boolean) : [String(el['XPATH']).trim()];
+                }
+                if (Array.isArray(el.xpaths)) {
+                    el.xpaths.forEach(xp => {
+                        const s = String(xp || '').trim();
+                        if (s && !xpaths.includes(s)) xpaths.push(s);
+                    });
+                }
+                if (Array.isArray(el.allXpaths)) {
+                    el.allXpaths.forEach(xp => {
+                        const s = String(xp || '').trim();
+                        if (s && !xpaths.includes(s)) xpaths.push(s);
+                    });
+                }
                 const xp = xpaths[0] || '';
                 const rowKey = pName.trim().toLowerCase() + '|' + name + '|' + String(xp || '').trim().toLowerCase();
                 if (name || String(xp || '').trim()) {
@@ -3787,9 +3802,13 @@
                 }
                 const tr = tbody.insertRow(0);
                 tr.dataset.rect = JSON.stringify(el.rect || null);
+                tr.dataset.xpaths = JSON.stringify(xpaths);
+                if (el.screenSignature) tr.dataset.screenSignature = el.screenSignature;
+                if (el.featureId || el['FEATURE NAME'] || el.FeatureName) tr.dataset.featureId = el.featureId || el['FEATURE NAME'] || el.FeatureName || '';
+                if (el['FINGERPRINT'] || el.Fingerprint || el.fingerprint) tr.dataset.fingerprint = el['FINGERPRINT'] || el.Fingerprint || el.fingerprint || '';
 
                 let controlIdCellHtml = (typeof buildControlIdSelectHtml === 'function')
-                    ? buildControlIdSelectHtml(xpaths)
+                    ? buildControlIdSelectHtml(xpaths, xpaths[0])
                     : `<select class="xpath-dropdown control-id-dropdown js-table-custom-select"><option value="">${String(xpaths[0] || '')}</option></select>`;
 
                 let currentControlType = el['CONTROL TYPE'] || el.ControlType || "";
@@ -5602,21 +5621,49 @@
             : (document.getElementById('pagename_searchbox')?.value || '').trim();
 
         /** Collect every Control ID option (selected first) so project save keeps multi-xpath. */
-        function getControlIdLocatorList(cell) {
+        /** Collect every Control ID option (selected first) so project save keeps multi-xpath. */
+        function getControlIdLocatorList(cell, row) {
             if (!cell) return [];
-            const selectEl = cell.querySelector('select.control-id-dropdown, select.xpath-dropdown');
-            if (!selectEl) {
-                const text = String(cell.textContent || '').trim();
-                return text ? [text] : [];
+            let storedList = [];
+            if (cell.dataset && cell.dataset.xpaths) {
+                try {
+                    const parsed = JSON.parse(cell.dataset.xpaths);
+                    if (Array.isArray(parsed) && parsed.length > 0) storedList = parsed;
+                } catch (_) {}
             }
+            if (storedList.length === 0 && row && row.dataset && row.dataset.xpaths) {
+                try {
+                    const parsed = JSON.parse(row.dataset.xpaths);
+                    if (Array.isArray(parsed) && parsed.length > 0) storedList = parsed;
+                } catch (_) {}
+            }
+
+            const selectEl = cell.querySelector('select.control-id-dropdown, select.xpath-dropdown, select');
             const unique = [];
-            const selected = String(selectEl.value || '').trim();
+            const selected = (selectEl && selectEl.value !== undefined && selectEl.value !== null && selectEl.value !== '')
+                ? String(selectEl.value).trim()
+                : '';
             if (selected) unique.push(selected);
-            Array.from(selectEl.options || []).forEach((opt) => {
-                if (opt.disabled) return;
-                const v = String(opt.value || opt.text || '').trim();
-                if (v && !unique.includes(v)) unique.push(v);
-            });
+
+            if (selectEl && selectEl.options && selectEl.options.length > 0) {
+                Array.from(selectEl.options).forEach((opt) => {
+                    if (opt.disabled) return;
+                    const v = String(opt.value || opt.text || '').trim();
+                    if (v && !unique.includes(v)) unique.push(v);
+                });
+            }
+
+            if (storedList.length > 0) {
+                storedList.forEach((xp) => {
+                    const v = String(xp == null ? '' : xp).trim();
+                    if (v && !unique.includes(v)) unique.push(v);
+                });
+            }
+
+            if (!unique.length) {
+                const text = String(cell.textContent || '').trim();
+                if (text) unique.push(text);
+            }
             return unique;
         }
 
@@ -5675,8 +5722,11 @@
             if (ctCell) rowObj["CONTROL TYPE"] = getCellValue(ctCell);
             // Persist ALL Control ID options (not only the selected one)
             if (xpathCell) {
-                const locatorList = getControlIdLocatorList(xpathCell);
+                const locatorList = getControlIdLocatorList(xpathCell, row);
                 rowObj["XPATH"] = locatorList.length > 1 ? locatorList : (locatorList[0] || "");
+                rowObj.ControlId = rowObj["XPATH"];
+                rowObj.xpaths = locatorList.slice();
+                rowObj.allXpaths = locatorList.slice();
             }
             if (pageCell) rowObj["PAGE NAME"] = getCellValue(pageCell);
             if (identCell) rowObj["IDENTIFICATION TYPE"] = getCellValue(identCell);
@@ -5692,8 +5742,11 @@
                 if (!fieldName || fieldName === "APP URL") return;
                 if (fieldName === "XPATH") {
                     if (!rowObj["XPATH"]) {
-                        const locatorList = getControlIdLocatorList(cell);
+                        const locatorList = getControlIdLocatorList(cell, row);
                         rowObj["XPATH"] = locatorList.length > 1 ? locatorList : (locatorList[0] || "");
+                        rowObj.ControlId = rowObj["XPATH"];
+                        rowObj.xpaths = locatorList.slice();
+                        rowObj.allXpaths = locatorList.slice();
                     }
                     return;
                 }
@@ -5739,6 +5792,14 @@
                 rowObj.rect = null;
             }
 
+            if (row.dataset.screenSignature) {
+                rowObj.screenSignature = row.dataset.screenSignature;
+            }
+            if (row.dataset.featureId) {
+                rowObj.featureId = row.dataset.featureId;
+            }
+            rowObj.fingerprint = rowObj["FINGERPRINT"] || row.dataset.fingerprint || "";
+
             // Validate that row has actual data (Control Name, XPath, Control Type, or Page Name)
             const xpathHasData = Array.isArray(rowObj["XPATH"])
                 ? rowObj["XPATH"].some((v) => String(v || '').trim())
@@ -5758,7 +5819,39 @@
         const clean = { ...row };
         delete clean.rect;
         delete clean.DELETE;
+        delete clean.xpaths;
+        delete clean.allXpaths;
+        delete clean.ControlId;
+        delete clean.featureId;
+        delete clean.screenSignature;
+        delete clean.fingerprint;
+        delete clean.appUrl;
+
+        // Ensure XPATH is a single string (the selected locator) for download/API export
+        const locRaw = clean["XPATH"] || clean.XPATH || "";
+        const loc = Array.isArray(locRaw) ? String(locRaw[0] || "").trim() : String(locRaw || "").trim();
+        clean["XPATH"] = loc;
+
+        // Ensure standard clean keys are always defined
+        clean["CONTROL NAME"] = clean["CONTROL NAME"] || clean.ControlName || "";
+        clean["CONTROL TYPE"] = clean["CONTROL TYPE"] || clean.ControlType || "";
+        clean["PAGE NAME"] = clean["PAGE NAME"] || clean.PageName || "DefaultPage";
+
+        // Ensure Identification Type is correctly derived from the selected XPath if missing
+        if (!clean["IDENTIFICATION TYPE"]) {
+            if (typeof inferIdentificationType === "function") {
+                clean["IDENTIFICATION TYPE"] = inferIdentificationType(loc);
+            } else {
+                clean["IDENTIFICATION TYPE"] = (loc.startsWith("//") || loc.startsWith("(")) ? "XPath" : (loc ? "AccessibilityId" : "Name");
+            }
+        }
+
+        clean["CONTROL VALUE"] = clean["CONTROL VALUE"] || clean.ControlValue || "";
+        clean["FEATURE NAME"] = clean["FEATURE NAME"] || clean.FeatureName || clean["PAGE NAME"];
+        clean["NODE NAME"] = clean["NODE NAME"] || clean.NodeName || clean["PAGE NAME"];
+        clean["FINGERPRINT"] = clean["FINGERPRINT"] || clean.Fingerprint || "";
         clean["APP URL"] = "";
+
         return clean;
     }
     window.sanitizeExportRow = sanitizeExportRow;
@@ -6418,6 +6511,9 @@
                     idTypeCell.innerText = typeof inferIdentificationType === "function"
                         ? inferIdentificationType(xpath)
                         : "";
+                }
+                if (typeof window.syncActiveProjectToRepo === 'function') {
+                    window.syncActiveProjectToRepo();
                 }
             } catch (_) {}
 
@@ -7815,6 +7911,7 @@ function createAndAppendTable(dtControls) {
 
         let tr = tbody.insertRow(0);
         tr.dataset.rect = JSON.stringify(dtControls[i].rect || null);
+        tr.dataset.xpaths = JSON.stringify(xpaths);
         try {
             tr.dataset.screenSignature = (typeof computeScreenSignature === 'function')
                 ? (computeScreenSignature(window.xmlDoc) || '')
@@ -7824,6 +7921,9 @@ function createAndAppendTable(dtControls) {
         }
         if (dtControls[i].featureId) {
             tr.dataset.featureId = String(dtControls[i].featureId);
+        }
+        if (dtControls[i].Fingerprint) {
+            tr.dataset.fingerprint = String(dtControls[i].Fingerprint);
         }
 
         let emptyRows = tbody.querySelectorAll('tr.empty-excel-row');
@@ -8952,11 +9052,7 @@ function createAndAppendTable(dtControls) {
                 var scenarioInfo = window.pageScenarioData[pageName];
                 if (scenarioInfo && scenarioInfo.scenarioName) {
                     var pageKey = pageName.trim().toLowerCase();
-                    var matchedSteps = (stepsByPage[pageKey] || []).map(r => {
-                        const { rect, DELETE, ...rest } = r;
-                        rest["APP URL"] = "";
-                        return rest;
-                    });
+                    var matchedSteps = (stepsByPage[pageKey] || []).map(sanitizeExportRow);
                     scenariosList.push({
                         "SCENARIO_NAME": scenarioInfo.scenarioName,
                         "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
@@ -9542,7 +9638,7 @@ function escapeHtmlAttr(value) {
 }
 
 /** Build Control ID <select> with ALL xpaths — safe on Windows + Mac (no broken inline JS). */
-function buildControlIdSelectHtml(xpaths) {
+function buildControlIdSelectHtml(xpaths, selectedValue) {
     const list = (Array.isArray(xpaths) ? xpaths : [xpaths])
         .map((xp) => String(xp == null ? '' : xp).trim())
         .filter(Boolean);
@@ -9552,9 +9648,11 @@ function buildControlIdSelectHtml(xpaths) {
     });
     if (!unique.length) unique.push('(unknown)[1]');
 
+    const sel = selectedValue ? String(selectedValue).trim() : unique[0];
     const optionsHtml = unique.map((xp) => {
         const safe = escapeHtmlAttr(xp);
-        return `<option value="${safe}">${safe}</option>`;
+        const isSel = (xp === sel) ? ' selected' : '';
+        return `<option value="${safe}"${isSel}>${safe}</option>`;
     }).join('');
 
     return `<select class="xpath-dropdown control-id-dropdown js-table-custom-select" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${optionsHtml}</select>`;
@@ -17863,7 +17961,7 @@ if (platformVersionField) {
                 return {
                     "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
                     "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                    "XPATH": Array.isArray(loc) ? (loc.length > 1 ? loc : (loc[0] || '')) : loc,
+                    "XPATH": primaryLoc,
                     "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
                     "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
                     "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
@@ -17915,7 +18013,7 @@ if (platformVersionField) {
                 return {
                     "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
                     "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                    "XPATH": Array.isArray(loc) ? (loc.length > 1 ? loc : (loc[0] || '')) : loc,
+                    "XPATH": primaryLoc,
                     "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
                     "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
                     "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
