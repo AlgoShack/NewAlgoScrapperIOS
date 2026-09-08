@@ -3562,6 +3562,20 @@
         const projPlatform = project ? (String(project.platform || '').toLowerCase().includes('ios') ? 'IOS' : 'Android') : currentPlatform;
         const isIos = projPlatform === 'IOS' || projPlatform === 'iOS';
 
+        if (!project || !key) {
+            if (typeof showStructuredAlert === 'function') {
+                showStructuredAlert(
+                    "No Configured Project",
+                    {
+                        lead: "There is no last configured project for this platform.",
+                        hint: "Go to the Home tab and click Launch Application to create or configure a project workspace."
+                    },
+                    "warning"
+                );
+            }
+            return;
+        }
+
         // 1. Windows platform guard
         if (process.platform === 'win32' && isIos) {
             if (typeof showCustomAlert === 'function') {
@@ -17194,7 +17208,7 @@ function updateConfigDashboard(forceAuto) {
         var launchBtn = document.getElementById("configLaunchProjectBtn");
         if (launchBtn) {
             launchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Launch Project</span>';
-            launchBtn.title = 'Launch Application and open "' + (linkedProject.appName || pTitle) + '"';
+            launchBtn.title = 'Launch Project: ' + (linkedProject.appName || pTitle);
         }
     } else {
         var projDevBadgeElNo = document.getElementById("configProjectDeviceBadge");
@@ -17219,8 +17233,8 @@ function updateConfigDashboard(forceAuto) {
 
         var launchBtnNoProj = document.getElementById("configLaunchProjectBtn");
         if (launchBtnNoProj) {
-            launchBtnNoProj.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Launch Application</span>';
-            launchBtnNoProj.title = 'Launch Application session';
+            launchBtnNoProj.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg><span>Launch Project</span>';
+            launchBtnNoProj.title = 'Launch Project';
         }
     }
 
