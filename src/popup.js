@@ -17077,19 +17077,51 @@ function updateConfigDashboard(forceAuto) {
 
     var store = typeof getProjectStore === 'function' ? getProjectStore() : {};
 
-    // Resolve last configured project for THIS Home platform (+ current device when known)
-    var activeDeviceHint = (typeof resolveActiveDeviceInfo === 'function')
-        ? resolveActiveDeviceInfo(isIos ? 'IOS' : 'Android')
-        : null;
-    var configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
-        ? getGlobalLastConfiguredProject(platformShort, activeDeviceHint)
-        : null;
-    var configuredKey = configuredInfo ? configuredInfo.key : null;
-    var linkedProject = configuredKey ? store[configuredKey] : (configuredInfo ? configuredInfo.project : null);
+    // Last launched / configured project for THIS Home platform only
+    var configuredKey = null;
+    var linkedProject = null;
+    try {
+        var platLsKey = isIos ? 'ios' : 'android';
+        configuredKey = localStorage.getItem('algo_last_configured_project_platform_key_' + platLsKey) || null;
+    } catch (_) {
+        configuredKey = null;
+    }
+    if (configuredKey) {
+        linkedProject = store[configuredKey] || null;
+        if (!linkedProject && typeof findProjectKeyInStore === 'function') {
+            var foundCfg = findProjectKeyInStore(store, configuredKey);
+            if (foundCfg && foundCfg.project) {
+                configuredKey = foundCfg.key || configuredKey;
+                linkedProject = foundCfg.project;
+            }
+        }
+    }
+    // Fallback: most recently updated project on this platform (launched/saved)
+    if (!linkedProject && store) {
+        var platCandidates = [];
+        Object.keys(store).forEach(function (k) {
+            var pr = store[k];
+            if (!pr) return;
+            var hasData = ((pr.pages || []).length > 0)
+                || ((pr.scenarios || []).length > 0)
+                || ((pr.features || []).length > 0);
+            if (!hasData) return;
+            var prIos = String(pr.platform || k).toLowerCase().includes('ios');
+            if (prIos !== isIos) return;
+            platCandidates.push({ key: k, project: pr });
+        });
+        if (platCandidates.length > 0) {
+            platCandidates.sort(function (a, b) {
+                return (b.project.lastUpdated || b.project.createdAt || 0) - (a.project.lastUpdated || a.project.createdAt || 0);
+            });
+            configuredKey = platCandidates[0].key;
+            linkedProject = platCandidates[0].project;
+        }
+    }
 
     if (linkedProject && configuredKey) {
-        var pIsIos = String(linkedProject.platform || '').toLowerCase().includes('ios');
-        if (pIsIos !== isIos) {
+        var pIsIosCheck = String(linkedProject.platform || '').toLowerCase().includes('ios');
+        if (pIsIosCheck !== isIos) {
             linkedProject = null;
             configuredKey = null;
         }
@@ -17098,6 +17130,8 @@ function updateConfigDashboard(forceAuto) {
         window.activeConfiguredProjectKey = configuredKey;
     } else {
         window.activeConfiguredProjectKey = null;
+        configuredKey = null;
+        linkedProject = null;
     }
 
     var mProject = document.getElementById("configMetricProject");
@@ -17174,6 +17208,12 @@ function updateConfigDashboard(forceAuto) {
             projAvatarEl.textContent = '—';
             projAvatarEl.className = 'config-project-avatar ' + (isIos ? 'is-ios' : 'is-android');
         }
+        // No project on this platform → never show scenario / feature / page stats
+        if (projStatsRow) projStatsRow.style.display = 'none';
+        if (statScenEl) statScenEl.textContent = '';
+        if (statFeatEl) statFeatEl.textContent = '';
+        if (statPageEl) statPageEl.textContent = '';
+        if (statUpdatedEl) statUpdatedEl.textContent = '';
         if (openRepoBtn) openRepoBtn.style.display = 'none';
         if (hintEl) hintEl.textContent = 'Launch Application on the Home tab will create and link a new project workspace';
 
