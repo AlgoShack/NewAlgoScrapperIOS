@@ -2179,20 +2179,23 @@
         return `${device.name} (${typeLabel})`;
     }
 
-    /** Windows builds are Android-only — keep Platform dropdown consistent. */
+    /** Windows builds are Android-only — keep Platform dropdown and filters consistent. */
     function lockPlatformToAndroidOnWindows() {
-        if (process.platform !== 'win32') return;
+        if (typeof process !== 'undefined' && process.platform !== 'win32') return;
         const platformEl = document.getElementById('platformname');
-        if (!platformEl || platformEl.tagName !== 'SELECT') return;
-        platformEl.innerHTML = '<option value="Android" selected>Android</option>';
-        platformEl.value = 'Android';
-        lastSelectedPlatform = 'Android';
-        if (typeof enhanceCustomSelect === 'function' && platformEl.dataset.customized !== '1') {
-            enhanceCustomSelect(platformEl);
+        if (platformEl && platformEl.tagName === 'SELECT') {
+            platformEl.innerHTML = '<option value="Android" selected>Android</option>';
+            platformEl.value = 'Android';
+            lastSelectedPlatform = 'Android';
+            if (typeof enhanceCustomSelect === 'function' && platformEl.dataset.customized !== '1') {
+                enhanceCustomSelect(platformEl);
+            }
+            if (typeof platformEl._rebuildCustomSelect === 'function') {
+                platformEl._rebuildCustomSelect();
+            }
         }
-        if (typeof platformEl._rebuildCustomSelect === 'function') {
-            platformEl._rebuildCustomSelect();
-        }
+        const iosRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="iOS"]');
+        if (iosRepoBtn) iosRepoBtn.style.display = 'none';
     }
     lockPlatformToAndroidOnWindows();
 
@@ -20024,6 +20027,11 @@ if (platformVersionField) {
         if (tabPlatformIos) tabPlatformIos.textContent = iosCount;
         if (tabPlatformAndroid) tabPlatformAndroid.textContent = androidCount;
 
+        if (isWinOS || (typeof process !== 'undefined' && process.platform === 'win32')) {
+            const iosRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="iOS"]');
+            if (iosRepoBtn) iosRepoBtn.style.display = 'none';
+        }
+
         const activeProj = currentSelectedProjectKey ? getProjectByKey(store, currentSelectedProjectKey) : null;
 
         // If no project selected -> Render ROOT PROJECTS VIEW
@@ -20094,7 +20102,7 @@ if (platformVersionField) {
 
                 setRepoMultiDeleteMode(false);
                 const enterBtn = document.getElementById('repoMultiDeleteBtn');
-                if (enterBtn) enterBtn.hidden = true;
+                if (enterBtn) enterBtn.hidden = (projectKeys.length === 0);
                 if (emptyState) emptyState.style.display = 'none';
                 return;
             }
@@ -20102,7 +20110,7 @@ if (platformVersionField) {
             grid.classList.remove('is-empty');
             if (emptyState) emptyState.style.display = 'none';
             const enterBtn = document.getElementById('repoMultiDeleteBtn');
-            if (enterBtn && !repoMultiDeleteMode) enterBtn.hidden = false;
+            if (enterBtn && !repoMultiDeleteMode) enterBtn.hidden = (projectKeys.length === 0);
 
             // Opened Home session first; remaining projects by last updated
             filteredKeys.sort((a, b) => {

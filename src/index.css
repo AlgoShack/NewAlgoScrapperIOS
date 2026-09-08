@@ -11173,5 +11173,107 @@ pre#configJsonPreview::-webkit-scrollbar {
   margin-top: 2px !important;
 }
 
+/* =============================================================================
+ * WINDOWS REPOSITORY & EMPTY STATE PARITY
+ * ============================================================================= */
+html.platform-win #tab-repository.is-active:not(.is-workspace-open),
+.platform-win #tab-repository.is-active:not(.is-workspace-open) {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+}
+
+html.platform-win .repo-page-wrapper,
+.platform-win .repo-page-wrapper {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 100% !important;
+}
+
+html.platform-win #repoProjectsView,
+.platform-win #repoProjectsView {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+}
+
+html.platform-win .repo-projects-grid:has(.repo-empty-state),
+html.platform-win .repo-projects-grid.is-empty,
+.platform-win .repo-projects-grid:has(.repo-empty-state),
+.platform-win .repo-projects-grid.is-empty {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 1 auto !important;
+  min-height: 240px !important;
+  width: 100% !important;
+  margin: auto 0 !important;
+}
+
+html.platform-win .repo-empty-state,
+.platform-win .repo-empty-state {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  margin: auto !important;
+  gap: 8px !important;
+  padding: 16px 16px !important;
+  max-width: 380px !important;
+}
+
+/* Windows: Hide iOS platform filter button completely (Android only) */
+html.platform-win [data-platform-filter="iOS"],
+.platform-win [data-platform-filter="iOS"],
+html.platform-win .repo-filter-btn[data-platform-filter="iOS"],
+.platform-win .repo-filter-btn[data-platform-filter="iOS"] {
+  display: none !important;
+}
+
+/* Windows: Ensure repository select button & icon are clearly visible */
+html.platform-win .repo-select-toggle-wrap,
+.platform-win .repo-select-toggle-wrap {
+  display: inline-flex !important;
+  width: 34px !important;
+  height: 34px !important;
+  flex: 0 0 34px !important;
+}
+
+html.platform-win .repo-select-toggle,
+.platform-win .repo-select-toggle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 10px !important;
+  color: #2F8BCC !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+}
+
+html.platform-win .repo-select-toggle svg,
+.platform-win .repo-select-toggle svg {
+  display: block !important;
+  width: 16px !important;
+  height: 16px !important;
+  stroke: #2F8BCC !important;
+  visibility: visible !important;
+}
+
 
 
