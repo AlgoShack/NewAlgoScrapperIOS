@@ -2115,10 +2115,15 @@
             enhanceTableCustomSelects(document.getElementById('myTable') || document);
         } catch (_) {}
     }
-    // Do NOT init custom selects here — wait until after IPC / Launch handlers (see deferred setTimeout below).
+    window.initAllCustomSelects = initAllCustomSelects;
+    try { initAllCustomSelects(); } catch (_) {}
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', () => {
+            try { initAllCustomSelects(); } catch (_) {}
+        });
+    }
 
-    // Delay custom-select chrome until after core IPC/handlers below are registered.
-    // Windows was dying when select.value was monkey-patched during early init.
+    // Close on outer click / escape
     document.addEventListener('click', () => {
         try { closeAllCustomSelects(); } catch (_) {}
     });
@@ -2182,6 +2187,9 @@
         platformEl.innerHTML = '<option value="Android" selected>Android</option>';
         platformEl.value = 'Android';
         lastSelectedPlatform = 'Android';
+        if (typeof enhanceCustomSelect === 'function' && platformEl.dataset.customized !== '1') {
+            enhanceCustomSelect(platformEl);
+        }
         if (typeof platformEl._rebuildCustomSelect === 'function') {
             platformEl._rebuildCustomSelect();
         }
@@ -2193,6 +2201,9 @@
         if (!appSelect) return;
         appSelect.innerHTML = `<option value="">${label || 'No device connected'}</option>`;
         appSelect.value = '';
+        if (typeof enhanceCustomSelect === 'function' && appSelect.dataset.customized !== '1') {
+            enhanceCustomSelect(appSelect);
+        }
         if (typeof appSelect._rebuildCustomSelect === 'function') {
             appSelect._rebuildCustomSelect();
         }
@@ -2299,6 +2310,9 @@
         if (deviceSelect) {
             deviceSelect.innerHTML = '<option value="">No device connected</option>';
             deviceSelect.value = '';
+            if (typeof enhanceCustomSelect === 'function' && deviceSelect.dataset.customized !== '1') {
+                enhanceCustomSelect(deviceSelect);
+            }
             if (typeof deviceSelect._rebuildCustomSelect === 'function') {
                 deviceSelect._rebuildCustomSelect();
             }
@@ -2536,6 +2550,9 @@
             }
         }
 
+        if (typeof enhanceCustomSelect === 'function' && deviceSelect.dataset.customized !== '1') {
+            enhanceCustomSelect(deviceSelect);
+        }
         if (typeof deviceSelect._rebuildCustomSelect === 'function') {
             deviceSelect._rebuildCustomSelect();
         }

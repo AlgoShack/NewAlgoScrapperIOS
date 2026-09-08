@@ -6478,7 +6478,29 @@ pre#configJsonPreview::-webkit-scrollbar,
   display: none;
 }
 
-.home-field select:not(.native-select-hidden),
+.home-field select:not(.native-select-hidden) {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 30px !important;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 7px 7px 0 !important;
+  box-shadow: none !important;
+  padding: 0 28px 0 10px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  background-size: 16px 16px !important;
+  cursor: pointer !important;
+  outline: none !important;
+  margin: 0 !important;
+}
+
 .home-field input {
   width: 100% !important;
   margin: 0 !important;
@@ -6526,6 +6548,21 @@ pre#configJsonPreview::-webkit-scrollbar,
 .home-field .custom-select-label.is-placeholder {
   color: #94a3b8 !important;
   font-weight: 400 !important;
+}
+
+.home-field .custom-select-caret {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+  fill: #64748b !important;
+  color: #64748b !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), fill 0.2s ease !important;
+}
+
+.home-field .custom-select-wrap.is-open .custom-select-caret {
+  transform: rotate(180deg) !important;
+  fill: #2F8BCC !important;
+  color: #2F8BCC !important;
 }
 
 /* ---- Session Primary & Reset Buttons ---- */
@@ -7436,6 +7473,21 @@ html.platform-win .home-field {
   box-sizing: border-box !important;
   overflow: visible !important;
   position: relative !important;
+  width: auto !important;
+  min-width: 140px !important;
+  flex: 0 0 auto !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+html.platform-win .home-field-app {
+  min-width: 175px !important;
+  flex: 0 0 auto !important;
+}
+
+html.platform-win .home-field-device {
+  min-width: 250px !important;
+  max-width: 380px !important;
+  flex: 0 1 300px !important;
 }
 
 html.platform-win .home-field label {
@@ -7504,6 +7556,21 @@ html.platform-win .home-field .custom-select-label {
 html.platform-win .home-field .custom-select-label.is-placeholder {
   color: #94a3b8 !important;
   font-weight: 400 !important;
+}
+
+html.platform-win .home-field .custom-select-caret {
+  width: 16px !important;
+  height: 16px !important;
+  flex-shrink: 0 !important;
+  fill: #64748b !important;
+  color: #64748b !important;
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), fill 0.2s ease !important;
+}
+
+html.platform-win .home-field .custom-select-wrap.is-open .custom-select-caret {
+  transform: rotate(180deg) !important;
+  fill: #2F8BCC !important;
+  color: #2F8BCC !important;
 }
 
 .home-table {
