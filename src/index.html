@@ -848,6 +848,11 @@
 
 <section id="tab-repository" class="app-tab" role="tabpanel">
     <div class="repo-page-wrapper">
+        <!-- Ambient animated aurora background glows -->
+        <div class="repo-aurora-glow glow-cyan" aria-hidden="true"></div>
+        <div class="repo-aurora-glow glow-indigo" aria-hidden="true"></div>
+        <div class="repo-aurora-glow glow-blue" aria-hidden="true"></div>
+
         <!-- TOP REPO HEADER -->
         <div class="repo-header">
             <div class="repo-header-main">
@@ -862,7 +867,6 @@
                         <span id="repoCrumbDivider" class="repo-crumb-div" style="display: none;">/</span>
                         <span id="repoCrumbProject" class="repo-crumb-current" style="display: none;"></span>
                     </nav>
-                    <span class="repo-status-pill"><span class="repo-dot"></span> Persistent Storage</span>
                 </div>
                 <p class="repo-header-desc" id="repoHeaderDesc">Persistent workspaces organized by application. Inspect, export, and manage your captured scenarios and scraped elements.</p>
             </div>
@@ -1015,7 +1019,7 @@
                     <div class="repo-asset-sidebar-head">
                         <div class="repo-asset-sidebar-title">
                             <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
-                            <span>Assets</span>
+                            <span>Project Artifacts</span>
                         </div>
                         <div class="repo-project-control-bar">
                             <div class="repo-filter-tabs">
@@ -1045,7 +1049,7 @@
                                     <circle cx="11" cy="11" r="8"></circle>
                                     <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                                 </svg>
-                                <input type="text" id="repoSearchInput" placeholder="Search assets..." autocomplete="off" />
+                                <input type="text" id="repoSearchInput" placeholder="Search artifacts..." autocomplete="off" />
                             </div>
                         </div>
                     </div>
@@ -1062,17 +1066,14 @@
                                 <span id="repoJsonViewerTitle">payload.json</span>
                             </div>
                             <div class="vscode-actions">
-                                <button type="button" class="vscode-copy-btn" id="repoJsonFindBtn" title="Find (Ctrl/Cmd+F)">
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                                    <span>Find</span>
+                                <button type="button" class="vscode-copy-btn" id="repoJsonFindBtn" title="Find in JSON (Ctrl/Cmd+F)" aria-label="Find">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                                 </button>
-                                <button type="button" class="vscode-copy-btn" id="repoJsonCopyBtn" title="Copy JSON">
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                    <span>Copy</span>
+                                <button type="button" class="vscode-copy-btn" id="repoJsonCopyBtn" title="Copy JSON payload" aria-label="Copy">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                                 </button>
-                                <button type="button" class="vscode-copy-btn" id="repoJsonDownloadBtn" title="Download JSON">
-                                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                                    <span>Download</span>
+                                <button type="button" class="vscode-copy-btn" id="repoJsonDownloadBtn" title="Download JSON file" aria-label="Download">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
                                 </button>
                             </div>
                         </div>
@@ -1120,181 +1121,264 @@
 
 <section id="tab-about" class="app-tab" role="tabpanel">
     <div class="about-page-wrapper">
-        
+        <!-- Ambient animated aurora background glows -->
+        <div class="about-aurora-glow glow-cyan" aria-hidden="true"></div>
+        <div class="about-aurora-glow glow-indigo" aria-hidden="true"></div>
+        <div class="about-aurora-glow glow-blue" aria-hidden="true"></div>
+
         <!-- HERO BANNER CARD -->
         <div class="about-hero-card">
-            <div class="about-hero-brand">
-                <div class="about-logo-box">
-                    <img src="icon/algoScraper-logo.png" alt="algoScraper" class="about-logo-img">
-                </div>
-                <div class="about-hero-title-group">
-                    <div class="about-title-row">
-                        <h1 class="about-title">algoScraper</h1>
-                        <span class="about-badge"><span class="badge-dot"></span>v1.0.0</span>
+            
+            <div class="about-hero-main-row">
+                <div class="about-hero-brand">
+                    <div class="about-logo-wrapper">
+                        <div class="logo-pulse-ring-outer" aria-hidden="true"></div>
+                        <div class="logo-pulse-ring-inner" aria-hidden="true"></div>
+                        <div class="about-logo-box">
+                            <img src="icon/algoScraper-logo.png" alt="algoScraper" class="about-logo-img">
+                        </div>
                     </div>
-                    <p class="about-kicker">Intelligent Mobile UI Element Extraction & Test Automation Framework</p>
+                    <div class="about-hero-title-group">
+                        <div class="about-title-row">
+                            <h1 class="about-title">algoScraper</h1>
+                            <div class="about-version-badge">
+                                <span class="badge-pulse-radar"></span>
+                                <span class="badge-text">v1.0.0</span>
+                                <span class="badge-tag">STABLE</span>
+                            </div>
+                        </div>
+                        <p class="about-kicker">Intelligent Mobile UI Element Extraction &amp; Test Automation Framework</p>
+                    </div>
+                </div>
+
+                <div class="about-live-metrics-ribbon">
+                    <div class="metric-glass-card">
+                        <span class="metric-glass-num">⚡ Real-Time</span>
+                        <span class="metric-glass-sub">Viewport Mirroring</span>
+                    </div>
+                    <div class="metric-glass-card">
+                        <span class="metric-glass-num">🎯 Multi-Locators</span>
+                        <span class="metric-glass-sub">XPath &amp; AccID Engine</span>
+                    </div>
+                    <div class="metric-glass-card">
+                        <span class="metric-glass-num">🤖 BDD Suite</span>
+                        <span class="metric-glass-sub">Gherkin Authoring</span>
+                    </div>
+                    <div class="metric-glass-card">
+                        <span class="metric-glass-num">☁️ Cloud Sync</span>
+                        <span class="metric-glass-sub">algoQA AI Integration</span>
+                    </div>
                 </div>
             </div>
 
             <div class="about-hero-body">
                 <p class="about-desc">
-                    Powered by <strong>algoShack</strong>, algoScraper empowers QA engineers and automation teams to inspect mobile applications, generate resilient multi-strategy locators, record BDD test scenarios, and export structured automation assets for native Android and iOS.
+                    Engineered by <strong>algoShack</strong>, algoScraper accelerates enterprise QA automation with high-fidelity mobile viewport mirroring, resilient multi-strategy locator extraction, end-to-end BDD scenario recording, and automated test asset synchronization.
                 </p>
             </div>
 
             <div class="about-platform-tags">
-                <div class="platform-chip">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-                    <span>Android (UiAutomator2)</span>
+                <div class="platform-chip chip-android">
+                    <div class="chip-icon-box">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                    </div>
+                    <span class="chip-title">Android (UiAutomator2)</span>
+                    <span class="chip-status-dot"></span>
                 </div>
-                <div class="platform-chip">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><circle cx="12" cy="18" r="1"></circle></svg>
-                    <span>iOS (XCUITest)</span>
+                <div class="platform-chip chip-ios">
+                    <div class="chip-icon-box">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><circle cx="12" cy="18" r="1"></circle></svg>
+                    </div>
+                    <span class="chip-title">iOS (XCUITest)</span>
+                    <span class="chip-status-dot"></span>
                 </div>
-                <div class="platform-chip">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
-                    <span>algoQA Cloud Sync</span>
+                <div class="platform-chip chip-cloud">
+                    <div class="chip-icon-box">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                    </div>
+                    <span class="chip-title">algoQA Cloud Sync</span>
+                    <span class="chip-status-dot"></span>
                 </div>
-                <div class="platform-chip">
-                    <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
-                    <span>W3C Protocol</span>
+                <div class="platform-chip chip-protocol">
+                    <div class="chip-icon-box">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                    </div>
+                    <span class="chip-title">W3C WebDriver Protocol</span>
+                    <span class="chip-status-dot"></span>
                 </div>
             </div>
         </div>
 
-        <!-- SECTION: CORE CAPABILITIES (6 CAPABILITY CARDS) -->
-        <div class="about-section-header">
-            <h2 class="about-section-title">Core Capabilities</h2>
-            <span class="about-section-subtitle">Comprehensive toolkit for mobile test authoring</span>
-        </div>
-
-        <div class="about-features-grid">
-            <!-- Feature 1 -->
-            <div class="about-feature-card">
-                <div class="feature-card-header">
-                    <div class="feature-icon-box blue">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-                    </div>
-                    <h3 class="feature-title">Live Device Mirroring</h3>
+        <!-- SECTION: CORE CAPABILITIES -->
+        <div class="about-section-container">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                 </div>
-                <p class="feature-text">Real-time viewport mirroring for physical devices, emulators, and simulators with touch/swipe emulation.</p>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Core Capabilities</h2>
+                    <span class="about-section-subtitle">Comprehensive toolkit for high-precision mobile test authoring</span>
+                </div>
             </div>
 
-            <!-- Feature 2 -->
-            <div class="about-feature-card">
-                <div class="feature-card-header">
-                    <div class="feature-icon-box purple">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <div class="about-features-grid">
+                <!-- Feature 1: Live Device Mirroring -->
+                <div class="about-feature-card card-blue">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box blue">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">Live Device Mirroring</h3>
+                            <span class="feature-pill-tag">Real-Time Sync</span>
+                        </div>
                     </div>
-                    <h3 class="feature-title">Visual UI Inspection</h3>
+                    <p class="feature-text">High-performance viewport streaming for physical devices, emulators, and simulators with touch, swipe, and hardware key emulation.</p>
                 </div>
-                <p class="feature-text">Hover and tap to highlight bounding boxes and extract exact element nodes from live XML hierarchies.</p>
-            </div>
 
-            <!-- Feature 3 -->
-            <div class="about-feature-card">
-                <div class="feature-card-header">
-                    <div class="feature-icon-box green">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                <!-- Feature 2: Visual UI Inspection -->
+                <div class="about-feature-card card-purple">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box purple">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">Visual UI Inspection</h3>
+                            <span class="feature-pill-tag">XML Tree Parsing</span>
+                        </div>
                     </div>
-                    <h3 class="feature-title">Smart Locator Engine</h3>
+                    <p class="feature-text">Hover &amp; tap to highlight bounding boxes and extract exact element nodes from live XML hierarchies with deep attribute inspection.</p>
                 </div>
-                <p class="feature-text">Generates optimized XPaths, Accessibility IDs, Resource IDs, and class names with one-click copy.</p>
-            </div>
 
-            <!-- Feature 4 -->
-            <div class="about-feature-card">
-                <div class="feature-card-header">
-                    <div class="feature-icon-box amber">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <!-- Feature 3: Smart Locator Engine -->
+                <div class="about-feature-card card-green">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box green">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">Smart Locator Engine</h3>
+                            <span class="feature-pill-tag">Multi-Strategy</span>
+                        </div>
                     </div>
-                    <h3 class="feature-title">BDD Scenario Suite</h3>
+                    <p class="feature-text">Generates optimized XPaths, Accessibility IDs, Resource IDs, and class names with resilient self-healing locator strategies.</p>
                 </div>
-                <p class="feature-text">Build Page Object Repositories and record end-to-end BDD Gherkin scenarios with custom actions.</p>
-            </div>
 
-            <!-- Feature 5 -->
-            <div class="about-feature-card">
-                <div class="feature-card-header">
-                    <div class="feature-icon-box indigo">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                <!-- Feature 4: BDD Scenario Suite -->
+                <div class="about-feature-card card-amber">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box amber">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">BDD Scenario Suite</h3>
+                            <span class="feature-pill-tag">Gherkin Studio</span>
+                        </div>
                     </div>
-                    <h3 class="feature-title">JSON Dataset Export</h3>
+                    <p class="feature-text">Build Page Object Repositories and record end-to-end BDD Gherkin scenarios with custom test actions and assertions.</p>
                 </div>
-                <p class="feature-text">Export captured controls, page objects, and scenario datasets directly as formatted automation payloads.</p>
-            </div>
 
-            <!-- Feature 6 -->
-            <div class="about-feature-card">
-                <div class="feature-card-header">
-                    <div class="feature-icon-box cyan">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                <!-- Feature 5: JSON Dataset Export -->
+                <div class="about-feature-card card-indigo">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box indigo">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">JSON Dataset Export</h3>
+                            <span class="feature-pill-tag">Automation Ready</span>
+                        </div>
                     </div>
-                    <h3 class="feature-title">algoQA Cloud Sync</h3>
+                    <p class="feature-text">Export captured controls, page objects, and scenario datasets directly as formatted automation payloads for CI/CD pipelines.</p>
                 </div>
-                <p class="feature-text">Publish scraped pages, controls, and recorded scenarios to the algoQA platform for instant AI test generation.</p>
+
+                <!-- Feature 6: algoQA Cloud Sync -->
+                <div class="about-feature-card card-cyan">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box cyan">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">algoQA Cloud Sync</h3>
+                            <span class="feature-pill-tag">AI Test Generation</span>
+                        </div>
+                    </div>
+                    <p class="feature-text">Seamlessly publish scraped pages, controls, and recorded scenarios to the algoQA cloud platform for automated AI test generation.</p>
+                </div>
             </div>
         </div>
 
         <!-- SECTION: WORKFLOW PIPELINE -->
-        <div class="about-section-header">
-            <h2 class="about-section-title">Automation Pipeline</h2>
-            <span class="about-section-subtitle">From exploration to test asset generation</span>
-        </div>
-
-        <div class="about-pipeline-strip">
-            <div class="pipeline-step">
-                <div class="pipeline-step-header">
-                    <span class="pipeline-step-num">01</span>
-                    <span class="pipeline-step-name">Connect</span>
+        <div class="about-section-container">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 </div>
-                <p class="pipeline-step-text">Select target platform, app package/bundle, and active device.</p>
-            </div>
-
-            <div class="pipeline-arrow">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </div>
-
-            <div class="pipeline-step">
-                <div class="pipeline-step-header">
-                    <span class="pipeline-step-num">02</span>
-                    <span class="pipeline-step-name">Scrape</span>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Automation Pipeline</h2>
+                    <span class="about-section-subtitle">Streamlined 4-step workflow from device connection to cloud synchronization</span>
                 </div>
-                <p class="pipeline-step-text">Launch driver session and tap elements to inspect and extract locators.</p>
             </div>
 
-            <div class="pipeline-arrow">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </div>
-
-            <div class="pipeline-step">
-                <div class="pipeline-step-header">
-                    <span class="pipeline-step-num">03</span>
-                    <span class="pipeline-step-name">Author</span>
+            <div class="about-pipeline-strip">
+                <div class="pipeline-step">
+                    <div class="pipeline-step-badge-wrap">
+                        <span class="pipeline-step-num">01</span>
+                    </div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Connect</span>
+                        <p class="pipeline-step-text">Select target platform, app package/bundle, and active device session.</p>
+                    </div>
                 </div>
-                <p class="pipeline-step-text">Organize elements into Pages and record BDD scenario outlines.</p>
-            </div>
 
-            <div class="pipeline-arrow">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-            </div>
-
-            <div class="pipeline-step">
-                <div class="pipeline-step-header">
-                    <span class="pipeline-step-num">04</span>
-                    <span class="pipeline-step-name">Export</span>
+                <div class="pipeline-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
                 </div>
-                <p class="pipeline-step-text">Download JSON datasets or sync directly to algoQA automation cloud.</p>
-            </div>
-        </div>
 
-        <!-- FOOTER -->
-        <div class="about-footer">
-            <span>algoScraper</span>
-            <span class="footer-dot">•</span>
-            <span>Powered by <strong>algoShack</strong> AI Test Platform</span>
-            <span class="footer-dot">•</span>
-            <span>All rights reserved</span>
+                <div class="pipeline-step">
+                    <div class="pipeline-step-badge-wrap">
+                        <span class="pipeline-step-num">02</span>
+                    </div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Scrape</span>
+                        <p class="pipeline-step-text">Launch driver session and tap elements to inspect and extract locators.</p>
+                    </div>
+                </div>
+
+                <div class="pipeline-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
+
+                <div class="pipeline-step">
+                    <div class="pipeline-step-badge-wrap">
+                        <span class="pipeline-step-num">03</span>
+                    </div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Author</span>
+                        <p class="pipeline-step-text">Organize elements into Page Objects and record BDD scenario outlines.</p>
+                    </div>
+                </div>
+
+                <div class="pipeline-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
+
+                <div class="pipeline-step">
+                    <div class="pipeline-step-badge-wrap">
+                        <span class="pipeline-step-num">04</span>
+                    </div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Export</span>
+                        <p class="pipeline-step-text">Download JSON datasets or sync directly to algoQA automation cloud.</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
     </div>

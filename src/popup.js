@@ -6043,28 +6043,48 @@
         const controlValue = String(row["CONTROL VALUE"] || row.ControlValue || "").trim();
         const featureName = String(row["FEATURE NAME"] || row.FeatureName || pageName).trim() || pageName;
         const nodeName = String(row["NODE NAME"] || row.NodeName || pageName).trim() || pageName;
-        const fingerprint = String(row["FINGERPRINT"] || row.Fingerprint || "").trim();
+
+        let controlAction = String(row["CONTROL ACTION"] || row.ControlAction || row.action || row.Action || "").trim();
+        if (!controlAction && controlValue) {
+            controlAction = "entered";
+        }
 
         let identificationType = String(row["IDENTIFICATION TYPE"] || row.IdentificationType || "").trim();
         if (!identificationType) {
             if (typeof inferIdentificationType === "function") {
                 identificationType = inferIdentificationType(loc);
             } else {
-                identificationType = (loc.startsWith("//") || loc.startsWith("(")) ? "XPath" : (loc ? "AccessibilityId" : "Name");
+                identificationType = (loc.startsWith("//") || loc.startsWith("(")) ? "XPATH" : (loc ? "AccessibilityId" : "Name");
+            }
+        }
+        if (identificationType.toLowerCase() === 'xpath') {
+            identificationType = 'XPATH';
+        }
+
+        let fingerprintObj = {};
+        const rawFp = row["FINGERPRINT"] !== undefined ? row["FINGERPRINT"] : (row.Fingerprint !== undefined ? row.Fingerprint : row.fingerprint);
+        if (rawFp && typeof rawFp === 'object' && !Array.isArray(rawFp)) {
+            fingerprintObj = rawFp;
+        } else if (typeof rawFp === 'string' && rawFp.trim()) {
+            try {
+                const parsed = JSON.parse(rawFp.trim());
+                if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) fingerprintObj = parsed;
+            } catch (_) {
+                fingerprintObj = {};
             }
         }
 
         return {
             "CONTROL NAME": controlName,
             "CONTROL TYPE": controlType,
+            "CONTROL ACTION": controlAction,
             "XPATH": loc,
-            "PAGE NAME": pageName,
             "IDENTIFICATION TYPE": identificationType,
             "CONTROL VALUE": controlValue,
             "FEATURE NAME": featureName,
             "NODE NAME": nodeName,
-            "FINGERPRINT": fingerprint,
-            "APP URL": ""
+            "PAGE NAME": pageName,
+            "FINGERPRINT": fingerprintObj
         };
     }
     window.sanitizeExportRow = sanitizeExportRow;
@@ -6158,8 +6178,16 @@
             return;
         }
 
-        // Always generate record scenario payload format with isRecordscenario: true
-        const jsonContent = buildScenarioPayload(dashboardControls);
+        // Differentiate between Normal Scraping vs Record Scenario
+        const isScenarioMode = Boolean(
+            window.pageScenarioData &&
+            Object.keys(window.pageScenarioData).length > 0 &&
+            Object.values(window.pageScenarioData).some(s => s && (s.scenarioName || s.scenarioOutline))
+        );
+
+        const jsonContent = isScenarioMode
+            ? buildScenarioPayload(dashboardControls)
+            : dashboardControls;
 
         let appName = "App";
         try {
@@ -6191,6 +6219,10 @@
             setTimeout(() => {
                 try { URL.revokeObjectURL(url); } catch (_) {}
             }, 60000);
+        }
+
+        if (typeof showAppPopup === 'function') {
+            showAppPopup('export_success', { message: `Exported ${dashboardControls.length} controls successfully!` });
         }
     }
 
@@ -9297,26 +9329,38 @@ function createAndAppendTable(dtControls) {
             return;
         }
 
-        // Always generate record scenario payload format with isRecordscenario: true
-        const scenarioPayload = (typeof buildScenarioPayload === 'function')
-            ? buildScenarioPayload(tableData)
-            : {
-                "isRecordscenario": true,
-                "dashboardControls": {
-                    "APP URL": "",
-                    "SCENARIOS": [
-                        {
-                            "SCENARIO_NAME": "Scenario",
-                            "SCENARIO_OUTLINE": "",
-                            "STEPS": tableData
-                        }
-                    ]
-                }
-            };
+        // Differentiate between Normal Scraping vs Record Scenario for algoQA send
+        const isScenarioMode = Boolean(
+            window.pageScenarioData &&
+            Object.keys(window.pageScenarioData).length > 0 &&
+            Object.values(window.pageScenarioData).some(s => s && (s.scenarioName || s.scenarioOutline))
+        );
+
+        let dataToSend;
+        if (isScenarioMode) {
+            const scenarioPayload = (typeof buildScenarioPayload === 'function')
+                ? buildScenarioPayload(tableData)
+                : {
+                    "isRecordscenario": true,
+                    "dashboardControls": {
+                        "APP URL": "",
+                        "SCENARIOS": [
+                            {
+                                "SCENARIO_NAME": "Scenario",
+                                "SCENARIO_OUTLINE": "",
+                                "STEPS": tableData
+                            }
+                        ]
+                    }
+                };
+            dataToSend = scenarioPayload.dashboardControls;
+        } else {
+            dataToSend = tableData;
+        }
 
         const payload = {
-            data: scenarioPayload.dashboardControls,
-            isRecordscenario: true, // Always true
+            data: dataToSend,
+            isRecordscenario: isScenarioMode,
             userID: Number(userData.userID),
             baseUrl: userData.baseUrl,
             projectId: userData.project_id,
@@ -19428,52 +19472,15 @@ if (platformVersionField) {
                 }
             }
 
-            const cleanElList = rawElList.map(el => {
-                const locRaw = el['XPATH'] != null && el['XPATH'] !== ''
-                    ? el['XPATH']
-                    : (el.ControlId != null ? el.ControlId : '');
-                const loc = Array.isArray(locRaw)
-                    ? locRaw.map((xp) => String(xp == null ? '' : xp).trim()).filter(Boolean)
-                    : String(locRaw || '').trim();
-                const primaryLoc = Array.isArray(loc) ? (loc[0] || '') : loc;
-                const inferredIdType = (typeof inferIdentificationType === 'function')
-                    ? inferIdentificationType(primaryLoc)
-                    : ((primaryLoc.startsWith('//') || primaryLoc.startsWith('(')) ? 'XPath' : (primaryLoc ? 'AccessibilityId' : 'Name'));
-                return {
-                    "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
-                    "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                    "XPATH": primaryLoc,
-                    "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
-                    "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
-                    "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
-                    "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
-                    "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
-                    "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
-                    "APP URL": ""
-                };
-            });
-
-            const downloadPayload = {
-                "isRecordscenario": true,
-                "dashboardControls": {
-                    "APP URL": "",
-                    "SCENARIOS": [
-                        {
-                            "SCENARIO_NAME": pageName,
-                            "SCENARIO_OUTLINE": "",
-                            "STEPS": cleanElList
-                        }
-                    ]
-                }
-            };
+            const cleanElList = rawElList.map(sanitizeExportRow);
 
             return {
                 filename: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
-                badge: 'SCRAPED PAGE JSON',
+                badge: 'PAGE OBJECT JSON',
                 badgeClass: 'repo-badge-page',
                 title: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
                 subtitle: `${cleanElList.length} UI ${cleanElList.length === 1 ? 'control' : 'controls'} • ${item.appName || project.appName || 'Application'} (${platform})`,
-                data: downloadPayload
+                data: cleanElList
             };
         } else if (item.type === 'scenario') {
             // Find scraped steps for this scenario (from item.elements or fallback to project.pages)
@@ -19489,30 +19496,7 @@ if (platformVersionField) {
             }
 
             const pageName = item.pageName || item.name || 'Default';
-            const cleanSteps = rawSteps.map(el => {
-                const locRaw = el['XPATH'] != null && el['XPATH'] !== ''
-                    ? el['XPATH']
-                    : (el.ControlId != null ? el.ControlId : '');
-                const loc = Array.isArray(locRaw)
-                    ? locRaw.map((xp) => String(xp == null ? '' : xp).trim()).filter(Boolean)
-                    : String(locRaw || '').trim();
-                const primaryLoc = Array.isArray(loc) ? (loc[0] || '') : loc;
-                const inferredIdType = (typeof inferIdentificationType === 'function')
-                    ? inferIdentificationType(primaryLoc)
-                    : ((primaryLoc.startsWith('//') || primaryLoc.startsWith('(')) ? 'XPath' : (primaryLoc ? 'AccessibilityId' : 'Name'));
-                return {
-                    "CONTROL NAME": el['CONTROL NAME'] || el.ControlName || '',
-                    "CONTROL TYPE": el['CONTROL TYPE'] || el.ControlType || '',
-                    "XPATH": primaryLoc,
-                    "PAGE NAME": el['PAGE NAME'] || el.PageName || pageName,
-                    "IDENTIFICATION TYPE": el['IDENTIFICATION TYPE'] || el.IdentificationType || inferredIdType,
-                    "CONTROL VALUE": el['CONTROL VALUE'] || el.ControlValue || '',
-                    "FEATURE NAME": el['FEATURE NAME'] || el.FeatureName || pageName,
-                    "NODE NAME": el['NODE NAME'] || el.NodeName || pageName,
-                    "FINGERPRINT": el['FINGERPRINT'] || el.Fingerprint || '',
-                    "APP URL": ""
-                };
-            });
+            const cleanSteps = rawSteps.map(sanitizeExportRow);
 
             const downloadPayload = {
                 "isRecordscenario": true,
@@ -19574,7 +19558,7 @@ if (platformVersionField) {
     }
 
     function repoAssetRowHtml(type, id, name, meta, selected) {
-        const label = type === 'scenario' ? 'Scenario' : (type === 'feature' ? 'Feature' : 'Page');
+        const label = type === 'scenario' ? 'Scenario' : (type === 'feature' ? 'Feature' : 'Page Object');
         return `
         <div class="repo-card repo-card--compact repo-asset-row ${selected ? 'is-selected' : ''}" data-repo-type="${type}" data-repo-id="${id}">
             <span class="repo-asset-icon repo-asset-icon--${type}">${repoTypeGlyph(type)}</span>
@@ -20068,6 +20052,8 @@ if (platformVersionField) {
             if (crumbProject) crumbProject.style.display = 'none';
             if (crumbRoot) {
                 crumbRoot.classList.add('is-active');
+                crumbRoot.classList.remove('is-back-btn');
+                crumbRoot.removeAttribute('title');
                 crumbRoot.innerHTML = `
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
@@ -20255,12 +20241,23 @@ if (platformVersionField) {
         }
         if (crumbDivider) crumbDivider.style.display = 'inline';
         if (crumbProject) {
-            crumbProject.style.display = 'inline';
-            crumbProject.textContent = ((typeof getProjectCardTitle === 'function') ? getProjectCardTitle(project, currentSelectedProjectKey) : (project.appName || currentSelectedProjectKey))
-                + ((typeof getProjectShortId === 'function' && getProjectShortId(project, currentSelectedProjectKey)) ? ` · ${getProjectShortId(project, currentSelectedProjectKey)}` : '');
+            crumbProject.style.display = 'inline-flex';
+            const displayName = project.appName || ((typeof getProjectCardTitle === 'function') ? getProjectCardTitle(project, currentSelectedProjectKey) : currentSelectedProjectKey);
+            const shortId = (typeof getProjectShortId === 'function') ? getProjectShortId(project, currentSelectedProjectKey) : (project.projectId || '');
+            const uniqueId = shortId || (String(currentSelectedProjectKey).includes('::') ? String(currentSelectedProjectKey).split('::').pop() : 'p_1');
+            const devSummary = (project.device && (project.device.label || project.device.name)) || project.deviceName || (project.platform ? `${project.platform} Device` : 'Mobile Device');
+
+            let crumbHtml = `<span class="repo-crumb-proj-title">${escapeDummyHtml(displayName)}</span>`;
+            crumbHtml += `<span class="repo-crumb-id-chip" title="Project Unique ID">ID: ${escapeDummyHtml(uniqueId)}</span>`;
+            if (devSummary) {
+                crumbHtml += `<span class="repo-crumb-meta-chip" title="Device: ${escapeDummyHtml(devSummary)}"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg><span>${escapeDummyHtml(devSummary)}</span></span>`;
+            }
+            crumbProject.innerHTML = crumbHtml;
         }
         if (crumbRoot) {
             crumbRoot.classList.remove('is-active');
+            crumbRoot.classList.add('is-back-btn');
+            crumbRoot.title = 'Back to All Projects';
             crumbRoot.innerHTML = `
                 <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="19" y1="12" x2="5" y2="12"></line>
@@ -20269,7 +20266,10 @@ if (platformVersionField) {
                 <span>All Projects</span>`;
         }
         const devSummary = (project.device && project.device.label) || project.deviceName || (project.device && project.device.name) || '';
-        if (headerDesc) headerDesc.textContent = `Viewing saved assets for ${project.appName} (${project.platform}${devSummary ? ` · ${devSummary}` : ''}). Preserved across resets and restarts.`;
+        const displayName = project.appName || ((typeof getProjectCardTitle === 'function') ? getProjectCardTitle(project, currentSelectedProjectKey) : currentSelectedProjectKey);
+        if (headerDesc) {
+            headerDesc.innerHTML = `Active workspace for <strong>${escapeDummyHtml(displayName)}</strong> (${project.platform || 'Mobile'}${devSummary ? ` · ${escapeDummyHtml(devSummary)}` : ''}). Inspect, export, and manage your captured scenarios and elements.`;
+        }
 
         // Update Project-level counters
         const scCount = document.getElementById('repoScenarioCount');
@@ -20439,11 +20439,13 @@ if (platformVersionField) {
     // Global Click Delegation for Repository Tab
     document.addEventListener('click', function(e) {
         // 1. Breadcrumb Root / Back to Projects buttons (Top and Inline)
-        if (e.target.closest('#repoCrumbRoot') || e.target.closest('#repoBackToProjectsBtn') || e.target.closest('#repoInlineBackBtn')) {
-            currentSelectedProjectKey = null;
-            closeRepoSideView();
-            window.renderRepositoryView();
-            return;
+        if (e.target.closest('#repoCrumbRoot') || e.target.closest('#repoBackToProjectsBtn') || e.target.closest('#repoInlineBackBtn') || e.target.closest('.repo-crumb-btn.is-back-btn') || e.target.closest('.repo-back-nav-btn')) {
+            if (currentSelectedProjectKey) {
+                currentSelectedProjectKey = null;
+                closeRepoSideView();
+                window.renderRepositoryView();
+                return;
+            }
         }
 
         // 2. Open Project by clicking Project Card
@@ -20808,8 +20810,15 @@ if (platformVersionField) {
                     const btn = document.getElementById('repoJsonCopyBtn');
                     if (btn) {
                         const origHtml = btn.innerHTML;
-                        btn.innerHTML = `<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied!</span>`;
-                        setTimeout(() => { btn.innerHTML = origHtml; }, 1800);
+                        const origTitle = btn.title;
+                        btn.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#22c55e" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+                        btn.title = 'Copied!';
+                        btn.style.borderColor = '#22c55e';
+                        setTimeout(() => {
+                            btn.innerHTML = origHtml;
+                            btn.title = origTitle;
+                            btn.style.borderColor = '';
+                        }, 1800);
                     }
                 }).catch(err => {
                     console.error('Copy JSON failed:', err);
