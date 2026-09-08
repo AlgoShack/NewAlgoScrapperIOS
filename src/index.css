@@ -5074,7 +5074,7 @@ html.platform-win .split-div2 #imageToolbarmain {
 }
 
 /* =============================================================================
- * TAB LAYOUT — Home (device left + table right), Configuration, About
+ * TAB LAYOUT — Home (device left + table right), Configuration, Repository, About
  * ============================================================================= */
 
 .app-tab {
@@ -5087,6 +5087,27 @@ html.platform-win .split-div2 #imageToolbarmain {
 .app-tab.is-active {
   display: flex !important;
   flex-direction: column;
+}
+
+/* Global Tab Entrance Keyframe */
+@keyframes appTabFadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* HOME TAB ENTRANCE ANIMATION */
+#tab-home.is-active .home-session-bar {
+  animation: appTabFadeInUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#tab-home.is-active .home-layout {
+  animation: appTabFadeInUp 0.38s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
 }
 
 /* =============================================================================
@@ -5104,6 +5125,19 @@ html.platform-win .split-div2 #imageToolbarmain {
   overflow-y: auto !important;
   box-sizing: border-box !important;
   background: var(--as-bg) !important;
+}
+
+/* CONFIG TAB STAGGERED ENTRANCE */
+#tab-configuration.is-active .config-page-header {
+  animation: appTabFadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#tab-configuration.is-active .config-metrics-row {
+  animation: appTabFadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.06s both;
+}
+
+#tab-configuration.is-active .config-dashboard-grid {
+  animation: appTabFadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
 }
 
 .config-page-wrapper {
@@ -5154,6 +5188,12 @@ html.platform-win .split-div2 #imageToolbarmain {
   font-size: 11px;
   color: #475569;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.config-header-status:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.06);
 }
 
 .pulse-dot {
@@ -5162,12 +5202,12 @@ html.platform-win .split-div2 #imageToolbarmain {
   border-radius: 50%;
   background: #22c55e;
   box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
-  animation: pulseDot 2s infinite;
+  animation: pulseDot 2s infinite ease-in-out;
 }
 
 @keyframes pulseDot {
   0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
-  70% { transform: scale(1); box-shadow: 0 0 0 5px rgba(34, 197, 94, 0); }
+  70% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
   100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
 }
 
@@ -5184,19 +5224,33 @@ html.platform-win .split-div2 #imageToolbarmain {
   gap: 10px;
   background: #ffffff;
   border: 1px solid var(--as-border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 8px 12px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.22s ease;
+}
+
+.config-metric-chip:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+  transform: translateY(-2px);
 }
 
 .metric-chip-icon {
   width: 28px;
   height: 28px;
-  border-radius: 6px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.config-metric-chip:hover .metric-chip-icon {
+  transform: scale(1.12);
 }
 
 .metric-chip-icon.blue { background: #eff6ff; color: #2F8BCC; }
@@ -5224,7 +5278,7 @@ html.platform-win .split-div2 #imageToolbarmain {
 .config-dash-card {
   background: #ffffff;
   border: 1px solid var(--as-border);
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
   display: flex;
   flex-direction: column;
@@ -5234,6 +5288,15 @@ html.platform-win .split-div2 #imageToolbarmain {
   max-width: 100%;
   box-sizing: border-box;
   height: 100%;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.22s ease;
+}
+
+.config-dash-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  transform: translateY(-2px);
 }
 
 .dash-card-header {
@@ -5259,6 +5322,11 @@ html.platform-win .split-div2 #imageToolbarmain {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.config-dash-card:hover .dash-icon-box {
+  transform: scale(1.12);
 }
 
 .dash-icon-box.blue { background: #eff6ff; color: #2F8BCC; }
@@ -7659,58 +7727,147 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 /* =============================================================================
- * MODERN ABOUT & CAPABILITIES DASHBOARD
+ * MODERN ABOUT & CAPABILITIES DASHBOARD WITH ANIMATIONS
  * ============================================================================= */
 #tab-about {
-  background: var(--as-bg) !important;
+  background: var(--as-bg, #f8fafc) !important;
   width: 100% !important;
   height: 100% !important;
 }
 
 #tab-about.is-active {
   display: block !important;
-  padding: 12px 16px 16px !important;
+  padding: 14px 18px 20px !important;
   overflow-y: auto !important;
   box-sizing: border-box !important;
-  background: var(--as-bg) !important;
+  background: var(--as-bg, #f8fafc) !important;
 }
 
 .about-page-wrapper {
   width: 100% !important;
   max-width: 100% !important;
-  margin: 0 !important;
+  margin: 0 auto !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 10px !important;
+  gap: 12px !important;
 }
 
-/* HERO BANNER CARD */
+/* --- KEYFRAME ANIMATIONS --- */
+@keyframes aboutFadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseLiveDot {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  }
+  70% {
+    transform: scale(1.15);
+    box-shadow: 0 0 0 5px rgba(34, 197, 94, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+  }
+}
+
+@keyframes arrowSlideFlow {
+  0%, 100% {
+    transform: translateX(0);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateX(4px);
+    opacity: 1;
+  }
+}
+
+@keyframes gradientBorderShimmer {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Staggered entrance animations */
+#tab-about.is-active .about-hero-card {
+  animation: aboutFadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#tab-about.is-active .about-section-header:nth-of-type(1) {
+  animation: aboutFadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+#tab-about.is-active .about-features-grid {
+  animation: aboutFadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+#tab-about.is-active .about-section-header:nth-of-type(2) {
+  animation: aboutFadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
+}
+
+#tab-about.is-active .about-pipeline-strip {
+  animation: aboutFadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+#tab-about.is-active .about-footer {
+  animation: aboutFadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+/* --- HERO BANNER CARD --- */
 .about-hero-card {
+  position: relative;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
-  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
+  padding: 14px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.about-hero-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #2F8BCC, #38bdf8, #6366f1, #2F8BCC);
+  background-size: 200% 200%;
+  animation: gradientBorderShimmer 4s ease infinite;
 }
 
 .about-hero-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
 
 .about-logo-box {
-  width: 40px;
-  height: 40px;
-  border-radius: 9px;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.15);
   flex-shrink: 0;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #e0e7ff;
   background: #ffffff;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.about-hero-card:hover .about-logo-box {
+  transform: scale(1.05) rotate(-2deg);
 }
 
 .about-logo-img {
@@ -7729,12 +7886,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .about-title-row {
   display: flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
 }
 
 .about-title {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   color: #0f172a;
   letter-spacing: -0.3px;
@@ -7742,14 +7899,26 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .about-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  color: #2F8BCC;
+  color: #1d4ed8;
   font-size: 10.5px;
   font-weight: 700;
-  padding: 1px 7px;
+  padding: 2px 8px;
   border-radius: 999px;
   line-height: 1.2;
+}
+
+.badge-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-block;
+  animation: pulseLiveDot 2s infinite ease-in-out;
 }
 
 .about-kicker {
@@ -7766,9 +7935,14 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 .about-desc {
   margin: 0;
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 11.5px;
+  line-height: 1.5;
   color: #475569;
+}
+
+.about-desc strong {
+  color: #0f172a;
+  font-weight: 700;
 }
 
 .about-platform-tags {
@@ -7776,7 +7950,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  padding-top: 8px;
+  padding-top: 10px;
   border-top: 1px solid #f1f5f9;
 }
 
@@ -7791,130 +7965,156 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   font-size: 11px;
   font-weight: 600;
   color: #334155;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  cursor: default;
 }
 
 .platform-chip:hover {
-  background: #ffffff;
-  border-color: #cbd5e1;
-  color: #0f172a;
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e40af;
+  transform: translateY(-1.5px);
+  box-shadow: 0 2px 6px rgba(47, 139, 204, 0.12);
 }
 
 .platform-chip svg {
   color: #2F8BCC;
   flex-shrink: 0;
+  transition: transform 0.2s ease;
 }
 
-/* SECTION HEADER */
+.platform-chip:hover svg {
+  transform: scale(1.1);
+}
+
+/* --- SECTION HEADER --- */
 .about-section-header {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 2px 2px 0;
+  padding: 4px 2px 0;
   margin: 2px 0 0;
 }
 
 .about-section-title {
   margin: 0;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 700;
   color: #0f172a;
   line-height: 1.2;
+  letter-spacing: -0.2px;
 }
 
 .about-section-subtitle {
   margin: 0;
-  font-size: 10.5px;
+  font-size: 11px;
   color: #64748b;
   font-weight: 500;
   line-height: 1.2;
 }
 
-/* FEATURES GRID */
+/* --- FEATURES GRID --- */
 .about-features-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 10px;
 }
 
 .about-feature-card {
+  position: relative;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
-  padding: 10px 12px;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
+  padding: 11px 13px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  gap: 6px;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.22s ease;
 }
 
 .about-feature-card:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06);
-  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.07), 0 2px 4px rgba(15, 23, 42, 0.03);
+  transform: translateY(-2.5px);
 }
 
 .feature-card-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
 }
 
 .feature-icon-box {
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  border: 1px solid transparent;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-.feature-icon-box.blue { background: #eff6ff; color: #2F8BCC; }
-.feature-icon-box.purple { background: #faf5ff; color: #a855f7; }
-.feature-icon-box.green { background: #f0fdf4; color: #16a34a; }
-.feature-icon-box.amber { background: #fffbeb; color: #d97706; }
-.feature-icon-box.indigo { background: #eef2ff; color: #6366f1; }
-.feature-icon-box.rose { background: #fff1f2; color: #f43f5e; }
+.about-feature-card:hover .feature-icon-box {
+  transform: scale(1.12);
+}
+
+.feature-icon-box.blue { background: #eff6ff; color: #2563eb; border-color: #dbeafe; }
+.feature-icon-box.purple { background: #faf5ff; color: #9333ea; border-color: #f3e8ff; }
+.feature-icon-box.green { background: #f0fdf4; color: #16a34a; border-color: #dcfce7; }
+.feature-icon-box.amber { background: #fffbeb; color: #d97706; border-color: #fef3c7; }
+.feature-icon-box.indigo { background: #eef2ff; color: #4f46e5; border-color: #e0e7ff; }
+.feature-icon-box.cyan { background: #ecfeff; color: #0891b2; border-color: #cffafe; }
+.feature-icon-box.rose { background: #fff1f2; color: #e11d48; border-color: #ffe4e6; }
 
 .feature-icon-box svg {
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
 }
 
 .feature-title {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .feature-text {
   margin: 0;
   font-size: 10.5px;
-  line-height: 1.4;
+  line-height: 1.45;
   color: #64748b;
 }
 
-/* WORKFLOW PIPELINE STRIP */
+/* --- WORKFLOW PIPELINE STRIP --- */
 .about-pipeline-strip {
   display: grid;
   grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px 14px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+  border-radius: 10px;
+  padding: 12px 16px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
 }
 
 .pipeline-step {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 6px;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.pipeline-step:hover {
+  transform: translateY(-1.5px);
 }
 
 .pipeline-step-header {
@@ -7926,22 +8126,24 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .pipeline-step-num {
   background: linear-gradient(135deg, #2F8BCC 0%, #1e75b2 100%);
   color: #ffffff;
-  font-size: 10px;
-  font-weight: 700;
-  padding: 1px 6px;
+  font-size: 9.5px;
+  font-weight: 800;
+  padding: 2px 6px;
   border-radius: 4px;
   line-height: 1.2;
+  box-shadow: 0 1px 3px rgba(47, 139, 204, 0.25);
+  letter-spacing: 0.2px;
 }
 
 .pipeline-step-name {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
 }
 
 .pipeline-step-text {
   margin: 0;
-  font-size: 10px;
+  font-size: 10.5px;
   line-height: 1.35;
   color: #64748b;
 }
@@ -7950,8 +8152,31 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #94a3b8;
+  color: #2F8BCC;
   padding: 0 2px;
+  animation: arrowSlideFlow 2.2s infinite ease-in-out;
+}
+
+/* --- ABOUT FOOTER --- */
+.about-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 0 4px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.about-footer strong {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.footer-dot {
+  font-size: 9px;
+  color: #cbd5e1;
 }
 
 /* =============================================================================
@@ -7968,6 +8193,26 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 #tab-repository.is-active:not(.is-workspace-open) {
   display: flex !important;
   flex-direction: column;
+}
+
+/* REPOSITORY TAB STAGGERED ENTRANCE */
+#tab-repository.is-active .repo-header {
+  animation: appTabFadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+#tab-repository.is-active .repo-hero-stats-row {
+  animation: appTabFadeInUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+#tab-repository.is-active .repo-toolbar,
+#tab-repository.is-active .repo-metrics-strip,
+#tab-repository.is-active .repo-project-control-bar {
+  animation: appTabFadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
+}
+
+#tab-repository.is-active .repo-cards-container,
+#tab-repository.is-active .repo-workspace-body {
+  animation: appTabFadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
 }
 
 #tab-repository::-webkit-scrollbar {
@@ -8660,7 +8905,8 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   height: 6px;
   border-radius: 50%;
   background: #22c55e;
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6);
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  animation: pulseDot 2s infinite ease-in-out;
 }
 
 .repo-header-desc {
@@ -9572,13 +9818,15 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   border-radius: 12px;
   padding: 12px 16px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
-  transition: all 0.15s ease;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.22s ease;
 }
 
 .repo-hero-stat-card:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.07);
+  transform: translateY(-2.5px);
 }
 
 .repo-hero-stat-icon {
@@ -9588,6 +9836,11 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: grid;
   place-items: center;
   flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.repo-hero-stat-card:hover .repo-hero-stat-icon {
+  transform: scale(1.12);
 }
 
 .repo-hero-stat-icon.blue {
