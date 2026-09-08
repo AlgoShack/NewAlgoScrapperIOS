@@ -2179,12 +2179,14 @@
         return `${device.name} (${typeLabel})`;
     }
 
-    /** Windows builds are Android-only — keep Platform dropdown and filters consistent. */
+    /** Windows builds are Android-only — keep Platform fixed to Android with no dropdown. */
     function lockPlatformToAndroidOnWindows() {
         if (typeof process !== 'undefined' && process.platform !== 'win32') return;
         const platformEl = document.getElementById('platformname');
-        if (platformEl && platformEl.tagName === 'SELECT') {
-            platformEl.innerHTML = '<option value="Android" selected>Android</option>';
+        if (platformEl) {
+            if (platformEl.tagName === 'SELECT') {
+                platformEl.innerHTML = '<option value="Android" selected>Android</option>';
+            }
             platformEl.value = 'Android';
             lastSelectedPlatform = 'Android';
             if (typeof enhanceCustomSelect === 'function' && platformEl.dataset.customized !== '1') {
@@ -2192,6 +2194,20 @@
             }
             if (typeof platformEl._rebuildCustomSelect === 'function') {
                 platformEl._rebuildCustomSelect();
+            }
+            const wrap = platformEl.closest('.custom-select-wrap');
+            if (wrap) {
+                const label = wrap.querySelector('.custom-select-label');
+                if (label) label.textContent = 'Android';
+                const caret = wrap.querySelector('.custom-select-caret');
+                if (caret) caret.style.display = 'none';
+                const trigger = wrap.querySelector('.custom-select-trigger');
+                if (trigger) {
+                    trigger.style.pointerEvents = 'none';
+                    trigger.style.cursor = 'default';
+                }
+                const menu = wrap.querySelector('.custom-select-menu');
+                if (menu) menu.remove();
             }
         }
         const platformTabs = document.getElementById('repoPlatformFilterTabs');

@@ -7479,6 +7479,36 @@ html.platform-win .home-field {
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
+html.platform-win .home-field-platform {
+  min-width: 130px !important;
+  max-width: 145px !important;
+  flex: 0 0 auto !important;
+  cursor: default !important;
+}
+
+html.platform-win .home-field-platform .custom-select-caret,
+html.platform-win .home-field:has(#platformname) .custom-select-caret,
+.platform-win .home-field-platform .custom-select-caret,
+.platform-win .home-field:has(#platformname) .custom-select-caret {
+  display: none !important;
+}
+
+html.platform-win .home-field-platform .custom-select-trigger,
+html.platform-win .home-field:has(#platformname) .custom-select-trigger,
+.platform-win .home-field-platform .custom-select-trigger,
+.platform-win .home-field:has(#platformname) .custom-select-trigger {
+  cursor: default !important;
+  pointer-events: none !important;
+  padding-right: 12px !important;
+}
+
+html.platform-win .home-field-platform .custom-select-menu,
+html.platform-win .home-field:has(#platformname) .custom-select-menu,
+.platform-win .home-field-platform .custom-select-menu,
+.platform-win .home-field:has(#platformname) .custom-select-menu {
+  display: none !important;
+}
+
 html.platform-win .home-field-app {
   min-width: 175px !important;
   flex: 0 0 auto !important;
