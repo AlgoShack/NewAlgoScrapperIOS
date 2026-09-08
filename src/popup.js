@@ -2194,6 +2194,8 @@
                 platformEl._rebuildCustomSelect();
             }
         }
+        const platformTabs = document.getElementById('repoPlatformFilterTabs');
+        if (platformTabs) platformTabs.style.display = 'none';
         const iosRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="iOS"]');
         if (iosRepoBtn) iosRepoBtn.style.display = 'none';
     }
@@ -20028,6 +20030,8 @@ if (platformVersionField) {
         if (tabPlatformAndroid) tabPlatformAndroid.textContent = androidCount;
 
         if (isWinOS || (typeof process !== 'undefined' && process.platform === 'win32')) {
+            const platformTabs = document.getElementById('repoPlatformFilterTabs');
+            if (platformTabs) platformTabs.style.display = 'none';
             const iosRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="iOS"]');
             if (iosRepoBtn) iosRepoBtn.style.display = 'none';
         }

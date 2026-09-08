@@ -11229,12 +11229,24 @@ html.platform-win .repo-empty-state,
   max-width: 380px !important;
 }
 
-/* Windows: Hide iOS platform filter button completely (Android only) */
+/* Windows: Hide platform filter tabs completely (Windows is Android-only) */
+html.platform-win #repoPlatformFilterTabs,
+.platform-win #repoPlatformFilterTabs,
 html.platform-win [data-platform-filter="iOS"],
 .platform-win [data-platform-filter="iOS"],
 html.platform-win .repo-filter-btn[data-platform-filter="iOS"],
 .platform-win .repo-filter-btn[data-platform-filter="iOS"] {
   display: none !important;
+}
+
+html.platform-win .repo-toolbar-top-row,
+.platform-win .repo-toolbar-top-row {
+  justify-content: flex-end !important;
+}
+
+html.platform-win .repo-toolbar-right,
+.platform-win .repo-toolbar-right {
+  margin-left: auto !important;
 }
 
 /* Windows: Ensure repository select button & icon are clearly visible */
