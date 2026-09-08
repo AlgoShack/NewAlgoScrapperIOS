@@ -3921,7 +3921,8 @@
                     if (seenRowKeys.has(rowKey)) return;
                     seenRowKeys.add(rowKey);
                 }
-                const tr = tbody.insertRow(0);
+                const firstEmptyRow = tbody.querySelector('tr.empty-excel-row');
+                const tr = firstEmptyRow ? tbody.insertBefore(document.createElement('tr'), firstEmptyRow) : tbody.insertRow(-1);
                 tr.dataset.rect = JSON.stringify(el.rect || null);
                 tr.dataset.xpaths = JSON.stringify(xpaths);
                 if (el.screenSignature) tr.dataset.screenSignature = el.screenSignature;
@@ -6009,77 +6010,72 @@
 
     function sanitizeExportRow(row) {
         if (!row || typeof row !== 'object') return row;
-        const clean = { ...row };
-        delete clean.rect;
-        delete clean.DELETE;
-        delete clean.xpaths;
-        delete clean.allXpaths;
-        delete clean.ControlId;
-        delete clean.featureId;
-        delete clean.screenSignature;
-        delete clean.fingerprint;
-        delete clean.appUrl;
-
-        // Ensure XPATH is a single string (the selected locator) for download/API export
-        const locRaw = clean["XPATH"] || clean.XPATH || "";
+        const locRaw = row["XPATH"] != null && row["XPATH"] !== ""
+            ? row["XPATH"]
+            : (row.XPATH != null && row.XPATH !== ""
+                ? row.XPATH
+                : (row.ControlId != null ? row.ControlId : ""));
         const loc = Array.isArray(locRaw) ? String(locRaw[0] || "").trim() : String(locRaw || "").trim();
-        clean["XPATH"] = loc;
+        const pageName = String(row["PAGE NAME"] || row.PageName || "DefaultPage").trim() || "DefaultPage";
+        const controlName = String(row["CONTROL NAME"] || row.ControlName || "").trim();
+        const controlType = String(row["CONTROL TYPE"] || row.ControlType || "").trim();
+        const controlValue = String(row["CONTROL VALUE"] || row.ControlValue || "").trim();
+        const featureName = String(row["FEATURE NAME"] || row.FeatureName || pageName).trim() || pageName;
+        const nodeName = String(row["NODE NAME"] || row.NodeName || pageName).trim() || pageName;
+        const fingerprint = String(row["FINGERPRINT"] || row.Fingerprint || "").trim();
 
-        // Ensure standard clean keys are always defined
-        clean["CONTROL NAME"] = clean["CONTROL NAME"] || clean.ControlName || "";
-        clean["CONTROL TYPE"] = clean["CONTROL TYPE"] || clean.ControlType || "";
-        clean["PAGE NAME"] = clean["PAGE NAME"] || clean.PageName || "DefaultPage";
-
-        // Ensure Identification Type is correctly derived from the selected XPath if missing
-        if (!clean["IDENTIFICATION TYPE"]) {
+        let identificationType = String(row["IDENTIFICATION TYPE"] || row.IdentificationType || "").trim();
+        if (!identificationType) {
             if (typeof inferIdentificationType === "function") {
-                clean["IDENTIFICATION TYPE"] = inferIdentificationType(loc);
+                identificationType = inferIdentificationType(loc);
             } else {
-                clean["IDENTIFICATION TYPE"] = (loc.startsWith("//") || loc.startsWith("(")) ? "XPath" : (loc ? "AccessibilityId" : "Name");
+                identificationType = (loc.startsWith("//") || loc.startsWith("(")) ? "XPath" : (loc ? "AccessibilityId" : "Name");
             }
         }
 
-        clean["CONTROL VALUE"] = clean["CONTROL VALUE"] || clean.ControlValue || "";
-        clean["FEATURE NAME"] = clean["FEATURE NAME"] || clean.FeatureName || clean["PAGE NAME"];
-        clean["NODE NAME"] = clean["NODE NAME"] || clean.NodeName || clean["PAGE NAME"];
-        clean["FINGERPRINT"] = clean["FINGERPRINT"] || clean.Fingerprint || "";
-        clean["APP URL"] = "";
-
-        return clean;
+        return {
+            "CONTROL NAME": controlName,
+            "CONTROL TYPE": controlType,
+            "XPATH": loc,
+            "PAGE NAME": pageName,
+            "IDENTIFICATION TYPE": identificationType,
+            "CONTROL VALUE": controlValue,
+            "FEATURE NAME": featureName,
+            "NODE NAME": nodeName,
+            "FINGERPRINT": fingerprint,
+            "APP URL": ""
+        };
     }
     window.sanitizeExportRow = sanitizeExportRow;
 
-    function downloadTableAsJSON(tableId) {
-        const statusBar = document.getElementById('sttus_bar_div');
-        if (statusBar) statusBar.style.display = 'none';
+    function buildScenarioPayload(dashboardControls) {
+        const cleanControls = (dashboardControls || []).map(sanitizeExportRow);
+        const scenariosList = [];
+        const stepsByPage = {};
+        const pageOrder = [];
 
-        const now = new Date();
-        const dateTime = now.toISOString().split('T')[0] + 'T' + now.toTimeString().split(' ')[0];
+        // Group extracted rows (steps) by Page Name (case-preserving key, case-insensitive lookup)
+        cleanControls.forEach(step => {
+            const rawPage = (step["PAGE NAME"] || "").trim() || "DefaultPage";
+            const lowerPage = rawPage.toLowerCase();
+            if (!stepsByPage[lowerPage]) {
+                stepsByPage[lowerPage] = { name: rawPage, steps: [] };
+                pageOrder.push(lowerPage);
+            }
+            stepsByPage[lowerPage].steps.push(step);
+        });
 
-        const rawControls = extractAllTableData(tableId);
-        const dashboardControls = rawControls.map(sanitizeExportRow);
+        const usedPages = new Set();
 
-        // Detect if we are in Record Scenario Mode based on whether scenario data was created
-        const isRecordMode = window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0;
-        let jsonContent;
-
-        if (isRecordMode) {
-            const scenariosList = [];
-            const stepsByPage = {};
-
-            // Group extracted rows (steps) by Page Name (case-insensitive)
-            dashboardControls.forEach(step => {
-                const page = (step["PAGE NAME"] || "").trim().toLowerCase();
-                if (!stepsByPage[page]) stepsByPage[page] = [];
-                stepsByPage[page].push(step);
-            });
-
-            // Build the Scenario payload mapping the steps to their corresponding Scenario
+        // 1. If explicit scenario definitions exist in window.pageScenarioData, map them
+        if (window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0) {
             for (const pageName in window.pageScenarioData) {
                 const scenarioInfo = window.pageScenarioData[pageName];
                 if (scenarioInfo && scenarioInfo.scenarioName) {
                     const pageKey = pageName.trim().toLowerCase();
-                    const matchedSteps = (stepsByPage[pageKey] || []).map(sanitizeExportRow);
+                    const pageGroup = stepsByPage[pageKey];
+                    const matchedSteps = pageGroup ? pageGroup.steps : [];
+                    usedPages.add(pageKey);
                     scenariosList.push({
                         "SCENARIO_NAME": scenarioInfo.scenarioName,
                         "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
@@ -6087,44 +6083,94 @@
                     });
                 }
             }
-
-            // Fallback: If no scenario matched or scenariosList is empty, include all steps
-            if (scenariosList.length === 0 && dashboardControls.length > 0) {
-                scenariosList.push({
-                    "SCENARIO_NAME": "Scenario",
-                    "SCENARIO_OUTLINE": "",
-                    "STEPS": dashboardControls
-                });
-            }
-
-            jsonContent = {
-                "isRecordscenario": true,
-                "dashboardControls": {
-                    "APP URL": "",
-                    "SCENARIOS": scenariosList
-                }
-            };
-        } else {
-            // Normal scraping: Scrape UI, element-by-element click scraping, etc.
-            jsonContent = {
-                "isRecordscenario": false,
-                "dashboardControls": dashboardControls
-            };
         }
 
-        const blob = new Blob([JSON.stringify(jsonContent, null, 2)], { type: "application/json;charset=utf-8;" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
+        // 2. For any pages/steps not covered by explicit scenarios, create a scenario per page
+        pageOrder.forEach(pageKey => {
+            if (!usedPages.has(pageKey)) {
+                const pageGroup = stepsByPage[pageKey];
+                if (pageGroup && pageGroup.steps.length > 0) {
+                    scenariosList.push({
+                        "SCENARIO_NAME": pageGroup.name || "Scenario",
+                        "SCENARIO_OUTLINE": "",
+                        "STEPS": pageGroup.steps
+                    });
+                }
+            }
+        });
 
-        const appSelect = document.getElementById('appname');
-        const appName = appSelect ? appSelect.options[appSelect.selectedIndex].text.trim() : "App";
+        // 3. Fallback: If no scenarios were created, wrap all controls into a single default scenario
+        if (scenariosList.length === 0 && cleanControls.length > 0) {
+            scenariosList.push({
+                "SCENARIO_NAME": "Scenario",
+                "SCENARIO_OUTLINE": "",
+                "STEPS": cleanControls
+            });
+        }
 
-        a.download = appName + "_" + dateTime + ".json";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        return {
+            "isRecordscenario": true,
+            "dashboardControls": {
+                "APP URL": "",
+                "SCENARIOS": scenariosList
+            }
+        };
+    }
+    window.buildScenarioPayload = buildScenarioPayload;
+
+    function downloadTableAsJSON(tableId) {
+        const statusBar = document.getElementById('sttus_bar_div');
+        if (statusBar) statusBar.style.display = 'none';
+
+        const now = new Date();
+        const datePart = now.toISOString().split('T')[0];
+        const timePart = now.toTimeString().split(' ')[0].replace(/:/g, '-');
+        const dateTime = `${datePart}T${timePart}`;
+
+        const rawControls = extractAllTableData(tableId);
+        const dashboardControls = rawControls.map(sanitizeExportRow);
+
+        if (!dashboardControls || dashboardControls.length === 0) {
+            if (typeof showAppPopup === 'function') {
+                showAppPopup('export_failed', { message: 'No scraped data found to download.' });
+            }
+            return;
+        }
+
+        // Always generate record scenario payload format with isRecordscenario: true
+        const jsonContent = buildScenarioPayload(dashboardControls);
+
+        let appName = "App";
+        try {
+            if (typeof resolveActiveAppName === 'function') {
+                appName = resolveActiveAppName() || appName;
+            } else {
+                const appSelect = document.getElementById('appname');
+                if (appSelect && appSelect.selectedOptions && appSelect.selectedOptions[0]) {
+                    appName = appSelect.selectedOptions[0].text.trim() || appName;
+                }
+            }
+        } catch (_) {}
+
+        const cleanAppName = appName.replace(/[/\\?%*:|"<>]/g, '_').replace(/\s+/g, '_');
+        const fileName = `${cleanAppName}_${dateTime}.json`;
+        const jsonString = JSON.stringify(jsonContent, null, 2);
+
+        if (typeof downloadFile === 'function') {
+            downloadFile(fileName, jsonString, 'application/json;charset=utf-8;');
+        } else {
+            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => {
+                try { URL.revokeObjectURL(url); } catch (_) {}
+            }, 60000);
+        }
     }
 
 
@@ -7897,7 +7943,9 @@ async function performSwipe(startX, startY, endX, endY) {
 
                var pageName = document.getElementById('pagename_searchbox').value || "";
                var table = document.getElementById('myTable');
-               var tableTopRow = table.insertRow(0);
+               var firstEmptyRow = table ? table.querySelector('tr.empty-excel-row') : null;
+               var tableTopRow = firstEmptyRow ? table.insertBefore(document.createElement('tr'), firstEmptyRow) : (table ? table.insertRow(-1) : null);
+               if (!tableTopRow) return;
 
                var allHeaders = Array.from(document.querySelectorAll('#mainTable thead tr > *'));
                var rowHtml = "";
@@ -8106,7 +8154,13 @@ function createAndAppendTable(dtControls) {
                 return `<select class="xpath-dropdown control-id-dropdown js-table-custom-select" onchange="onDropdownChange(this)" onmouseleave="onShowElementLeave(event)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${opts}</select>`;
             })();
 
-        let tr = tbody.insertRow(0);
+        let emptyRows = tbody.querySelectorAll('tr.empty-excel-row');
+        if (emptyRows.length > 0) {
+            emptyRows[0].remove();
+        }
+
+        const firstEmptyRow = tbody.querySelector('tr.empty-excel-row');
+        let tr = firstEmptyRow ? tbody.insertBefore(document.createElement('tr'), firstEmptyRow) : tbody.insertRow(-1);
         tr.dataset.rect = JSON.stringify(dtControls[i].rect || null);
         tr.dataset.xpaths = JSON.stringify(xpaths);
         try {
@@ -8121,11 +8175,6 @@ function createAndAppendTable(dtControls) {
         }
         if (dtControls[i].Fingerprint) {
             tr.dataset.fingerprint = String(dtControls[i].Fingerprint);
-        }
-
-        let emptyRows = tbody.querySelectorAll('tr.empty-excel-row');
-        if (emptyRows.length > 0) {
-            emptyRows[emptyRows.length - 1].remove();
         }
 
         let td_id = i;
@@ -9220,67 +9269,33 @@ function createAndAppendTable(dtControls) {
         }
 
         const rawTableData = extractAllTableData(tableId);
-        const tableData = (typeof sanitizeExportRow === 'function')
-            ? rawTableData.map(sanitizeExportRow)
-            : rawTableData.map(r => { const { rect, DELETE, ...rest } = r; rest["APP URL"] = ""; return rest; });
+        const tableData = rawTableData.map(sanitizeExportRow);
 
         if (tableData.length === 0) {
             showAppPopup('export_failed');
             return;
         }
 
-        // Detect if we are in Record Scenario Mode
-        var isRecordMode = window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0;
-        var finalDataPayload;
-
-        if (isRecordMode) {
-            var scenariosList = [];
-            var stepsByPage = {};
-
-            // Group rows (steps) by their PAGE NAME (case-insensitive)
-            tableData.forEach(step => {
-                var page = (step["PAGE NAME"] || "").trim().toLowerCase();
-                if (!stepsByPage[page]) stepsByPage[page] = [];
-                stepsByPage[page].push(step);
-            });
-
-            // Assemble SCENARIOS list mapping steps to their relevant scenario details
-            for (var pageName in window.pageScenarioData) {
-                var scenarioInfo = window.pageScenarioData[pageName];
-                if (scenarioInfo && scenarioInfo.scenarioName) {
-                    var pageKey = pageName.trim().toLowerCase();
-                    var matchedSteps = (stepsByPage[pageKey] || []).map(sanitizeExportRow);
-                    scenariosList.push({
-                        "SCENARIO_NAME": scenarioInfo.scenarioName,
-                        "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
-                        "STEPS": matchedSteps
-                    });
-                }
-            }
-
-            // Fallback: If no scenario matched or scenariosList is empty, include all steps
-            if (scenariosList.length === 0 && tableData.length > 0) {
-                scenariosList.push({
-                    "SCENARIO_NAME": "Scenario",
-                    "SCENARIO_OUTLINE": "",
-                    "STEPS": tableData
-                });
-            }
-
-            finalDataPayload = {
+        // Always generate record scenario payload format with isRecordscenario: true
+        const scenarioPayload = (typeof buildScenarioPayload === 'function')
+            ? buildScenarioPayload(tableData)
+            : {
+                "isRecordscenario": true,
                 "dashboardControls": {
                     "APP URL": "",
-                    "SCENARIOS": scenariosList
+                    "SCENARIOS": [
+                        {
+                            "SCENARIO_NAME": "Scenario",
+                            "SCENARIO_OUTLINE": "",
+                            "STEPS": tableData
+                        }
+                    ]
                 }
             };
-        } else {
-            // Normal scraping: Scrape UI, element-by-element click scraping, etc.
-            finalDataPayload = tableData;
-        }
 
         const payload = {
-            data: finalDataPayload,
-            isRecordscenario: isRecordMode, // Include top-level flag for API handling
+            data: scenarioPayload.dashboardControls,
+            isRecordscenario: true, // Always true
             userID: Number(userData.userID),
             baseUrl: userData.baseUrl,
             projectId: userData.project_id,
@@ -19075,19 +19090,32 @@ if (platformVersionField) {
     function formatDate(ts) {
         if (!ts) return '';
         const d = new Date(ts);
-        return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        if (Number.isNaN(d.getTime())) return '';
+        const day = d.getDate();
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
+        const month = months[d.getMonth()];
+        let hours = d.getHours();
+        const minutes = String(d.getMinutes()).padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+        const strHours = String(hours).padStart(2, '0');
+        return `${day} ${month}, ${strHours}:${minutes} ${ampm}`;
     }
 
     function downloadFile(filename, content, type = 'application/json') {
+        const safeName = String(filename || 'download.json').replace(/[/\\?%*:|"<>]/g, '_');
         const blob = new Blob([content], { type });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = filename;
+        a.download = safeName;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        setTimeout(() => {
+            try { URL.revokeObjectURL(url); } catch (_) {}
+        }, 60000);
     }
 
     function guessAppNameFromImport(data, fileName) {
@@ -19405,8 +19433,17 @@ if (platformVersionField) {
             });
 
             const downloadPayload = {
-                "isRecordscenario": false,
-                "dashboardControls": cleanElList
+                "isRecordscenario": true,
+                "dashboardControls": {
+                    "APP URL": "",
+                    "SCENARIOS": [
+                        {
+                            "SCENARIO_NAME": pageName,
+                            "SCENARIO_OUTLINE": "",
+                            "STEPS": cleanElList
+                        }
+                    ]
+                }
             };
 
             return {
@@ -20036,18 +20073,25 @@ if (platformVersionField) {
             }
 
             if (filteredKeys.length === 0) {
+                grid.classList.add('is-empty');
+                const isFiltered = projectKeys.length > 0;
+
                 grid.innerHTML = `
-                    <div class="repo-empty-state" style="grid-column: 1 / -1;">
-                        <div class="repo-empty-icon">
-                            <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="#2F8BCC" stroke-width="2">
-                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                    <div class="repo-empty-state">
+                        <div class="repo-empty-art">
+                            <svg width="52" height="52" viewBox="0 0 52 52" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="26" cy="26" r="25" fill="#F0F7FF" stroke="#E0E7FF" stroke-width="1.2" />
+                                <path d="M16 19C16 17.8954 16.8954 17 18 17H22.5858C23.1162 17 23.6249 17.2107 24 17.5858L25.4142 19C25.7893 19.3751 26.298 19.5858 26.8284 19.5858H34C35.1046 19.5858 36 20.4904 36 21.5858V32C36 33.1046 35.1046 34 34 34H18C16.8954 34 16 33.1046 16 32V19Z" fill="#DBEAFE" stroke="#93C5FD" stroke-width="1.4" stroke-linejoin="round" />
+                                <circle cx="28" cy="27" r="6" fill="#FFFFFF" stroke="#2563EB" stroke-width="1.6" />
+                                <path d="M32.5 31.5L36.5 35.5" stroke="#2563EB" stroke-width="1.8" stroke-linecap="round" />
                             </svg>
                         </div>
-                        <p class="repo-empty-title">${projectKeys.length === 0 ? 'No Saved App Projects Yet' : 'No Matching Projects'}</p>
-                        <p class="repo-empty-desc">${projectKeys.length === 0
+                        <h3 class="repo-empty-title">${!isFiltered ? 'No Saved App Projects Yet' : 'No Matching Projects'}</h3>
+                        <p class="repo-empty-desc">${!isFiltered
                             ? 'When you scrape UI elements, define features, or record scenarios on Home, they appear here as project workspaces.'
-                            : 'Try adjusting your platform filter or search query.'}</p>
+                            : 'No projects match your current platform filter or search query.'}</p>
                     </div>`;
+
                 setRepoMultiDeleteMode(false);
                 const enterBtn = document.getElementById('repoMultiDeleteBtn');
                 if (enterBtn) enterBtn.hidden = true;
@@ -20055,6 +20099,7 @@ if (platformVersionField) {
                 return;
             }
 
+            grid.classList.remove('is-empty');
             if (emptyState) emptyState.style.display = 'none';
             const enterBtn = document.getElementById('repoMultiDeleteBtn');
             if (enterBtn && !repoMultiDeleteMode) enterBtn.hidden = false;
@@ -20136,7 +20181,7 @@ if (platformVersionField) {
                     <div class="repo-project-asset-tags">
                         ${visibleTags.map(t => `<span class="repo-proj-tag" title="${escapeDummyHtml(t)}">${escapeDummyHtml(t)}</span>`).join('')}
                         ${remainingTags > 0 ? `<span class="repo-proj-tag-more">+${remainingTags} more</span>` : ''}
-                    </div>` : '<div class="repo-project-asset-tags"></div>'}
+                    </div>` : ''}
 
                     <div class="repo-project-footer">
                         <div class="repo-open-link-btn" data-action="open-workspace">

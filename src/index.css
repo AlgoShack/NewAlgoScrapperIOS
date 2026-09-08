@@ -7932,6 +7932,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  height: 100%;
+}
+
+#tab-repository.is-active:not(.is-workspace-open) {
+  display: flex !important;
+  flex-direction: column;
 }
 
 #tab-repository::-webkit-scrollbar {
@@ -7947,6 +7953,8 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   width: 100%;
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 100%;
   gap: 14px;
   box-sizing: border-box;
 }
@@ -9382,41 +9390,52 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   transform: none !important;
 }
 
+#repoProjectsView {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 .repo-empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 48px 24px;
-  background: #ffffff;
-  border: 1px dashed #cbd5e1;
-  border-radius: 12px;
+  padding: 16px 16px;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   gap: 8px;
+  margin: auto !important;
+  width: 100%;
+  max-width: 380px;
+  grid-column: 1 / -1;
+  box-sizing: border-box;
 }
 
-.repo-empty-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 50%;
-  background: #eff6ff;
-  display: grid;
-  place-items: center;
-  margin-bottom: 4px;
+.repo-empty-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 2px;
 }
 
 .repo-empty-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 15px;
+  font-weight: 600;
   color: #0f172a;
   margin: 0;
+  letter-spacing: -0.01em;
 }
 
 .repo-empty-desc {
-  font-size: 11.5px;
+  font-size: 12.5px;
   color: #64748b;
-  max-width: 420px;
-  line-height: 1.45;
+  max-width: 360px;
+  line-height: 1.5;
   margin: 0;
 }
 
@@ -9583,9 +9602,21 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 .repo-projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(270px, 320px));
+  gap: 12px;
   margin-top: 4px;
+}
+
+.repo-projects-grid:has(.repo-empty-state),
+.repo-projects-grid.is-empty {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 1 1 auto !important;
+  min-height: 280px !important;
+  width: 100% !important;
+  margin: auto 0 !important;
 }
 
 /* =============================================================================
@@ -9594,12 +9625,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .repo-project-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 16px 18px;
+  border-radius: 10px;
+  padding: 11px 13px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04), 0 1px 2px rgba(15, 23, 42, 0.02);
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
   cursor: pointer;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
@@ -9607,52 +9638,52 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 #repoProjectsView.is-multi-delete .repo-project-card:not(.is-live) {
-  padding-left: 38px;
+  padding-left: 34px;
 }
 
 .repo-project-card.is-live {
-  padding-left: 18px;
+  padding-left: 13px;
   border-color: #2F8BCC;
-  box-shadow: 0 0 0 3px rgba(47, 139, 204, 0.14), 0 8px 20px -8px rgba(47, 139, 204, 0.22);
+  box-shadow: 0 0 0 2px rgba(47, 139, 204, 0.14), 0 6px 16px -6px rgba(47, 139, 204, 0.22);
   cursor: pointer;
 }
 
 .repo-project-card:hover {
-  transform: translateY(-3px);
+  transform: translateY(-2px);
   border-color: #93c5fd;
-  box-shadow: 0 12px 24px -4px rgba(15, 23, 42, 0.08), 0 4px 8px -2px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 8px 18px -4px rgba(15, 23, 42, 0.08), 0 2px 6px -2px rgba(15, 23, 42, 0.04);
 }
 
 .repo-project-card.is-live:hover {
   border-color: #2F8BCC;
-  box-shadow: 0 0 0 3px rgba(47, 139, 204, 0.2), 0 12px 24px -4px rgba(47, 139, 204, 0.18);
+  box-shadow: 0 0 0 2px rgba(47, 139, 204, 0.2), 0 8px 18px -4px rgba(47, 139, 204, 0.18);
 }
 
 .repo-project-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px;
 }
 
 .repo-project-identity {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 9px;
   min-width: 0;
 }
 
 .repo-project-icon-box {
-  width: 42px;
-  height: 42px;
-  border-radius: 10px;
+  width: 32px;
+  height: 32px;
+  border-radius: 7px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  font-size: 17px;
+  font-size: 13px;
   font-weight: 800;
   color: #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
 }
 
 .repo-project-icon-box.is-ios {
@@ -9667,18 +9698,18 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  gap: 4px;
+  gap: 2px;
 }
 
 .repo-project-name-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-width: 0;
 }
 
 .repo-project-name {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: #0f172a;
   margin: 0;
@@ -9691,22 +9722,22 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .repo-live-pill {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 999px;
   background: #e8f4fb;
   border: 1px solid #b7d9ef;
   color: #2F8BCC;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   text-transform: uppercase;
 }
 
 .repo-live-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #2F8BCC;
   box-shadow: 0 0 0 0 rgba(47, 139, 204, 0.7);
@@ -9715,46 +9746,46 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 @keyframes repoLivePulse {
   0% { box-shadow: 0 0 0 0 rgba(47, 139, 204, 0.65); }
-  70% { box-shadow: 0 0 0 6px rgba(47, 139, 204, 0); }
+  70% { box-shadow: 0 0 0 5px rgba(47, 139, 204, 0); }
   100% { box-shadow: 0 0 0 0 rgba(47, 139, 204, 0); }
 }
 
 .repo-project-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
   flex-wrap: wrap;
   min-width: 0;
 }
 
 .repo-project-id {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
   color: #334155;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  padding: 1px 6px;
+  border-radius: 4px;
+  padding: 0 5px;
   letter-spacing: 0.01em;
-  max-width: 180px;
+  max-width: 130px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .repo-project-device {
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 600;
   color: #334155;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  padding: 1px 7px;
+  border-radius: 4px;
+  padding: 0 5px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  max-width: 220px;
+  gap: 3px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -9766,42 +9797,42 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .launch-picker-device {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   color: #334155;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   border-radius: 4px;
-  padding: 1px 5px;
+  padding: 0 5px;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  max-width: 160px;
+  max-width: 150px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .repo-project-updated {
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
   font-weight: 600;
 }
 
 .repo-project-date {
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
-  margin-top: 2px;
+  margin-top: 1px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 
 .repo-project-badge-pill {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  padding: 3px 8px;
-  border-radius: 6px;
+  padding: 2px 6px;
+  border-radius: 5px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
 }
@@ -9822,17 +9853,17 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .repo-project-stats-strip {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
+  gap: 5px;
 }
 
 .repo-pstat-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border-radius: 8px;
-  font-size: 11.5px;
+  gap: 4px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 10.5px;
   font-weight: 600;
 }
 
@@ -9855,12 +9886,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .repo-pstat-num {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 .repo-pstat-lbl {
-  font-size: 10.5px;
+  font-size: 9.5px;
   font-weight: 600;
 }
 
@@ -9868,30 +9899,34 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .repo-project-asset-tags {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   flex-wrap: wrap;
-  min-height: 20px;
+  min-height: 0;
+}
+
+.repo-project-asset-tags:empty {
+  display: none;
 }
 
 .repo-proj-tag {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 2px 7px;
+  padding: 1px 5px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: 4px;
+  font-size: 9.5px;
   font-weight: 600;
   color: #475569;
-  max-width: 120px;
+  max-width: 110px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .repo-proj-tag-more {
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 600;
   color: #94a3b8;
 }
@@ -9901,22 +9936,22 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding-top: 10px;
+  gap: 6px;
+  padding-top: 6px;
   border-top: 1px solid #f1f5f9;
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .repo-open-link-btn {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
-  border-radius: 7px;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 5px;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
   color: #2563eb;
-  font-size: 11.5px;
+  font-size: 10.5px;
   font-weight: 700;
   transition: all 0.15s ease;
 }
@@ -9938,7 +9973,15 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .repo-project-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+}
+
+.repo-project-actions .repo-btn-sm {
+  padding: 2px 7px;
+  font-size: 10.5px;
+  height: 23px;
+  border-radius: 5px;
+  gap: 3px;
 }
 
 /* --- Right-Side Slide Table Drawer --- */
