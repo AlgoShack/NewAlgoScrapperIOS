@@ -4708,12 +4708,12 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   justify-content: flex-start;
   gap: 20px;
   padding: 0 18px;
-  background: linear-gradient(180deg, #0d1527 0%, #080d1a 100%);
+  background: linear-gradient(180deg, var(--as-navy-2) 0%, var(--as-navy) 100%);
   color: #ffffff;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
   z-index: 4000;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+  border-bottom: 1px solid rgba(47, 139, 204, 0.3);
   position: relative;
 }
 
