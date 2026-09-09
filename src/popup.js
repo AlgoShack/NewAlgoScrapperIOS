@@ -6072,6 +6072,34 @@
             identificationType = 'XPATH';
         }
 
+        // Platform metadata extraction
+        const platform = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : '')
+            || (document.getElementById('platformname')?.value || 'Android');
+        const isAndroid = String(platform).toLowerCase().includes('android');
+        const isIOS = String(platform).toLowerCase().includes('ios');
+
+        let devName = "";
+        try {
+            const devSelect = document.getElementById('devicename');
+            if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
+                devName = devSelect.selectedOptions[0].text.trim() || devSelect.value || "";
+            }
+            if (!devName) {
+                devName = (document.getElementById('devicename')?.value || '').trim();
+            }
+        } catch (_) {}
+
+        const udidVal = (document.getElementById('udid')?.value || '').trim();
+        const appPkgVal = (document.getElementById('apppackage')?.value || '').trim();
+        const appActVal = (document.getElementById('appactivity')?.value || '').trim();
+        const bundleIdVal = (document.getElementById('bundleID')?.value || '').trim();
+
+        const appActivity = isAndroid ? (row["APP ACTIVITY"] !== undefined ? row["APP ACTIVITY"] : (row.AppActivity !== undefined ? row.AppActivity : (row.appActivity !== undefined ? row.appActivity : appActVal))) : "";
+        const appPackage = isAndroid ? (row["APP PACKAGE"] !== undefined ? row["APP PACKAGE"] : (row.AppPackage !== undefined ? row.AppPackage : (row.appPackage !== undefined ? row.appPackage : appPkgVal))) : "";
+        const bundleId = isIOS ? (row["BUNDLE ID"] !== undefined ? row["BUNDLE ID"] : (row.BundleId !== undefined ? row.BundleId : (row.bundleId !== undefined ? row.bundleId : bundleIdVal))) : "";
+        const deviceName = row["DEVICE NAME"] !== undefined ? row["DEVICE NAME"] : (row.DeviceName !== undefined ? row.DeviceName : (row.deviceName !== undefined ? row.deviceName : devName));
+        const udid = row["UDID"] !== undefined ? row["UDID"] : (row.UDID !== undefined ? row.UDID : (row.udid !== undefined ? row.udid : udidVal));
+
         let fingerprintObj = {};
         const rawFp = row["FINGERPRINT"] !== undefined ? row["FINGERPRINT"] : (row.Fingerprint !== undefined ? row.Fingerprint : row.fingerprint);
         if (rawFp && typeof rawFp === 'object' && !Array.isArray(rawFp)) {
@@ -6095,13 +6123,49 @@
             "FEATURE NAME": featureName,
             "NODE NAME": nodeName,
             "PAGE NAME": pageName,
+            "APP ACTIVITY": appActivity,
+            "APP PACKAGE": appPackage,
+            "BUNDLE ID": bundleId,
+            "DEVICE NAME": deviceName,
+            "UDID": udid,
             "FINGERPRINT": fingerprintObj
         };
     }
     window.sanitizeExportRow = sanitizeExportRow;
 
     function buildScenarioPayload(dashboardControls) {
-        const cleanControls = (dashboardControls || []).map(sanitizeExportRow);
+        const platform = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : '')
+            || (document.getElementById('platformname')?.value || 'Android');
+        const isAndroid = String(platform).toLowerCase().includes('android');
+        const isIOS = String(platform).toLowerCase().includes('ios');
+
+        let devName = "";
+        try {
+            const devSelect = document.getElementById('devicename');
+            if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
+                devName = devSelect.selectedOptions[0].text.trim() || devSelect.value || "";
+            }
+            if (!devName) {
+                devName = (document.getElementById('devicename')?.value || '').trim();
+            }
+        } catch (_) {}
+
+        const udid = (document.getElementById('udid')?.value || '').trim();
+        const appPkg = (document.getElementById('apppackage')?.value || '').trim();
+        const appAct = (document.getElementById('appactivity')?.value || '').trim();
+        const bundleId = (document.getElementById('bundleID')?.value || '').trim();
+
+        let appUrl = "";
+        try {
+            appUrl = (document.getElementById('appiumurl')?.value || '').trim();
+            if (!appUrl && window.currentUserData && window.currentUserData.launchUrl) {
+                appUrl = window.currentUserData.launchUrl.trim();
+            }
+        } catch (_) {}
+
+        const formatScenarioStep = (step) => sanitizeExportRow(step);
+
+        const cleanControls = (dashboardControls || []).map(formatScenarioStep);
         const scenariosList = [];
         const stepsByPage = {};
         const pageOrder = [];
@@ -6163,7 +6227,12 @@
         return {
             "isRecordscenario": true,
             "dashboardControls": {
-                "APP URL": "",
+                "APP URL": appUrl,
+                "APP ACTIVITY": isAndroid ? appAct : "",
+                "APP PACKAGE": isAndroid ? appPkg : "",
+                "BUNDLE ID": isIOS ? bundleId : "",
+                "DEVICE NAME": devName,
+                "UDID": udid,
                 "SCENARIOS": scenariosList
             }
         };
@@ -19507,17 +19576,50 @@ if (platformVersionField) {
             }
 
             const pageName = item.pageName || item.name || 'Default';
-            const cleanSteps = rawSteps.map(sanitizeExportRow);
+            const itemPlatform = project.platform || platform || 'Android';
+            const isAndroidItem = String(itemPlatform).toLowerCase().includes('android');
+            const isIOSItem = String(itemPlatform).toLowerCase().includes('ios');
+            const devNameItem = (project.device && project.device.name) || project.deviceName || '';
+            const udidItem = (project.device && project.device.id) || project.deviceId || '';
+            const appPkgItem = (project.capabilities && (project.capabilities['appium:appPackage'] || project.capabilities.appPackage)) || '';
+            const appActItem = (project.capabilities && (project.capabilities['appium:appActivity'] || project.capabilities.appActivity)) || '';
+            const bundleIdItem = (project.capabilities && (project.capabilities['appium:bundleId'] || project.capabilities.bundleId)) || '';
+
+            const formattedSteps = rawSteps.map(step => {
+                const sanitized = sanitizeExportRow(step);
+                return {
+                    "CONTROL NAME": sanitized["CONTROL NAME"] || "",
+                    "CONTROL TYPE": sanitized["CONTROL TYPE"] || "",
+                    "CONTROL ACTION": sanitized["CONTROL ACTION"] || "",
+                    "XPATH": sanitized["XPATH"] || "",
+                    "IDENTIFICATION TYPE": sanitized["IDENTIFICATION TYPE"] || "XPATH",
+                    "CONTROL VALUE": sanitized["CONTROL VALUE"] || "",
+                    "FEATURE NAME": sanitized["FEATURE NAME"] || "",
+                    "NODE NAME": sanitized["NODE NAME"] || "",
+                    "PAGE NAME": sanitized["PAGE NAME"] || "",
+                    "APP ACTIVITY": isAndroidItem ? (step["APP ACTIVITY"] !== undefined ? step["APP ACTIVITY"] : appActItem) : "",
+                    "APP PACKAGE": isAndroidItem ? (step["APP PACKAGE"] !== undefined ? step["APP PACKAGE"] : appPkgItem) : "",
+                    "BUNDLE ID": isIOSItem ? (step["BUNDLE ID"] !== undefined ? step["BUNDLE ID"] : bundleIdItem) : "",
+                    "DEVICE NAME": step["DEVICE NAME"] !== undefined ? step["DEVICE NAME"] : devNameItem,
+                    "UDID": step["UDID"] !== undefined ? step["UDID"] : udidItem,
+                    "FINGERPRINT": sanitized["FINGERPRINT"] || {}
+                };
+            });
 
             const downloadPayload = {
                 "isRecordscenario": true,
                 "dashboardControls": {
-                    "APP URL": "",
+                    "APP URL": project.appUrl || (project.capabilities && project.capabilities.appiumurl) || "",
+                    "APP ACTIVITY": isAndroidItem ? appActItem : "",
+                    "APP PACKAGE": isAndroidItem ? appPkgItem : "",
+                    "BUNDLE ID": isIOSItem ? bundleIdItem : "",
+                    "DEVICE NAME": devNameItem,
+                    "UDID": udidItem,
                     "SCENARIOS": [
                         {
                             "SCENARIO_NAME": item.name || pageName || "Scenario",
                             "SCENARIO_OUTLINE": item.outline || item.name || "",
-                            "STEPS": cleanSteps
+                            "STEPS": formattedSteps
                         }
                     ]
                 }
