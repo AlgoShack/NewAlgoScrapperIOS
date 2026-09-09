@@ -9412,7 +9412,18 @@ html.platform-win #tab-home .home-preview #dummyDevice {
               border-color 0.25s ease;
   box-sizing: border-box;
   overflow: hidden;
+  animation: repoCardCascadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+.repo-project-card:nth-child(1) { animation-delay: 0.02s; }
+.repo-project-card:nth-child(2) { animation-delay: 0.05s; }
+.repo-project-card:nth-child(3) { animation-delay: 0.08s; }
+.repo-project-card:nth-child(4) { animation-delay: 0.11s; }
+.repo-project-card:nth-child(5) { animation-delay: 0.14s; }
+.repo-project-card:nth-child(6) { animation-delay: 0.17s; }
+.repo-project-card:nth-child(7) { animation-delay: 0.20s; }
+.repo-project-card:nth-child(8) { animation-delay: 0.23s; }
+.repo-project-card:nth-child(n+9) { animation-delay: 0.26s; }
 
 #repoProjectsView.is-multi-delete .repo-project-card:not(.is-live) {
   padding-left: 36px;
@@ -9846,6 +9857,111 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 /* =============================================================================
+ * REPOSITORY WORKSPACE & TRANSITION ANIMATIONS
+ * ============================================================================= */
+@keyframes repoWorkspaceFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes repoHeaderSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes repoCrumbPopIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-8px) scale(0.96);
+  }
+  60% {
+    transform: translateX(2px) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+@keyframes repoSidebarSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes repoJsonPaneSlideIn {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes repoCardCascadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes repoCodeFadeIn {
+  0% {
+    opacity: 0.15;
+    transform: translateY(2px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes repoFindWidgetSlideDown {
+  0% {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes repoProjectsGridFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* =============================================================================
  * PAGE 2: OPEN WORKSPACE VIEW (DUAL PANE: SIDEBAR ASSETS + VS CODE STUDIO)
  * ============================================================================= */
 #tab-repository.is-workspace-open {
@@ -9878,6 +9994,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   padding: 8px 14px;
   border-radius: 12px;
   gap: 12px;
+  animation: repoHeaderSlideDown 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 #tab-repository.is-workspace-open .repo-header-desc {
@@ -9888,14 +10005,20 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   font-size: 13.5px;
 }
 
+#repoCrumbProject {
+  animation: repoCrumbPopIn 0.32s cubic-bezier(0.34, 1.3, 0.64, 1) both;
+}
+
 #tab-repository.is-workspace-open #repoDetailsView,
-#tab-repository.is-workspace-open .repo-workspace-page {
+#tab-repository.is-workspace-open .repo-workspace-page,
+#repoDetailsView.repo-workspace-animate {
   display: flex;
   flex: 1 1 0;
   min-height: 0;
   overflow: hidden;
   flex-direction: column;
   gap: 0;
+  animation: repoWorkspaceFadeIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .repo-workspace-body {
@@ -9909,7 +10032,8 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 /* --- LEFT ASSET SIDEBAR --- */
-.repo-asset-sidebar {
+.repo-asset-sidebar,
+#tab-repository.is-workspace-open .repo-asset-sidebar {
   width: 350px;
   flex: 0 0 350px;
   display: flex;
@@ -9922,6 +10046,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   border-radius: 14px;
   box-shadow: 0 4px 20px -6px rgba(15, 23, 42, 0.06);
   overflow: hidden;
+  animation: repoSidebarSlideIn 0.34s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .repo-asset-sidebar-head {
