@@ -105,7 +105,18 @@
         (typeof navigator !== 'undefined' && ((navigator.platform && navigator.platform.toLowerCase().includes('win')) || (navigator.userAgent && navigator.userAgent.toLowerCase().includes('windows'))));
     if (isWinOS) {
         document.documentElement.classList.add('platform-win');
-        if (document.body) document.body.classList.add('platform-win');
+        document.documentElement.classList.remove('platform-mac');
+        if (document.body) {
+            document.body.classList.add('platform-win');
+            document.body.classList.remove('platform-mac');
+        }
+    } else {
+        document.documentElement.classList.add('platform-mac');
+        document.documentElement.classList.remove('platform-win');
+        if (document.body) {
+            document.body.classList.add('platform-mac');
+            document.body.classList.remove('platform-win');
+        }
     }
 
     const secretKey = "algoshackv5-123";

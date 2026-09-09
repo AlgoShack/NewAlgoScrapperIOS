@@ -34,6 +34,19 @@
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
     <link rel="stylesheet" href="./index.css">
     <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
+    <script id="earlyPlatformDetect">
+        (function() {
+            var isWin = (typeof process !== 'undefined' && process.platform === 'win32') ||
+                (typeof navigator !== 'undefined' && ((navigator.platform && navigator.platform.toLowerCase().includes('win')) || (navigator.userAgent && navigator.userAgent.toLowerCase().includes('windows'))));
+            if (isWin) {
+                document.documentElement.classList.add('platform-win');
+                document.documentElement.classList.remove('platform-mac');
+            } else {
+                document.documentElement.classList.add('platform-mac');
+                document.documentElement.classList.remove('platform-win');
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -1131,8 +1144,6 @@
             <div class="about-hero-main-row">
                 <div class="about-hero-brand">
                     <div class="about-logo-wrapper">
-                        <div class="logo-pulse-ring-outer" aria-hidden="true"></div>
-                        <div class="logo-pulse-ring-inner" aria-hidden="true"></div>
                         <div class="about-logo-box">
                             <img src="icon/algoScraper-logo.png" alt="algoScraper" class="about-logo-img">
                         </div>
@@ -1899,24 +1910,25 @@
             </div>
         </div>
 
-        <!-- 5. SECTION: KEYBOARD SHORTCUTS REFERENCE -->
-                <div class="about-guide-section" id="section-shortcuts">
+                <!-- 5. SECTION: KEYBOARD SHORTCUTS REFERENCE -->
+        <div class="about-guide-section" id="section-shortcuts">
             <div class="about-section-header">
                 <div class="section-title-icon-wrap">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="10" y1="12" x2="10" y2="12"></line><line x1="14" y1="12" x2="14" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line></svg>
                 </div>
                 <div class="section-title-texts">
                     <h2 class="about-section-title">Keyboard Shortcuts &amp; Hotkeys</h2>
-                    <span class="about-section-subtitle">Supported keyboard controls for Windows and macOS environments</span>
+                    <span class="about-section-subtitle sc-subtitle-win">Supported keyboard controls for Windows environment</span>
+                    <span class="about-section-subtitle sc-subtitle-mac">Supported keyboard controls for macOS environment</span>
                 </div>
             </div>
 
-            <!-- CLEAN 3-COLUMN SHORTCUTS TABLE -->
+            <!-- DYNAMIC OS SHORTCUTS TABLE (WINDOWS ONLY ON WIN, MAC ONLY ON MAC) -->
             <div class="sc-table-panel">
                 <div class="sc-thead">
                     <div class="sc-th th-action">Action / Operation</div>
-                    <div class="sc-th th-os"><span class="os-badge-win"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" class="os-icon-svg"><path d="M0 2.222L6.47 1.33v6.236H0V2.222zm0 6.134h6.47v6.236L0 13.704V8.356zm7.26-7.14L16 0v7.566H7.26V1.216zm8.74 7.14V16l-8.74-1.216V8.356H16z"/></svg> Windows</span></div>
-                    <div class="sc-th th-os"><span class="os-badge-mac"><svg viewBox="0 0 170 170" width="13" height="13" fill="currentColor" class="os-icon-svg"><path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.7-7.83-12.01-14.36-6.8-10.4-12.18-21.96-16.14-34.69-3.96-12.73-5.94-24.89-5.94-36.49 0-14.05 3.65-26.06 10.95-36.03 7.3-9.97 16.63-15.11 27.99-15.42 4.9 0 10.37 1.25 16.42 3.75 6.05 2.5 10.23 3.8 12.54 3.89 1.74 0 6.05-1.42 12.92-4.26 6.87-2.84 12.72-4.08 17.55-3.72 13.52 1.05 24.32 6.54 32.4 16.48-11.78 7.15-17.56 16.9-17.34 29.27.22 9.68 3.97 17.75 11.26 24.21 7.29 6.46 16.15 10.15 26.58 11.08-2.61 7.84-5.87 15.86-9.78 24.08zM119.22 33.64c0-7.39 2.67-14.43 8.01-21.12 5.34-6.69 11.96-10.94 19.86-12.75.98 7.39-1.25 14.52-6.7 21.39-5.45 6.87-12.28 11.19-20.49 12.96-.22-.16-.44-.32-.68-.48z"/></svg> macOS</span></div>
+                    <div class="sc-th th-win"><span class="os-badge-win"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" class="os-icon-svg"><path d="M0 2.222L6.47 1.33v6.236H0V2.222zm0 6.134h6.47v6.236L0 13.704V8.356zm7.26-7.14L16 0v7.566H7.26V1.216zm8.74 7.14V16l-8.74-1.216V8.356H16z"/></svg> Windows Shortcut</span></div>
+                    <div class="sc-th th-mac"><span class="os-badge-mac"><svg viewBox="0 0 170 170" width="13" height="13" fill="currentColor" class="os-icon-svg"><path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.7-7.83-12.01-14.36-6.8-10.4-12.18-21.96-16.14-34.69-3.96-12.73-5.94-24.89-5.94-36.49 0-14.05 3.65-26.06 10.95-36.03 7.3-9.97 16.63-15.11 27.99-15.42 4.9 0 10.37 1.25 16.42 3.75 6.05 2.5 10.23 3.8 12.54 3.89 1.74 0 6.05-1.42 12.92-4.26 6.87-2.84 12.72-4.08 17.55-3.72 13.52 1.05 24.32 6.54 32.4 16.48-11.78 7.15-17.56 16.9-17.34 29.27.22 9.68 3.97 17.75 11.26 24.21 7.29 6.46 16.15 10.15 26.58 11.08-2.61 7.84-5.87 15.86-9.78 24.08zM119.22 33.64c0-7.39 2.67-14.43 8.01-21.12 5.34-6.69 11.96-10.94 19.86-12.75.98 7.39-1.25 14.52-6.7 21.39-5.45 6.87-12.28 11.19-20.49 12.96-.22-.16-.44-.32-.68-.48z"/></svg> macOS Shortcut</span></div>
                 </div>
 
                 <div class="sc-tbody">
@@ -1931,8 +1943,8 @@
                             <span class="sc-act-title">Reload Viewport</span>
                             <span class="sc-act-sub">Capture instant screenshot &amp; sync device frame</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -1940,8 +1952,8 @@
                             <span class="sc-act-title">Zoom In Viewport</span>
                             <span class="sc-act-sub">Increase mobile canvas magnification</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">+</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">+</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">+</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">+</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -1949,8 +1961,8 @@
                             <span class="sc-act-title">Zoom Out Viewport</span>
                             <span class="sc-act-sub">Scale down canvas to fit full device screen</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">-</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">-</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">-</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">-</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -1958,8 +1970,8 @@
                             <span class="sc-act-title">Reset Zoom (100%)</span>
                             <span class="sc-act-sub">Restore default 1:1 crisp pixel scaling</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">0</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">0</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">0</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">0</kbd></div>
                     </div>
 
                     <!-- Category 2: Inspection & Recording -->
@@ -1973,8 +1985,8 @@
                             <span class="sc-act-title">Toggle Inspect Mode</span>
                             <span class="sc-act-sub">Hover to highlight element bounding box &amp; XML node</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Alt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">I</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌥ Opt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">I</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Alt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">I</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌥ Opt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">I</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -1982,8 +1994,8 @@
                             <span class="sc-act-title">Toggle Interact Mode</span>
                             <span class="sc-act-sub">Direct touch, swipe &amp; keystroke emulation</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Alt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">M</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌥ Opt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">M</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Alt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">M</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌥ Opt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">M</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -1991,8 +2003,8 @@
                             <span class="sc-act-title">Record Action Step</span>
                             <span class="sc-act-sub">Capture current UI interaction into scenario</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2000,8 +2012,8 @@
                             <span class="sc-act-title">Clear Scenario Steps</span>
                             <span class="sc-act-sub">Reset recorded flow timeline to start fresh</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">X</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">X</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">X</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">X</kbd></div>
                     </div>
 
                     <!-- Category 3: Repository & JSON Search -->
@@ -2015,8 +2027,8 @@
                             <span class="sc-act-title">Open Search Widget</span>
                             <span class="sc-act-sub">Find keys, attributes, locator values, or XPath</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">F</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">F</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">F</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">F</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2024,8 +2036,8 @@
                             <span class="sc-act-title">Find Next Match</span>
                             <span class="sc-act-sub">Jump forward to subsequent search hit</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Enter</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Ctrl+G</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Return</kbd> <span class="k-or">/</span> <kbd class="app-kbd">⌘G</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Enter</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Ctrl+G</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Return</kbd> <span class="k-or">/</span> <kbd class="app-kbd">⌘G</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2033,8 +2045,8 @@
                             <span class="sc-act-title">Find Previous Match</span>
                             <span class="sc-act-sub">Navigate backward to prior matched item</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Enter</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Return</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Enter</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Return</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2042,8 +2054,8 @@
                             <span class="sc-act-title">Close Search Widget</span>
                             <span class="sc-act-sub">Dismiss floating search overlay</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
 
                     <!-- Category 4: Configuration & Code Editor -->
@@ -2057,8 +2069,8 @@
                             <span class="sc-act-title">Indent JSON (2 Spaces)</span>
                             <span class="sc-act-sub">Insert standardized 2-space tab indent</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Tab</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Tab</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2066,8 +2078,8 @@
                             <span class="sc-act-title">Navigate Autocomplete</span>
                             <span class="sc-act-sub">Cycle through suggestion list</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">↑</kbd> <kbd class="app-kbd">↓</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">↑</kbd> <kbd class="app-kbd">↓</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">↑</kbd> <kbd class="app-kbd">↓</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">↑</kbd> <kbd class="app-kbd">↓</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2075,8 +2087,8 @@
                             <span class="sc-act-title">Accept Suggestion</span>
                             <span class="sc-act-sub">Insert highlighted capability snippet</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Enter</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Return</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Tab</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Enter</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Tab</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Return</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2084,8 +2096,8 @@
                             <span class="sc-act-title">Dismiss Suggestions</span>
                             <span class="sc-act-sub">Close autocomplete popup box</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
 
                     <!-- Category 5: Table & Inline Editing -->
@@ -2099,8 +2111,8 @@
                             <span class="sc-act-title">Commit Cell Edit</span>
                             <span class="sc-act-sub">Save edited control property or name</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Enter</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Return</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Enter</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Return</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2108,8 +2120,8 @@
                             <span class="sc-act-title">Close Drawer / Inspector</span>
                             <span class="sc-act-sub">Exit repository split view side panel</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
 
                     <div class="sc-trow">
@@ -2117,8 +2129,8 @@
                             <span class="sc-act-title">Cancel Name Rename</span>
                             <span class="sc-act-sub">Discard inline renaming changes</span>
                         </div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
-                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
                 </div>
             </div>
@@ -2186,7 +2198,7 @@
             </div>
         </div>
 
-        <!-- 7. SECTION: FAQ & TROUBLESHOOTING -->
+                <!-- 7. SECTION: FAQ & TROUBLESHOOTING -->
         <div class="about-guide-section" id="section-faq">
             <div class="about-section-header">
                 <div class="section-title-icon-wrap">
@@ -2194,99 +2206,205 @@
                 </div>
                 <div class="section-title-texts">
                     <h2 class="about-section-title">Frequently Asked Questions &amp; Troubleshooting</h2>
-                    <span class="about-section-subtitle">Quick solutions for common connection and scraping scenarios</span>
+                    <span class="about-section-subtitle">Quick solutions for common connection, scraping, and locator scenarios</span>
                 </div>
             </div>
 
             <div class="about-faq-accordion">
                 <!-- FAQ 1: Device Detection -->
                 <div class="faq-item" data-searchable="faq device not detected adb unauthorized usb debugging ios webdriveragent xcuitest connection offline">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">My device is not appearing in the connected devices dropdown. How do I fix it?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-blue">DEVICE SETUP</span>
+                            <span class="faq-q-text">My device is not appearing in the connected devices dropdown. How do I fix it?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p><strong>For Android:</strong> Ensure <em>USB Debugging</em> is enabled under Developer Options on your phone and accept the RSA computer authorization prompt. Run <code>adb devices</code> in your terminal to verify that the device is listed as <code>device</code> (not <code>unauthorized</code> or <code>offline</code>).</p>
-                        <p><strong>For iOS:</strong> Ensure Xcode is installed. On physical iPhones, trust Developer Certificates under <em>iOS Settings &gt; General &gt; VPN &amp; Device Management</em> and verify WebDriverAgentRunner is installed. For iOS Simulators, verify that the simulator is booted in Xcode.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-os-pill pill-android">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                                <span>Android</span>
+                            </div>
+                            <div class="faq-guide-text">Ensure <strong>USB Debugging</strong> is enabled under Developer Options on your phone and accept the RSA computer authorization prompt. Run <code class="faq-code">adb devices</code> in your terminal to verify that the device is listed as <span class="faq-status-tag valid">device</span> (not <code>unauthorized</code> or <code>offline</code>).</div>
+                        </div>
+                        <div class="faq-guide-row">
+                            <div class="faq-os-pill pill-ios">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><circle cx="12" cy="18" r="1"></circle></svg>
+                                <span>iOS</span>
+                            </div>
+                            <div class="faq-guide-text">Ensure Xcode and command line tools are installed. On physical iPhones, trust Developer Certificates under <em>iOS Settings &gt; General &gt; VPN &amp; Device Management</em> and verify WebDriverAgentRunner is installed. For iOS Simulators, verify that the simulator is booted in Xcode.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 2: Package & Activity / Bundle ID -->
                 <div class="faq-item" data-searchable="faq package name app activity launcher activity bundle id info plist android manifest">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">How do I find the correct App Package &amp; Launcher Activity (Android) or Bundle ID (iOS)?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-purple">CONFIG</span>
+                            <span class="faq-q-text">How do I find the correct App Package &amp; Launcher Activity (Android) or Bundle ID (iOS)?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p><strong>For Android:</strong> Run <code>adb shell cmd package resolve-activity --brief &lt;package-name&gt;</code> while the app is running, or inspect the app APK using Android Studio / APK Analyzer to locate the exported Launcher Activity.</p>
-                        <p><strong>For iOS:</strong> Inspect your app's <code>Info.plist</code> file for the <code>CFBundleIdentifier</code> key, or run <code>ideviceinstaller -l</code> in terminal to list installed app bundle identifiers.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-os-pill pill-android">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                                <span>Android</span>
+                            </div>
+                            <div class="faq-guide-text">Run <code class="faq-code">adb shell cmd package resolve-activity --brief &lt;package-name&gt;</code> while the app is running, or inspect the APK using Android Studio / APK Analyzer to locate the exported Launcher Activity.</div>
+                        </div>
+                        <div class="faq-guide-row">
+                            <div class="faq-os-pill pill-ios">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><circle cx="12" cy="18" r="1"></circle></svg>
+                                <span>iOS</span>
+                            </div>
+                            <div class="faq-guide-text">Inspect your app's <code class="faq-code">Info.plist</code> file for the <code class="faq-code">CFBundleIdentifier</code> key, or run <code class="faq-code">ideviceinstaller -l</code> in your terminal to list installed app bundle identifiers.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 3: Inspect Mode vs Interact Mode -->
                 <div class="faq-item" data-searchable="faq inspect mode interact mode dual mode viewport live touch tap gestures">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">What is the difference between Inspect Mode and Interact Mode?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-amber">VIEWPORT</span>
+                            <span class="faq-q-text">What is the difference between Inspect Mode and Interact Mode?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p><strong>Inspect Mode (Tap = Scrape):</strong> Clicking the live device screen highlights element bounding boxes and extracts full attributes &amp; multi-XPaths directly into the Scraped Table without triggering actions on the device.</p>
-                        <p><strong>Interact Mode (Live Gestures):</strong> Transmits real touch inputs, clicks, drag-to-scroll gestures, and soft keyboard typing directly to the physical device or simulator via Appium / W3C WebDriver.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-mode-pill pill-inspect">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                                <span>Inspect Mode</span>
+                            </div>
+                            <div class="faq-guide-text"><strong>Tap = Scrape:</strong> Clicking the live device screen highlights element bounding boxes and extracts full attributes &amp; multi-XPaths directly into the Scraped Table without triggering actions on the device.</div>
+                        </div>
+                        <div class="faq-guide-row">
+                            <div class="faq-mode-pill pill-interact">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <span>Interact Mode</span>
+                            </div>
+                            <div class="faq-guide-text"><strong>Live Gestures:</strong> Transmits real touch inputs, clicks, drag-to-scroll gestures, and soft keyboard typing directly to the physical device or simulator via Appium / W3C WebDriver.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 4: Hybrid Apps & WebViews -->
                 <div class="faq-item" data-searchable="faq hybrid apps webview chrome custom tab embedded webview dom inspection">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">Can algoScraper inspect elements inside hybrid apps or WebViews?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-indigo">WEBVIEW</span>
+                            <span class="faq-q-text">Can algoScraper inspect elements inside hybrid apps or WebViews?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p>Yes! algoScraper parses both native wrapper containers and child DOM elements in embedded WebViews and Chrome Custom Tabs. For Android debug builds, ensure <code>WebView.setWebContentsDebuggingEnabled(true)</code> is enabled in your application source code.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-indigo">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                                <span>Hybrid DOM</span>
+                            </div>
+                            <div class="faq-guide-text">Yes! algoScraper parses both native wrapper containers and child DOM elements in embedded WebViews and Chrome Custom Tabs. For Android debug builds, ensure <code class="faq-code">WebView.setWebContentsDebuggingEnabled(true)</code> is enabled in your application source code.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 5: Multi-XPath Dropdown Selection -->
                 <div class="faq-item" data-searchable="faq multi xpath locator selection control id dropdown fallback allxpaths priority">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">How do I select and customize element locators in the Scraped Table?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-green">LOCATORS</span>
+                            <span class="faq-q-text">How do I select and customize element locators in the Scraped Table?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p>In the Scraped Table on the Home page, click the <strong>CONTROL ID</strong> dropdown for any element row. You can choose the primary locator from candidate options (Accessibility ID, Resource ID, Combined Text/ID, Parent-Relative XPath, or Indexed tag). All fallback candidates remain preserved in the <code>allXpaths</code> repository array.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-green">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"></polyline><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path></svg>
+                                <span>Control ID</span>
+                            </div>
+                            <div class="faq-guide-text">In the Scraped Table on the Home page, click the <strong>CONTROL ID</strong> dropdown for any element row. You can choose the primary locator from candidate options (Accessibility ID, Resource ID, Combined Text/ID, Parent-Relative XPath, or Indexed tag). All fallback candidates remain preserved in the <code class="faq-code">allXpaths</code> repository array.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 6: Scenario Recording & Action Types -->
                 <div class="faq-item" data-searchable="faq scenario recording action types clicked entered swipe steps sequence">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">How does Scenario Studio record user action flows?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-rose">SCENARIOS</span>
+                            <span class="faq-q-text">How does Scenario Studio record user action flows?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p>When you click <strong>Record Scenario</strong> on the Home dashboard, live actions are captured sequentially: screen taps are recorded as <code>clicked</code>, typing into text inputs records the input string into <code>CONTROL VALUE</code> with action <code>entered</code>, and swipe gestures capture coordinate trajectories.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-rose">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                                <span>Action Steps</span>
+                            </div>
+                            <div class="faq-guide-text">When you click <strong>Record Scenario</strong> on the Home dashboard, live actions are captured sequentially: screen taps are recorded as <code class="faq-code">clicked</code>, typing into text inputs records the input string into <strong>CONTROL VALUE</strong> with action <code class="faq-code">entered</code>, and swipe gestures capture coordinate trajectories.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 7: Exporting & algoQA Sync -->
                 <div class="faq-item" data-searchable="faq export json save repository algoqa cloud sync api token publish">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">How do I export my project data or publish to algoQA Cloud?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-cyan">CLOUD SYNC</span>
+                            <span class="faq-q-text">How do I export my project data or publish to algoQA Cloud?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p>In the <strong>Repository</strong> tab, click <strong>Export JSON</strong> to download standalone test artifact files. To publish to algoQA Cloud, paste your API token in the top header and click <strong>algoQA</strong> to sync features, page objects, and recorded scenarios directly into your cloud projects.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-cyan">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                                <span>algoQA AI</span>
+                            </div>
+                            <div class="faq-guide-text">In the <strong>Repository</strong> tab, click <strong>Export JSON</strong> to download standalone test artifact files. To publish to algoQA Cloud, paste your API token in the top header and click <strong>algoQA</strong> to sync features, page objects, and recorded scenarios directly into your cloud projects.</div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- FAQ 8: Reset & Disconnect -->
                 <div class="faq-item" data-searchable="faq reset session clear table disconnect appium driver clean cache">
-                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
-                        <span class="faq-q-text">How do I reset or start a fresh scraping session?</span>
-                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-slate">SESSIONS</span>
+                            <span class="faq-q-text">How do I reset or start a fresh scraping session?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
                     </button>
                     <div class="faq-answer-content">
-                        <p>Click the <strong>Reset</strong> button on the top toolbar to clear scraped controls in memory, or use <strong>Disconnect</strong> to safely terminate the active Appium/W3C driver session and release connected device resources.</p>
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-slate">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+                                <span>Session Reset</span>
+                            </div>
+                            <div class="faq-guide-text">Click the <strong>Reset</strong> button on the top toolbar to clear scraped controls in memory, or use <strong>Disconnect</strong> to safely terminate the active Appium/W3C driver session and release connected device resources.</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2409,12 +2527,29 @@
             });
         }
 
-        function toggleAboutFaq(el) {
+                function toggleAboutFaq(el) {
             if (!el) return;
             const item = el.closest('.faq-item');
-            if (item) {
-                item.classList.toggle('is-open');
+            if (!item) return;
+            const accordion = item.closest('.about-faq-accordion');
+            const wasOpen = item.classList.contains('is-open');
+
+            // Close all other items in this accordion
+            if (accordion) {
+                const openItems = accordion.querySelectorAll('.faq-item.is-open');
+                openItems.forEach(function(openItem) {
+                    if (openItem !== item) {
+                        openItem.classList.remove('is-open');
+                        const btn = openItem.querySelector('.faq-question-btn');
+                        if (btn) btn.setAttribute('aria-expanded', 'false');
+                    }
+                });
             }
+
+            // Toggle selected item
+            item.classList.toggle('is-open', !wasOpen);
+            const currentBtn = item.querySelector('.faq-question-btn');
+            if (currentBtn) currentBtn.setAttribute('aria-expanded', !wasOpen ? 'true' : 'false');
         }
         window.toggleAboutFaq = toggleAboutFaq;
 

@@ -7891,14 +7891,23 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 /* --- KEYFRAME ANIMATIONS --- */
-@keyframes aboutFadeInUp {
+@keyframes aboutFadeIn {
   0% {
     opacity: 0;
-    transform: translateY(20px) scale(0.98);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes aboutFadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -7994,63 +8003,11 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 /* Staggered entrance animations */
 #tab-about.is-active .about-hero-card {
-  animation: aboutFadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-#tab-about.is-active .about-section-container:nth-of-type(1) {
-  animation: aboutFadeInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) 0.08s both;
-}
-
-#tab-about.is-active .about-section-container:nth-of-type(2) {
-  animation: aboutFadeInUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.16s both;
-}
-
-/* --- AMBIENT AURORA BACKGROUND GLOWS --- */
-.about-aurora-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(65px);
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.55;
-  animation: auroraDrift 14s ease-in-out infinite alternate;
-}
-
-.about-aurora-glow.glow-cyan {
-  width: 280px;
-  height: 280px;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.45) 0%, rgba(56, 189, 248, 0.1) 60%, transparent 100%);
-  top: -40px;
-  right: 8%;
-}
-
-.about-aurora-glow.glow-indigo {
-  width: 320px;
-  height: 320px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.38) 0%, rgba(129, 140, 248, 0.08) 60%, transparent 100%);
-  bottom: 20px;
-  left: 2%;
-  animation-duration: 18s;
-}
-
-.about-aurora-glow.glow-blue {
-  width: 240px;
-  height: 240px;
-  background: radial-gradient(circle, rgba(37, 99, 235, 0.3) 0%, rgba(47, 139, 204, 0.05) 60%, transparent 100%);
-  top: 35%;
-  left: 45%;
-  animation-duration: 20s;
-}
-
-/* --- HERO BANNER CARD (FIXED TOP) --- */
-.about-hero-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 14px;
-  box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.05), 0 1px 4px rgba(15, 23, 42, 0.02);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.02);
   padding: 12px 18px;
   display: flex;
   flex-direction: column;
@@ -8058,12 +8015,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   overflow: hidden;
   flex-shrink: 0 !important;
   z-index: 2;
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .about-hero-card:hover {
-  border-color: rgba(147, 197, 253, 0.9);
-  box-shadow: 0 14px 36px -8px rgba(47, 139, 204, 0.16), 0 4px 12px rgba(15, 23, 42, 0.04);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .about-hero-main-row {
@@ -8082,8 +8039,8 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 .about-logo-wrapper {
   position: relative;
-  width: 50px;
-  height: 50px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -8091,45 +8048,22 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .about-logo-box {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 4px 14px rgba(47, 139, 204, 0.25);
-  border: 1.5px solid #e0e7ff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  border: 1px solid #e2e8f0;
   background: #ffffff;
-  position: relative;
-  z-index: 2;
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
-  animation: iconFloatingBob 4s ease-in-out infinite;
-}
-
-.about-hero-card:hover .about-logo-box {
-  transform: scale(1.1) rotate(-4deg);
-}
-
-.logo-pulse-ring-outer {
-  position: absolute;
-  inset: -6px;
-  border-radius: 18px;
-  border: 1.5px solid rgba(56, 189, 248, 0.45);
-  animation: pulseRadarRing 3s infinite cubic-bezier(0.25, 1, 0.5, 1);
-  pointer-events: none;
-}
-
-.logo-pulse-ring-inner {
-  position: absolute;
-  inset: -2px;
-  border-radius: 14px;
-  border: 1.5px solid rgba(47, 139, 204, 0.6);
-  animation: pulseRadarRing 3s infinite 0.75s cubic-bezier(0.25, 1, 0.5, 1);
-  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .about-logo-img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
 }
 
@@ -8147,13 +8081,11 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 .about-title {
   margin: 0;
-  font-size: 20px;
-  font-weight: 800;
-  letter-spacing: -0.4px;
-  line-height: 1.1;
-  background: linear-gradient(135deg, #0f172a 0%, #1e40af 50%, #0284c7 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 1.2;
+  color: #0f172a;
 }
 
 .about-version-badge {
@@ -8208,23 +8140,21 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .metric-glass-card {
-  background: rgba(248, 250, 252, 0.85);
-  backdrop-filter: blur(8px);
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   padding: 6px 11px;
   display: flex;
   flex-direction: column;
   gap: 1px;
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
   cursor: default;
 }
 
 .metric-glass-card:hover {
   background: #ffffff;
   border-color: #93c5fd;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(47, 139, 204, 0.12);
+  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.1);
 }
 
 .metric-glass-num {
@@ -8271,14 +8201,14 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: rgba(248, 250, 252, 0.9);
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 5px 11px;
   font-size: 11px;
   font-weight: 600;
   color: #334155;
-  transition: all 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
   cursor: default;
   position: relative;
 }
@@ -8300,7 +8230,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .platform-chip:hover {
-  transform: translateY(-2px);
+  border-color: #cbd5e1;
 }
 
 .platform-chip.chip-android:hover {
@@ -8427,20 +8357,16 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 .about-feature-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.03);
   padding: 13px 15px;
   display: flex;
   flex-direction: column;
   gap: 7px;
   overflow: hidden;
-  transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1), 
-              box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1), 
-              border-color 0.25s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .card-shimmer-sheen {
@@ -8460,37 +8386,38 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .about-feature-card:hover {
-  transform: translateY(-3.5px);
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.07);
 }
 
 .about-feature-card.card-blue:hover {
   border-color: #93c5fd;
-  box-shadow: 0 12px 24px -4px rgba(37, 99, 235, 0.14), 0 3px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.12);
 }
 
 .about-feature-card.card-purple:hover {
   border-color: #d8b4fe;
-  box-shadow: 0 12px 24px -4px rgba(147, 51, 234, 0.14), 0 3px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 14px rgba(147, 51, 234, 0.12);
 }
 
 .about-feature-card.card-green:hover {
   border-color: #86efac;
-  box-shadow: 0 12px 24px -4px rgba(22, 163, 74, 0.14), 0 3px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.12);
 }
 
 .about-feature-card.card-amber:hover {
   border-color: #fde68a;
-  box-shadow: 0 12px 24px -4px rgba(217, 119, 6, 0.14), 0 3px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.12);
 }
 
 .about-feature-card.card-indigo:hover {
   border-color: #c7d2fe;
-  box-shadow: 0 12px 24px -4px rgba(79, 70, 229, 0.14), 0 3px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.12);
 }
 
 .about-feature-card.card-cyan:hover {
   border-color: #a5f3fc;
-  box-shadow: 0 12px 24px -4px rgba(8, 145, 178, 0.14), 0 3px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 4px 14px rgba(8, 145, 178, 0.12);
 }
 
 .feature-card-header {
@@ -8566,13 +8493,11 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
   align-items: center;
   gap: 9px;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
   padding: 12px 16px;
-  box-shadow: 0 3px 10px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
   position: relative;
   z-index: 1;
 }
@@ -8583,13 +8508,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   gap: 9px;
   padding: 6px 8px;
   border-radius: 8px;
-  transition: transform 0.24s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, box-shadow 0.2s ease;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .pipeline-step:hover {
-  transform: translateY(-2px);
   background: #f8fafc;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
 }
 
 .pipeline-step-badge-wrap {
@@ -8685,7 +8609,6 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .about-nav-pill:hover {
   background: #f1f5f9;
   color: #0f172a;
-  transform: translateY(-1px);
 }
 
 .about-nav-pill.is-active {
@@ -8756,18 +8679,19 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   height: 100% !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
+  overscroll-behavior-y: contain !important;
+  scroll-behavior: smooth !important;
+  -webkit-overflow-scrolling: touch !important;
   display: flex !important;
   flex-direction: column !important;
   gap: 12px !important;
-  padding-top: 8px !important;
+  padding-top: 4px !important;
   padding-right: 4px !important;
-  padding-bottom: 36px !important;
+  padding-bottom: 24px !important;
   padding-left: 2px !important;
   box-sizing: border-box !important;
   scrollbar-width: none !important;
   -ms-overflow-style: none !important;
-  mask-image: linear-gradient(to bottom, transparent 0px, black 12px, black calc(100% - 12px), transparent 100%);
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0px, black 12px, black calc(100% - 12px), transparent 100%);
 }
 
 .about-content-scroll-container::-webkit-scrollbar {
@@ -8787,7 +8711,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .about-guide-section.is-active,
 .about-guide-section.is-search-active {
   display: flex !important;
-  animation: aboutFadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: aboutFadeIn 0.2s ease both;
 }
 
 .about-two-col-grid {
@@ -8797,22 +8721,21 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .about-card-panel {
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
   padding: 16px 18px;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.03);
   display: flex;
   flex-direction: column;
   gap: 10px;
   position: relative;
-  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
 }
 
 .about-card-panel:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
 }
 
 .about-card-panel.full-width {
@@ -8985,8 +8908,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .locator-strat-card:hover {
   background: #ffffff;
   border-color: #93c5fd;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(47, 139, 204, 0.1);
+  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.1);
 }
 
 .strat-rank {
@@ -9202,7 +9124,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 /* =============================================================================
- * CLEAN 3-COLUMN SHORTCUTS TABLE
+ * DYNAMIC OS KEYBOARD SHORTCUTS TABLE (MAC DEFAULT / WIN SCOPED)
  * ============================================================================= */
 .sc-table-panel {
   background: #ffffff;
@@ -9216,9 +9138,10 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .sc-thead {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   background: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
-  padding: 10px 16px;
+  padding: 10px 18px;
   font-size: 11px;
   font-weight: 700;
   color: #475569;
@@ -9226,11 +9149,27 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .sc-th.th-action {
-  flex: 1.6;
+  flex: 1 1 auto;
+  text-align: left;
 }
 
-.sc-th.th-os {
-  flex: 1;
+/* Default / macOS styles: hide Windows column */
+.th-win,
+.td-win,
+.sc-subtitle-win {
+  display: none !important;
+}
+
+.th-mac,
+.td-mac,
+.sc-subtitle-mac {
+  display: flex !important;
+}
+
+.sc-th.th-mac {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  text-align: right;
 }
 
 .os-badge-win, .os-badge-mac {
@@ -9262,7 +9201,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 16px;
+  padding: 8px 18px;
   background: #f1f5f9;
   border-bottom: 1px solid #e2e8f0;
   border-top: 1px solid #e2e8f0;
@@ -9285,7 +9224,8 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .sc-trow {
   display: flex;
   align-items: center;
-  padding: 8.5px 16px;
+  justify-content: space-between;
+  padding: 9px 18px;
   border-bottom: 1px solid #f1f5f9;
   transition: background 0.15s ease;
 }
@@ -9299,12 +9239,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 }
 
 .sc-td.td-action {
-  flex: 1.6;
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
   gap: 1.5px;
   min-width: 0;
-  padding-right: 12px;
+  padding-right: 18px;
 }
 
 .sc-act-title {
@@ -9321,13 +9261,16 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   text-overflow: ellipsis;
 }
 
-.sc-td.td-os {
-  flex: 1;
+.sc-td.td-mac,
+.sc-td.td-win {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 4px;
   font-size: 11px;
   color: #1e293b;
+  text-align: right;
 }
 
 .app-kbd {
@@ -9335,7 +9278,7 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   align-items: center;
   justify-content: center;
   gap: 3px;
-  padding: 3px 6.5px;
+  padding: 3px 7px;
   min-width: 22px;
   height: 22px;
   font-size: 10.5px;
@@ -9355,7 +9298,6 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .sc-trow:hover .app-kbd {
   border-color: #94a3b8;
   border-bottom-color: #64748b;
-  transform: translateY(-0.5px);
 }
 
 .k-plus {
@@ -9388,28 +9330,31 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   color: #0f172a;
 }
 
-/* FAQ ACCORDION */
+/* FAQ ACCORDION - MODERN SLATE & ACCENT SYSTEM */
 .about-faq-accordion {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
 }
 
 .faq-item {
-  background: rgba(255, 255, 255, 0.95);
+  background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.02);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .faq-item:hover {
   border-color: #cbd5e1;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .faq-item.is-open {
   border-color: #93c5fd;
-  box-shadow: 0 4px 12px rgba(47, 139, 204, 0.08);
+  box-shadow: 0 4px 14px rgba(47, 139, 204, 0.08);
 }
 
 .faq-question-btn {
@@ -9418,54 +9363,169 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 12px 16px;
-  background: transparent;
+  padding: 10.5px 14px;
+  background: #ffffff;
   border: none;
   font-family: inherit;
-  font-size: 12px;
-  font-weight: 700;
-  color: #0f172a;
-  text-align: left;
   cursor: pointer;
   outline: none;
+  text-align: left;
+  transition: background-color 0.15s ease;
+  user-select: none;
 }
 
-.faq-chevron {
-  color: #94a3b8;
-  transition: transform 0.25s ease;
+.faq-item.is-open .faq-question-btn {
+  background: #f8fafc;
+}
+
+.faq-q-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.faq-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 6.5px;
+  border-radius: 4px;
   flex-shrink: 0;
+  line-height: 1.2;
 }
 
-.faq-item.is-open .faq-chevron {
+.faq-cat-badge.badge-blue { background: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; }
+.faq-cat-badge.badge-purple { background: #faf5ff; color: #9333ea; border: 1px solid #f3e8ff; }
+.faq-cat-badge.badge-amber { background: #fffbeb; color: #d97706; border: 1px solid #fef3c7; }
+.faq-cat-badge.badge-indigo { background: #eef2ff; color: #4f46e5; border: 1px solid #e0e7ff; }
+.faq-cat-badge.badge-green { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
+.faq-cat-badge.badge-rose { background: #fff1f2; color: #e11d48; border: 1px solid #ffe4e6; }
+.faq-cat-badge.badge-cyan { background: #ecfeff; color: #0891b2; border: 1px solid #cffafe; }
+.faq-cat-badge.badge-slate { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+
+.faq-q-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+}
+
+.faq-chevron-box {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #64748b;
+  transition: transform 0.22s ease, background-color 0.2s ease, color 0.2s ease;
+}
+
+.faq-item.is-open .faq-chevron-box {
   transform: rotate(180deg);
+  background: #eff6ff;
   color: #2F8BCC;
+}
+
+.faq-chevron-box svg {
+  display: block;
 }
 
 .faq-answer-content {
   display: none;
-  padding: 0 16px 14px;
-  font-size: 11px;
-  line-height: 1.6;
-  color: #475569;
+  padding: 10px 14px 12px 14px;
   border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  flex-direction: column;
+  gap: 7px;
 }
 
 .faq-item.is-open .faq-answer-content {
-  display: block;
-  padding-top: 10px;
+  display: flex;
+  animation: aboutFadeIn 0.2s ease both;
 }
 
-.faq-answer-content p {
-  margin: 4px 0;
+.faq-guide-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  box-sizing: border-box;
 }
 
-.faq-answer-content code {
-  font-family: 'JetBrains Mono', monospace;
-  background: #f1f5f9;
-  padding: 2px 5px;
+.faq-os-pill,
+.faq-mode-pill,
+.faq-icon-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2.5px 7px;
   border-radius: 4px;
-  color: #0f172a;
   font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-top: 1px;
+  line-height: 1.2;
+}
+
+.faq-os-pill.pill-android { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.faq-os-pill.pill-ios { background: #f8fafc; color: #0f172a; border: 1px solid #cbd5e1; }
+.faq-mode-pill.pill-inspect { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.faq-mode-pill.pill-interact { background: #fdf2f8; color: #be185d; border: 1px solid #fbcfe8; }
+.faq-icon-pill.pill-indigo { background: #eef2ff; color: #4f46e5; border: 1px solid #c7d2fe; }
+.faq-icon-pill.pill-green { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.faq-icon-pill.pill-rose { background: #fff1f2; color: #e11d48; border: 1px solid #fecdd3; }
+.faq-icon-pill.pill-cyan { background: #ecfeff; color: #0891b2; border: 1px solid #a5f3fc; }
+.faq-icon-pill.pill-slate { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+
+.faq-guide-text {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #334155;
+  flex: 1;
+}
+
+.faq-guide-text strong {
+  color: #0f172a;
+}
+
+.faq-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  padding: 1.5px 5px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+.faq-status-tag {
+  display: inline-flex;
+  align-items: center;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.faq-status-tag.valid {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
 }
 
 /* =============================================================================
@@ -12416,10 +12476,11 @@ html.platform-win #tab-about .about-hero-brand {
   gap: 12px !important;
 }
 
-html.platform-win #tab-about .about-hero-title {
-  font-size: 15px !important;
-  font-weight: 700 !important;
+html.platform-win #tab-about .about-title {
+  font-size: 16.5px !important;
+  font-weight: 600 !important;
   color: #0f172a !important;
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
 }
 
 html.platform-win #tab-about .about-hero-desc {
@@ -12546,7 +12607,19 @@ html.platform-win #tab-about .about-check-list {
   line-height: 1.45 !important;
 }
 
-/* Shortcuts Table on Windows */
+/* Shortcuts Table on Windows (Windows-only view) */
+html.platform-win .th-mac,
+html.platform-win .td-mac,
+html.platform-win .sc-subtitle-mac {
+  display: none !important;
+}
+
+html.platform-win .th-win,
+html.platform-win .td-win,
+html.platform-win .sc-subtitle-win {
+  display: flex !important;
+}
+
 html.platform-win #tab-about .sc-table-panel {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
@@ -12563,6 +12636,15 @@ html.platform-win #tab-about .sc-thead {
   letter-spacing: 0.3px !important;
 }
 
+html.platform-win #tab-about .sc-th.th-action {
+  flex: 1 1 auto !important;
+}
+
+html.platform-win #tab-about .sc-th.th-win {
+  flex: 0 0 auto !important;
+  justify-content: flex-end !important;
+}
+
 html.platform-win #tab-about .sc-cat-header {
   padding: 7px 14px !important;
   background: #f1f5f9 !important;
@@ -12577,15 +12659,27 @@ html.platform-win #tab-about .sc-trow {
   border-bottom: 1px solid #f1f5f9 !important;
 }
 
+html.platform-win #tab-about .sc-td.td-action {
+  flex: 1 1 auto !important;
+  padding-right: 14px !important;
+}
+
+html.platform-win #tab-about .sc-td.td-win {
+  flex: 0 0 auto !important;
+  justify-content: flex-end !important;
+}
+
 html.platform-win #tab-about .sc-act-title {
   font-size: 11.5px !important;
   font-weight: 600 !important;
   color: #0f172a !important;
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
 }
 
 html.platform-win #tab-about .sc-act-sub {
   font-size: 10px !important;
   color: #64748b !important;
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
 }
 
 html.platform-win #tab-about .app-kbd {
@@ -12604,27 +12698,71 @@ html.platform-win #tab-about .app-kbd {
 
 /* FAQ Accordion on Windows */
 html.platform-win #tab-about .about-faq-accordion {
-  gap: 6px !important;
+  gap: 7px !important;
 }
 
 html.platform-win #tab-about .faq-item {
-  border-radius: 7px !important;
+  border-radius: 8px !important;
   border: 1px solid #e2e8f0 !important;
   background: #ffffff !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.02) !important;
 }
 
 html.platform-win #tab-about .faq-question-btn {
-  padding: 9px 12px !important;
+  padding: 9.5px 12px !important;
+  gap: 10px !important;
 }
 
-html.platform-win #tab-about .faq-question-text {
+html.platform-win #tab-about .faq-cat-badge {
+  font-size: 8.5px !important;
+  padding: 1.5px 5.5px !important;
+}
+
+html.platform-win #tab-about .faq-q-text {
   font-size: 11.5px !important;
   font-weight: 600 !important;
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
 }
 
-html.platform-win #tab-about .faq-answer-body {
-  padding: 0 12px 10px 12px !important;
+html.platform-win #tab-about .faq-answer-content {
+  padding: 9px 12px 11px 12px !important;
+  gap: 6px !important;
+}
+
+html.platform-win #tab-about .faq-guide-row {
+  padding: 6px 9px !important;
+  gap: 8px !important;
+}
+
+html.platform-win #tab-about .faq-guide-text {
   font-size: 10.5px !important;
   line-height: 1.45 !important;
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
+}
+
+html.platform-win #tab-about .faq-code {
+  font-size: 10px !important;
+}
+
+
+/* Windows Topnav Typography & Refinement */
+html.platform-win .app-topnav {
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
+}
+
+html.platform-win .brand-name {
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+}
+
+html.platform-win .brand-sub {
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
+  font-size: 9.5px !important;
+}
+
+html.platform-win .topnav-tab {
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
 }
