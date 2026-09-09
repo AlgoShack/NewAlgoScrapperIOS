@@ -4451,8 +4451,8 @@
                 </button>`;
         }).join('');
 
-        const rowH = 36;
-        const gapH = 4;
+        const rowH = 42;
+        const gapH = 8;
         const visibleCount = Math.min(items.length, 5);
         const listH = visibleCount > 0
             ? (visibleCount * rowH) + (Math.max(0, visibleCount - 1) * gapH)
@@ -6163,7 +6163,21 @@
             }
         } catch (_) {}
 
-        const formatScenarioStep = (step) => sanitizeExportRow(step);
+        const formatScenarioStep = (step) => {
+            const sanitized = sanitizeExportRow(step);
+            return {
+                "CONTROL NAME": sanitized["CONTROL NAME"] || "",
+                "CONTROL TYPE": sanitized["CONTROL TYPE"] || "",
+                "CONTROL ACTION": sanitized["CONTROL ACTION"] || "",
+                "XPATH": sanitized["XPATH"] || "",
+                "IDENTIFICATION TYPE": sanitized["IDENTIFICATION TYPE"] || "XPATH",
+                "CONTROL VALUE": sanitized["CONTROL VALUE"] || "",
+                "FEATURE NAME": sanitized["FEATURE NAME"] || "",
+                "NODE NAME": sanitized["NODE NAME"] || "",
+                "PAGE NAME": sanitized["PAGE NAME"] || "",
+                "FINGERPRINT": sanitized["FINGERPRINT"] || {}
+            };
+        };
 
         const cleanControls = (dashboardControls || []).map(formatScenarioStep);
         const scenariosList = [];
@@ -6185,18 +6199,22 @@
 
         // 1. If explicit scenario definitions exist in window.pageScenarioData, map them
         if (window.pageScenarioData && Object.keys(window.pageScenarioData).length > 0) {
-            for (const pageName in window.pageScenarioData) {
-                const scenarioInfo = window.pageScenarioData[pageName];
-                if (scenarioInfo && scenarioInfo.scenarioName) {
+            const scenarioEntries = Object.entries(window.pageScenarioData);
+            for (const [pageName, scenarioInfo] of scenarioEntries) {
+                if (scenarioInfo && (scenarioInfo.scenarioName || scenarioInfo.scenarioOutline)) {
                     const pageKey = pageName.trim().toLowerCase();
-                    const pageGroup = stepsByPage[pageKey];
-                    const matchedSteps = pageGroup ? pageGroup.steps : [];
-                    usedPages.add(pageKey);
-                    scenariosList.push({
-                        "SCENARIO_NAME": scenarioInfo.scenarioName,
-                        "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
-                        "STEPS": matchedSteps
-                    });
+                    let matchedSteps = stepsByPage[pageKey] ? stepsByPage[pageKey].steps : [];
+                    if (matchedSteps.length === 0 && cleanControls.length > 0 && scenarioEntries.length === 1) {
+                        matchedSteps = cleanControls;
+                    }
+                    if (matchedSteps.length > 0) {
+                        usedPages.add(pageKey);
+                        scenariosList.push({
+                            "SCENARIO_NAME": scenarioInfo.scenarioName || pageName || "Scenario",
+                            "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
+                            "STEPS": matchedSteps
+                        });
+                    }
                 }
             }
         }
@@ -6227,7 +6245,7 @@
         return {
             "isRecordscenario": true,
             "dashboardControls": {
-                "APP URL": appUrl,
+                "APP URL": "",
                 "APP ACTIVITY": isAndroid ? appAct : "",
                 "APP PACKAGE": isAndroid ? appPkg : "",
                 "BUNDLE ID": isIOS ? bundleId : "",
@@ -9433,7 +9451,8 @@ function createAndAppendTable(dtControls) {
                         ]
                     }
                 };
-            dataToSend = scenarioPayload.dashboardControls;
+            const scenarioObj = Array.isArray(scenarioPayload) ? scenarioPayload[0] : scenarioPayload;
+            dataToSend = (scenarioObj && scenarioObj.dashboardControls) ? scenarioObj.dashboardControls : scenarioObj;
         } else {
             dataToSend = tableData;
         }
@@ -19335,6 +19354,10 @@ if (platformVersionField) {
             page.features.push(featureItem);
         };
 
+        if (Array.isArray(data) && data.length === 1 && data[0] && typeof data[0] === 'object' && (data[0].isRecordscenario !== undefined || data[0].dashboardControls)) {
+            data = data[0];
+        }
+
         if (data && data.isRecordscenario && data.dashboardControls && Array.isArray(data.dashboardControls.SCENARIOS)) {
             data.dashboardControls.SCENARIOS.forEach((sc, idx) => {
                 const steps = Array.isArray(sc.STEPS) ? sc.STEPS : [];
@@ -19597,11 +19620,6 @@ if (platformVersionField) {
                     "FEATURE NAME": sanitized["FEATURE NAME"] || "",
                     "NODE NAME": sanitized["NODE NAME"] || "",
                     "PAGE NAME": sanitized["PAGE NAME"] || "",
-                    "APP ACTIVITY": isAndroidItem ? (step["APP ACTIVITY"] !== undefined ? step["APP ACTIVITY"] : appActItem) : "",
-                    "APP PACKAGE": isAndroidItem ? (step["APP PACKAGE"] !== undefined ? step["APP PACKAGE"] : appPkgItem) : "",
-                    "BUNDLE ID": isIOSItem ? (step["BUNDLE ID"] !== undefined ? step["BUNDLE ID"] : bundleIdItem) : "",
-                    "DEVICE NAME": step["DEVICE NAME"] !== undefined ? step["DEVICE NAME"] : devNameItem,
-                    "UDID": step["UDID"] !== undefined ? step["UDID"] : udidItem,
                     "FINGERPRINT": sanitized["FINGERPRINT"] || {}
                 };
             });
@@ -19609,7 +19627,7 @@ if (platformVersionField) {
             const downloadPayload = {
                 "isRecordscenario": true,
                 "dashboardControls": {
-                    "APP URL": project.appUrl || (project.capabilities && project.capabilities.appiumurl) || "",
+                    "APP URL": "",
                     "APP ACTIVITY": isAndroidItem ? appActItem : "",
                     "APP PACKAGE": isAndroidItem ? appPkgItem : "",
                     "BUNDLE ID": isIOSItem ? bundleIdItem : "",
@@ -19630,7 +19648,7 @@ if (platformVersionField) {
                 badge: 'SCENARIO JSON',
                 badgeClass: 'repo-badge-scenario',
                 title: `${(item.name || 'scenario').replace(/\s+/g, '_')}_scenario.json`,
-                subtitle: `Scenario: ${item.name || 'Scenario'} • ${cleanSteps.length} scraped ${cleanSteps.length === 1 ? 'step' : 'steps'} • ${item.appName || project.appName || 'Application'} (${platform})`,
+                subtitle: `Scenario: ${item.name || 'Scenario'} • ${formattedSteps.length} scraped ${formattedSteps.length === 1 ? 'step' : 'steps'} • ${item.appName || project.appName || 'Application'} (${platform})`,
                 data: downloadPayload
             };
         } else if (item.type === 'feature') {
