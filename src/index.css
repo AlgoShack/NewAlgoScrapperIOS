@@ -12680,15 +12680,23 @@ html.platform-mac *::-webkit-scrollbar,
  * - Native Windows Segoe UI typography & crisp high-DPI contrast.
  * - Perfectly balanced cards, pipeline, and 3-column shortcuts table.
  * ============================================================================= */
-html.platform-win #tab-about {
-  padding: 10px 18px 0 18px !important;
+html.platform-win #tab-about,
+html.platform-win #tab-about.is-active {
+  padding: 4px 14px 0 14px !important;
+  margin-top: 0 !important;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif !important;
   box-sizing: border-box !important;
 }
 
+html.platform-win #tab-about .about-page-wrapper {
+  gap: 6px !important;
+  margin-top: 0 !important;
+}
+
 html.platform-win #tab-about .about-hero-card {
-  padding: 12px 18px !important;
-  border-radius: 8px !important;
+  margin-top: 0 !important;
+  padding: 8px 14px !important;
+  border-radius: 6px !important;
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04) !important;
@@ -12699,7 +12707,7 @@ html.platform-win #tab-about .about-hero-brand {
 }
 
 html.platform-win #tab-about .about-title {
-  font-size: 16.5px !important;
+  font-size: 16px !important;
   font-weight: 600 !important;
   color: #0f172a !important;
   font-family: 'Segoe UI', system-ui, sans-serif !important;
@@ -12715,11 +12723,11 @@ html.platform-win #tab-about .platform-chips-row {
   display: flex !important;
   flex-wrap: wrap !important;
   gap: 6px !important;
-  margin-top: 6px !important;
+  margin-top: 5px !important;
 }
 
 html.platform-win #tab-about .platform-chip {
-  padding: 3.5px 9px !important;
+  padding: 3px 8px !important;
   font-size: 10.5px !important;
   border-radius: 5px !important;
   background: #f8fafc !important;
@@ -12727,16 +12735,17 @@ html.platform-win #tab-about .platform-chip {
 }
 
 html.platform-win #tab-about .about-nav-toolbar {
-  padding: 5px 10px !important;
-  border-radius: 8px !important;
+  margin-top: 0 !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03) !important;
-  gap: 10px !important;
+  gap: 8px !important;
 }
 
 html.platform-win #tab-about .about-nav-pill {
-  padding: 4.5px 10px !important;
+  padding: 4px 9px !important;
   font-size: 11px !important;
   font-weight: 600 !important;
   border-radius: 5px !important;
@@ -12984,3 +12993,238 @@ html.platform-win .app-topnav {
 html.platform-win .app-topnav::after {
   display: none !important;
 }
+
+/* =============================================================================
+ * WINDOWS HOVER ANIMATIONS & TRANSITIONS — COMPLETE APP COVERAGE
+ * ---------------------------------------------------------------------------
+ * Ensures all hover animations (lift effect, scale, glow, color shifts,
+ * button animations, card hover, table rows) work identically to macOS.
+ * ============================================================================= */
+
+/* Global Transition Smoothing for Windows */
+html.platform-win .pill-btn,
+html.platform-win button,
+html.platform-win .topnav-tab,
+html.platform-win .custom-select-trigger,
+html.platform-win .config-metric-chip,
+html.platform-win .config-dash-card,
+html.platform-win .repo-hero-stat-card,
+html.platform-win .repo-project-card,
+html.platform-win .repo-card,
+html.platform-win .about-feature-card,
+html.platform-win .about-card-panel,
+html.platform-win .about-hero-card,
+html.platform-win .about-pipeline-strip,
+html.platform-win .about-nav-pill,
+html.platform-win .platform-chip,
+html.platform-win .faq-item,
+html.platform-win .sc-trow,
+html.platform-win .app-kbd {
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+/* 1. Top Navigation Bar Hover */
+html.platform-win .app-topnav .topnav-tab:hover:not(.is-active) {
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  transform: translateY(-1px) !important;
+}
+
+html.platform-win .app-topnav .nav-ghost-btn:hover:not(:disabled) {
+  background: rgba(47, 139, 204, 0.9) !important;
+  border-color: #38bdf8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.4) !important;
+}
+
+html.platform-win .app-topnav #algoQA:hover:not(:disabled),
+html.platform-win .app-topnav .algoqa-styled-btn:hover:not(:disabled) {
+  background: linear-gradient(90deg, #d300ff, #2F8BCC) !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(211, 0, 255, 0.35) !important;
+}
+
+/* 2. Primary Buttons Hover (Launch, Record, Create Feature, Scrape, etc.) */
+html.platform-win .pill-btn:hover:not(:disabled),
+html.platform-win #tab-home #Run.pill-btn:hover:not(:disabled),
+html.platform-win .split-div1 .pill-btn:hover:not(:disabled),
+html.platform-win .home-toolbar .pill-btn:hover:not(:disabled),
+html.platform-win .home-session-actions .pill-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0284c7 0%, #2478b3 100%) !important;
+  border-color: #38bdf8 !important;
+  box-shadow: 0 5px 14px rgba(47, 139, 204, 0.38) !important;
+  transform: translateY(-1.5px) !important;
+}
+
+html.platform-win .pill-btn:active:not(:disabled),
+html.platform-win #tab-home #Run.pill-btn:active:not(:disabled),
+html.platform-win .split-div1 .pill-btn:active:not(:disabled) {
+  transform: translateY(0.5px) !important;
+  box-shadow: 0 1px 3px rgba(47, 139, 204, 0.25) !important;
+}
+
+/* 3. Reset Button Hover */
+html.platform-win #tab-home #reset.pill-btn:hover:not(:disabled),
+html.platform-win #tab-home .home-reset-btn:hover:not(:disabled),
+html.platform-win .split-div1 #reset:hover:not(:disabled) {
+  background: #fef2f2 !important;
+  border-color: #f87171 !important;
+  color: #b91c1c !important;
+  box-shadow: 0 4px 10px rgba(220, 38, 38, 0.18) !important;
+  transform: translateY(-1px) !important;
+}
+
+html.platform-win #tab-home #reset.pill-btn:hover:not(:disabled) svg,
+html.platform-win #tab-home .home-reset-btn:hover:not(:disabled) svg,
+html.platform-win .split-div1 #reset:hover:not(:disabled) svg {
+  transform: rotate(-30deg) !important;
+}
+
+/* 4. Table Action Buttons & Icons Hover */
+html.platform-win #add_row_btn:hover:not(:disabled) {
+  background-color: #2478b3 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(47, 139, 204, 0.3) !important;
+}
+
+html.platform-win #bulk_delete_btn:hover:not(:disabled) {
+  background-color: #c9302c !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 10px rgba(217, 83, 79, 0.3) !important;
+}
+
+html.platform-win #headerDeleteIcon:hover {
+  transform: scale(1.15) !important;
+}
+
+html.platform-win .circular-add-btn:hover {
+  transform: scale(1.08) !important;
+  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.3) !important;
+}
+
+html.platform-win .circular-eye-btn:hover {
+  transform: scale(1.08) !important;
+}
+
+html.platform-win #mainTable tbody tr:hover,
+html.platform-win #repoTableElement tbody tr:hover {
+  background: rgba(47, 139, 204, 0.05) !important;
+}
+
+/* 5. Config Tab Hover Animations */
+html.platform-win .config-metric-chip:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08) !important;
+  transform: translateY(-2px) !important;
+}
+
+html.platform-win .config-metric-chip:hover .metric-chip-icon {
+  transform: scale(1.12) !important;
+}
+
+html.platform-win .config-dash-card:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08) !important;
+  transform: translateY(-2px) !important;
+}
+
+html.platform-win .config-save-btn:hover:not(:disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px rgba(47, 139, 204, 0.35) !important;
+}
+
+/* 6. Repo Tab Hover Animations */
+html.platform-win .repo-hero-stat-card:hover {
+  border-color: #93c5fd !important;
+  box-shadow: 0 8px 20px -2px rgba(15, 23, 42, 0.08), 0 2px 8px -1px rgba(47, 139, 204, 0.12) !important;
+  transform: translateY(-2.5px) !important;
+}
+
+html.platform-win .repo-project-card:hover,
+html.platform-win .repo-card:hover {
+  border-color: #93c5fd !important;
+  box-shadow: 0 10px 24px -4px rgba(15, 23, 42, 0.08) !important;
+  transform: translateY(-3px) scale(1.005) !important;
+}
+
+html.platform-win .repo-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 4px 14px rgba(47, 139, 204, 0.4) !important;
+}
+
+html.platform-win .repo-btn-secondary:hover:not(:disabled) {
+  background: #f8fafc !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.06) !important;
+}
+
+html.platform-win .repo-btn-danger:hover:not(:disabled) {
+  transform: translateY(-1.5px) !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.35) !important;
+}
+
+html.platform-win .repo-action-btn:hover:not(:disabled) {
+  transform: translateY(-1.5px) !important;
+}
+
+html.platform-win .repo-crumb-item:hover {
+  transform: translateY(-1px) !important;
+  color: #2F8BCC !important;
+}
+
+/* 7. About Tab Hover Animations */
+html.platform-win #tab-about .about-feature-card:hover {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 8px 20px -3px rgba(14, 165, 233, 0.15) !important;
+  transform: translateY(-2px) !important;
+}
+
+html.platform-win #tab-about .about-feature-card:hover .feature-icon-badge {
+  transform: scale(1.12) rotate(3deg) !important;
+}
+
+html.platform-win #tab-about .about-card-panel:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06) !important;
+  transform: translateY(-1.5px) !important;
+}
+
+html.platform-win #tab-about .about-pipeline-strip:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.06) !important;
+}
+
+html.platform-win #tab-about .about-nav-pill:hover:not(.is-active) {
+  background: #f1f5f9 !important;
+  transform: translateY(-1px) !important;
+  color: #0f172a !important;
+}
+
+html.platform-win #tab-about .platform-chip:hover {
+  background: #f1f5f9 !important;
+  border-color: #cbd5e1 !important;
+  transform: translateY(-1px) !important;
+  color: #0f172a !important;
+}
+
+html.platform-win #tab-about .faq-item:hover {
+  border-color: #cbd5e1 !important;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05) !important;
+}
+
+html.platform-win #tab-about .faq-question-btn:hover {
+  background: #f8fafc !important;
+}
+
+html.platform-win #tab-about .sc-trow:hover {
+  background: #f8fafc !important;
+  transform: translateX(2px) !important;
+}
+
+html.platform-win #tab-about .app-kbd:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1) !important;
+}
+
