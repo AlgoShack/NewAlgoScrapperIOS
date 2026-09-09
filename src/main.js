@@ -1843,6 +1843,8 @@
         title: "AlgoScraper",
         width: 1280,
         height: 800,
+        minWidth: 960,
+        minHeight: 680,
         backgroundColor: "#e8edf3",
         icon: getAppWindowIcon(),
         webPreferences: {
@@ -1896,6 +1898,7 @@
         if (shown || !mainWindow || mainWindow.isDestroyed()) return;
         shown = true;
         try {
+          mainWindow.setMinimumSize(960, 680);
           mainWindow.maximize();
           mainWindow.show();
           mainWindow.focus();

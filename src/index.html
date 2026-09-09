@@ -1251,12 +1251,6 @@
                     <span>FAQ &amp; Tips</span>
                 </button>
             </div>
-
-            <div class="about-search-box">
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-                <input type="text" id="aboutHelpSearch" placeholder="Search guides, shortcuts, xpaths, modes..." autocomplete="off">
-                <span class="search-count-badge" id="aboutSearchCount" style="display: none;">0 matches</span>
-            </div>
         </div>
 
         <!-- SCROLLABLE CONTENT AREA (TOP HERO & NAV REMAIN FIXED) -->
@@ -1357,6 +1351,62 @@
                         </div>
                     </div>
                     <p class="feature-text">Seamlessly publish scraped pages, controls, and recorded scenarios to the algoQA cloud platform for automated AI test generation.</p>
+                </div>
+
+                <div class="about-feature-card card-rose" data-searchable="cross-platform android uiautomator2 ios xcuitest simulators emulators device driver" onclick="window.switchAboutSubtab('section-scraping')">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box rose">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line><line x1="9" y1="5" x2="15" y2="5"></line></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">Cross-Platform Engine</h3>
+                            <span class="feature-pill-tag">Android &amp; iOS</span>
+                        </div>
+                    </div>
+                    <p class="feature-text">Unified driver architecture for Android (UiAutomator2) and iOS (XCUITest) across physical devices, emulators, and simulators.</p>
+                </div>
+
+                <div class="about-feature-card card-teal" data-searchable="device interaction touch swipe drag scroll soft keyboard hardware keys back home shortcuts live emulation" onclick="window.switchAboutSubtab('section-shortcuts')">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box teal">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"></path><path d="M13 13l6 6"></path></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">Smart Device Controls</h3>
+                            <span class="feature-pill-tag">Live Emulation</span>
+                        </div>
+                    </div>
+                    <p class="feature-text">Perform real-time taps, multi-touch swipes, inertia scrolling, soft keyboard input, and hardware key emulation directly on the mirror.</p>
+                </div>
+
+                <div class="about-feature-card card-violet" data-searchable="xpath tester custom xpath validator match highlighting real time test matrix expression" onclick="window.switchAboutSubtab('section-locators')">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box violet">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">XPath &amp; Match Tester</h3>
+                            <span class="feature-pill-tag">Real-Time Testing</span>
+                        </div>
+                    </div>
+                    <p class="feature-text">Instantly test and validate custom XPath expressions against live XML trees with real-time match highlighting and node counters.</p>
+                </div>
+
+                <div class="about-feature-card card-orange" data-searchable="offline first enterprise security encrypted local storage workspace privacy w3c webdriver protocol" onclick="window.switchAboutSubtab('section-cloud-repo')">
+                    <div class="card-shimmer-sheen" aria-hidden="true"></div>
+                    <div class="feature-card-header">
+                        <div class="feature-icon-box orange">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                        </div>
+                        <div class="feature-title-block">
+                            <h3 class="feature-title">Enterprise Security</h3>
+                            <span class="feature-pill-tag">Local-First Storage</span>
+                        </div>
+                    </div>
+                    <p class="feature-text">Work securely with encrypted local workspace caching, zero external telemetry leaks, and direct W3C WebDriver communication.</p>
                 </div>
             </div>
 
