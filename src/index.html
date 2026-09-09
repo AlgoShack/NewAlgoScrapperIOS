@@ -1128,7 +1128,6 @@
 
         <!-- HERO BANNER CARD -->
         <div class="about-hero-card">
-            
             <div class="about-hero-main-row">
                 <div class="about-hero-brand">
                     <div class="about-logo-wrapper">
@@ -1158,11 +1157,11 @@
                     </div>
                     <div class="metric-glass-card">
                         <span class="metric-glass-num">🎯 Multi-Locators</span>
-                        <span class="metric-glass-sub">XPath &amp; AccID Engine</span>
+                        <span class="metric-glass-sub">Multi-Tier Locators</span>
                     </div>
                     <div class="metric-glass-card">
-                        <span class="metric-glass-num">🤖 BDD Suite</span>
-                        <span class="metric-glass-sub">Gherkin Authoring</span>
+                        <span class="metric-glass-num">🎬 Scenario Suite</span>
+                        <span class="metric-glass-sub">Action Flow Recorder</span>
                     </div>
                     <div class="metric-glass-card">
                         <span class="metric-glass-num">☁️ Cloud Sync</span>
@@ -1173,7 +1172,7 @@
 
             <div class="about-hero-body">
                 <p class="about-desc">
-                    Engineered by <strong>algoShack</strong>, algoScraper accelerates enterprise QA automation with high-fidelity mobile viewport mirroring, resilient multi-strategy locator extraction, end-to-end BDD scenario recording, and automated test asset synchronization.
+                    Engineered by <strong>algoShack</strong>, algoScraper is an enterprise-grade mobile test authoring solution that eliminates flaky locators, simplifies UI element discovery, records end-to-end user scenarios, and publishes production-ready test automation assets to the <strong>algoQA</strong> AI platform.
                 </p>
             </div>
 
@@ -1209,36 +1208,74 @@
             </div>
         </div>
 
-        <!-- SECTION: CORE CAPABILITIES -->
-        <div class="about-section-container">
+        <!-- HELP & KNOWLEDGE HUB TOOLBAR -->
+        <div class="about-nav-toolbar">
+            <div class="about-subnav-pills" role="tablist" aria-label="About Sub-navigation">
+                <button type="button" class="about-nav-pill is-active" data-about-target="section-overview" onclick="window.switchAboutSubtab('section-overview')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="12 8 8 12 12 16 12 8"></polygon></svg>
+                    <span>Overview</span>
+                </button>
+                <button type="button" class="about-nav-pill" data-about-target="section-scraping" onclick="window.switchAboutSubtab('section-scraping')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                    <span>How We Scrape</span>
+                </button>
+                <button type="button" class="about-nav-pill" data-about-target="section-locators" onclick="window.switchAboutSubtab('section-locators')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                    <span>Multi-Locators &amp; XPath</span>
+                </button>
+                <button type="button" class="about-nav-pill" data-about-target="section-scenarios" onclick="window.switchAboutSubtab('section-scenarios')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    <span>Scenarios &amp; Features</span>
+                </button>
+                <button type="button" class="about-nav-pill" data-about-target="section-shortcuts" onclick="window.switchAboutSubtab('section-shortcuts')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="10" y1="12" x2="10" y2="12"></line><line x1="14" y1="12" x2="14" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line></svg>
+                    <span>Keyboard Shortcuts</span>
+                </button>
+                <button type="button" class="about-nav-pill" data-about-target="section-cloud-repo" onclick="window.switchAboutSubtab('section-cloud-repo')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"></path><polyline points="8 16 12 12 16 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line></svg>
+                    <span>Repository &amp; Cloud</span>
+                </button>
+                <button type="button" class="about-nav-pill" data-about-target="section-faq" onclick="window.switchAboutSubtab('section-faq')">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                    <span>FAQ &amp; Tips</span>
+                </button>
+            </div>
+
+            <div class="about-search-box">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="search-icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <input type="text" id="aboutHelpSearch" placeholder="Search guides, shortcuts, xpaths, modes..." autocomplete="off">
+                <span class="search-count-badge" id="aboutSearchCount" style="display: none;">0 matches</span>
+            </div>
+        </div>
+
+        <!-- 1. SECTION: OVERVIEW & ARCHITECTURE -->
+        <div class="about-guide-section is-active" id="section-overview">
             <div class="about-section-header">
                 <div class="section-title-icon-wrap">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
                 </div>
                 <div class="section-title-texts">
-                    <h2 class="about-section-title">Core Capabilities</h2>
+                    <h2 class="about-section-title">Core Capabilities &amp; Architecture</h2>
                     <span class="about-section-subtitle">Comprehensive toolkit for high-precision mobile test authoring</span>
                 </div>
             </div>
 
             <div class="about-features-grid">
-                <!-- Feature 1: Live Device Mirroring -->
-                <div class="about-feature-card card-blue">
+                <div class="about-feature-card card-blue" data-searchable="live device mirroring viewport streaming physical devices emulators simulators touch swipe gestures" onclick="window.switchAboutSubtab('section-scraping')">
                     <div class="card-shimmer-sheen" aria-hidden="true"></div>
                     <div class="feature-card-header">
                         <div class="feature-icon-box blue">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                         </div>
                         <div class="feature-title-block">
-                            <h3 class="feature-title">Live Device Mirroring</h3>
-                            <span class="feature-pill-tag">Real-Time Sync</span>
+                            <h3 class="feature-title">Live Viewport Mirroring</h3>
+                            <span class="feature-pill-tag">Ultra Low Latency</span>
                         </div>
                     </div>
-                    <p class="feature-text">High-performance viewport streaming for physical devices, emulators, and simulators with touch, swipe, and hardware key emulation.</p>
+                    <p class="feature-text">High-performance screen mirroring for physical devices, emulators, and iOS simulators with touch, swipe, keyboard, and hardware key emulation.</p>
                 </div>
 
-                <!-- Feature 2: Visual UI Inspection -->
-                <div class="about-feature-card card-purple">
+                <div class="about-feature-card card-purple" data-searchable="visual ui inspection element hierarchy xml tree hover bounding box node parser" onclick="window.switchAboutSubtab('section-scraping')">
                     <div class="card-shimmer-sheen" aria-hidden="true"></div>
                     <div class="feature-card-header">
                         <div class="feature-icon-box purple">
@@ -1252,8 +1289,7 @@
                     <p class="feature-text">Hover &amp; tap to highlight bounding boxes and extract exact element nodes from live XML hierarchies with deep attribute inspection.</p>
                 </div>
 
-                <!-- Feature 3: Smart Locator Engine -->
-                <div class="about-feature-card card-green">
+                <div class="about-feature-card card-green" data-searchable="smart locator engine multi-strategy resilient self healing xpath accessibility id resource id" onclick="window.switchAboutSubtab('section-locators')">
                     <div class="card-shimmer-sheen" aria-hidden="true"></div>
                     <div class="feature-card-header">
                         <div class="feature-icon-box green">
@@ -1264,26 +1300,24 @@
                             <span class="feature-pill-tag">Multi-Strategy</span>
                         </div>
                     </div>
-                    <p class="feature-text">Generates optimized XPaths, Accessibility IDs, Resource IDs, and class names with resilient self-healing locator strategies.</p>
+                    <p class="feature-text">Generates optimized XPaths, Accessibility IDs, Resource IDs, and class names with multi-candidate locator strategies.</p>
                 </div>
 
-                <!-- Feature 4: BDD Scenario Suite -->
-                <div class="about-feature-card card-amber">
+                <div class="about-feature-card card-amber" data-searchable="scenario suite record scenario create feature page object action steps" onclick="window.switchAboutSubtab('section-scenarios')">
                     <div class="card-shimmer-sheen" aria-hidden="true"></div>
                     <div class="feature-card-header">
                         <div class="feature-icon-box amber">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                         </div>
                         <div class="feature-title-block">
-                            <h3 class="feature-title">BDD Scenario Suite</h3>
-                            <span class="feature-pill-tag">Gherkin Studio</span>
+                            <h3 class="feature-title">Scenario Studio</h3>
+                            <span class="feature-pill-tag">Action Workflows</span>
                         </div>
                     </div>
-                    <p class="feature-text">Build Page Object Repositories and record end-to-end BDD Gherkin scenarios with custom test actions and assertions.</p>
+                    <p class="feature-text">Build Page Object Repositories and record end-to-end user action scenarios with custom gestures and assertions.</p>
                 </div>
 
-                <!-- Feature 5: JSON Dataset Export -->
-                <div class="about-feature-card card-indigo">
+                <div class="about-feature-card card-indigo" data-searchable="json dataset export automation ready payload ci cd pipeline page objects" onclick="window.switchAboutSubtab('section-cloud-repo')">
                     <div class="card-shimmer-sheen" aria-hidden="true"></div>
                     <div class="feature-card-header">
                         <div class="feature-icon-box indigo">
@@ -1297,8 +1331,7 @@
                     <p class="feature-text">Export captured controls, page objects, and scenario datasets directly as formatted automation payloads for CI/CD pipelines.</p>
                 </div>
 
-                <!-- Feature 6: algoQA Cloud Sync -->
-                <div class="about-feature-card card-cyan">
+                <div class="about-feature-card card-cyan" data-searchable="algoqa cloud sync ai test generation publish token sync" onclick="window.switchAboutSubtab('section-cloud-repo')">
                     <div class="card-shimmer-sheen" aria-hidden="true"></div>
                     <div class="feature-card-header">
                         <div class="feature-icon-box cyan">
@@ -1312,76 +1345,960 @@
                     <p class="feature-text">Seamlessly publish scraped pages, controls, and recorded scenarios to the algoQA cloud platform for automated AI test generation.</p>
                 </div>
             </div>
+
+            <!-- AUTOMATION PIPELINE STRIP -->
+            <div class="about-pipeline-strip">
+                <div class="pipeline-step" onclick="window.switchAboutSubtab('section-scraping')">
+                    <div class="pipeline-step-badge-wrap"><span class="pipeline-step-num">01</span></div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Connect Device</span>
+                        <p class="pipeline-step-text">Choose platform (Android / iOS), select target app package/bundle, and launch Appium session.</p>
+                    </div>
+                </div>
+                <div class="pipeline-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
+                <div class="pipeline-step" onclick="window.switchAboutSubtab('section-scraping')">
+                    <div class="pipeline-step-badge-wrap"><span class="pipeline-step-num">02</span></div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Inspect &amp; Scrape</span>
+                        <p class="pipeline-step-text">Hover/tap single elements or click <strong>Scrape UI</strong> to extract complete page view hierarchies.</p>
+                    </div>
+                </div>
+                <div class="pipeline-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
+                <div class="pipeline-step" onclick="window.switchAboutSubtab('section-scenarios')">
+                    <div class="pipeline-step-badge-wrap"><span class="pipeline-step-num">03</span></div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Author Scenarios</span>
+                        <p class="pipeline-step-text">Organize elements into Page Objects and record end-to-end scenario workflows.</p>
+                    </div>
+                </div>
+                <div class="pipeline-arrow" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                </div>
+                <div class="pipeline-step" onclick="window.switchAboutSubtab('section-cloud-repo')">
+                    <div class="pipeline-step-badge-wrap"><span class="pipeline-step-num">04</span></div>
+                    <div class="pipeline-step-content">
+                        <span class="pipeline-step-name">Export &amp; Sync</span>
+                        <p class="pipeline-step-text">Download JSON repositories or publish directly to algoQA Cloud via API token.</p>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- SECTION: WORKFLOW PIPELINE -->
-        <div class="about-section-container">
+        <!-- 2. SECTION: HOW WE SCRAPE & MODES -->
+        <div class="about-guide-section" id="section-scraping">
             <div class="about-section-header">
                 <div class="section-title-icon-wrap">
-                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
                 </div>
                 <div class="section-title-texts">
-                    <h2 class="about-section-title">Automation Pipeline</h2>
-                    <span class="about-section-subtitle">Streamlined 4-step workflow from device connection to cloud synchronization</span>
+                    <h2 class="about-section-title">How Scraping Works in algoScraper</h2>
+                    <span class="about-section-subtitle">Element-by-Element inspection, Full Scrape UI, and Viewport Dual-Mode streaming</span>
                 </div>
             </div>
 
-            <div class="about-pipeline-strip">
-                <div class="pipeline-step">
-                    <div class="pipeline-step-badge-wrap">
-                        <span class="pipeline-step-num">01</span>
+            <div class="about-two-col-grid">
+                <!-- Mode A: Element-by-Element Scraping -->
+                <div class="about-card-panel" data-searchable="element by element scraping point and inspect tap mode pick element hover bounding box inspect mode single control">
+                    <div class="panel-header-badge">
+                        <span class="panel-badge-pill pill-cyan">MODE 1: POINT &amp; INSPECT</span>
+                        <h3 class="panel-main-title">Element-by-Element Scraping (Tap Mode)</h3>
                     </div>
-                    <div class="pipeline-step-content">
-                        <span class="pipeline-step-name">Connect</span>
-                        <p class="pipeline-step-text">Select target platform, app package/bundle, and active device session.</p>
+                    <p class="panel-desc-text">
+                        Hover and click on any visual UI element in the live mobile mirror to extract precise node attributes and candidate locators.
+                    </p>
+                    <div class="about-step-list">
+                        <div class="guide-step-item">
+                            <span class="step-bullet">1</span>
+                            <div class="step-info">
+                                <strong>Real-Time Coordinate Mapping:</strong> Cursor movements over the device stream map directly to screen pixels, calculating bounding box rects from the active XML page source.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">2</span>
+                            <div class="step-info">
+                                <strong>Attribute Extraction:</strong> Clicking any node extracts Resource ID, Accessibility ID (<code>content-desc</code> / <code>label</code>), Class, Text, Bounds, Clickable, and Package metadata.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">3</span>
+                            <div class="step-info">
+                                <strong>Control ID Dropdown Generation:</strong> Computes the full multi-XPath candidate set and adds the row into the table with a selectable locator dropdown.
+                            </div>
+                        </div>
                     </div>
-                </div>
-
-                <div class="pipeline-arrow" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </div>
-
-                <div class="pipeline-step">
-                    <div class="pipeline-step-badge-wrap">
-                        <span class="pipeline-step-num">02</span>
-                    </div>
-                    <div class="pipeline-step-content">
-                        <span class="pipeline-step-name">Scrape</span>
-                        <p class="pipeline-step-text">Launch driver session and tap elements to inspect and extract locators.</p>
-                    </div>
-                </div>
-
-                <div class="pipeline-arrow" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </div>
-
-                <div class="pipeline-step">
-                    <div class="pipeline-step-badge-wrap">
-                        <span class="pipeline-step-num">03</span>
-                    </div>
-                    <div class="pipeline-step-content">
-                        <span class="pipeline-step-name">Author</span>
-                        <p class="pipeline-step-text">Organize elements into Page Objects and record BDD scenario outlines.</p>
+                    <div class="panel-tip-box">
+                        <span class="tip-icon">💡</span>
+                        <span><strong>Interactive Viewport:</strong> Switch between <strong>Tap Mode</strong> (inspect elements) and <strong>Device Interact Mode</strong> (live touch, drag-to-scroll, and soft keyboard input) directly in the viewport header.</span>
                     </div>
                 </div>
 
-                <div class="pipeline-arrow" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                <!-- Mode B: Bulk Scrape UI -->
+                <div class="about-card-panel" data-searchable="scrape ui bulk scraping whole screen full screen xml hierarchy tree snapshot deduplication batch extraction">
+                    <div class="panel-header-badge">
+                        <span class="panel-badge-pill pill-blue">MODE 2: BULK EXTRACTION</span>
+                        <h3 class="panel-main-title">Full Scrape UI (Whole Screen)</h3>
+                    </div>
+                    <p class="panel-desc-text">
+                        Instantly harvests and categorizes every interactive widget on the current mobile screen with a single click.
+                    </p>
+                    <div class="about-step-list">
+                        <div class="guide-step-item">
+                            <span class="step-bullet">1</span>
+                            <div class="step-info">
+                                <strong>XML Hierarchy Harvest:</strong> Initiates an Appium page source extraction (UiAutomator2 XML or XCUITest hierarchy) with automated screen signature verification.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">2</span>
+                            <div class="step-info">
+                                <strong>Smart Widget Filtering:</strong> Filters out passive layout wrappers and captures buttons, input fields, checkboxes, list items, text views, images, and dropdowns.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">3</span>
+                            <div class="step-info">
+                                <strong>Batch Table Population:</strong> Generates semantic Control Names, assigns them to the active Page, and populates multi-XPath candidates for every control.
+                            </div>
+                        </div>
+                    </div>
+                    <div class="panel-tip-box">
+                        <span class="tip-icon">🚀</span>
+                        <span><strong>Pro-Tip:</strong> When navigating to a new screen in your app, click <strong>Scrape UI</strong> to populate all controls at once, then refine names or remove unwanted rows.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Viewport Dual-Mode Breakdown -->
+            <div class="about-card-panel full-width" data-searchable="device interaction mode tap mode touch swipe scroll hardware keys back button home button inspect toggle">
+                <div class="panel-header-badge">
+                    <span class="panel-badge-pill pill-purple">VIEWPORT DUAL-MODE ENGINE</span>
+                    <h3 class="panel-main-title">Live Device Interaction vs. Element Inspection</h3>
+                </div>
+                <div class="about-dual-mode-grid">
+                    <div class="mode-col">
+                        <div class="mode-col-header">
+                            <span class="mode-badge inspect">🔍 Inspect Mode (Tap = Scrape)</span>
+                        </div>
+                        <p class="mode-col-desc">Clicking on the screen highlights element geometry and extracts the element into the Scraped Table without triggering on-device actions.</p>
+                        <ul class="mode-col-list">
+                            <li>🎯 Live bounding box highlight on hover</li>
+                            <li>📋 Full attribute inspector &amp; multi-XPath calculation</li>
+                            <li>🛡️ Safe exploration without altering app screen state</li>
+                        </ul>
+                    </div>
+                    <div class="mode-col">
+                        <div class="mode-col-header">
+                            <span class="mode-badge interact">📱 Interact Mode (Live Touch &amp; Gestures)</span>
+                        </div>
+                        <p class="mode-col-desc">Mouse clicks, drags, and keystrokes are transmitted directly to the physical device or simulator via Appium / W3C WebDriver.</p>
+                        <ul class="mode-col-list">
+                            <li>👆 Single tap, long press, double tap</li>
+                            <li>📜 Natural click-and-drag for scrolling &amp; swiping</li>
+                            <li>⌨️ Soft keyboard typing &amp; hardware navigation keys</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. SECTION: MULTI-LOCATORS & XPATH STORAGE -->
+        <div class="about-guide-section" id="section-locators">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                </div>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Smart Multi-Locators &amp; XPath Storage Engine</h2>
+                    <span class="about-section-subtitle">How algoScraper generates, prioritizes, and stores multi-strategy locators for robust test automation</span>
+                </div>
+            </div>
+
+            <div class="about-card-panel full-width" data-searchable="multi xpath storage multiple locators self healing strategy accessibility id resource id text xpath class xpath relative xpath ancestor fallback control id dropdown">
+                <p class="panel-desc-text">
+                    algoScraper’s <strong>getAllPossibleXPaths</strong> engine analyzes each captured XML node and computes a resilient multi-tier locator suite. In the Scraped Table, every row features an interactive <strong>CONTROL ID Dropdown</strong> allowing you to choose the primary locator, while all fallback locators are permanently stored in the project repository JSON.
+                </p>
+
+                <div class="about-locator-hierarchy-grid">
+                    <div class="locator-strat-card strat-1">
+                        <div class="strat-rank">Tier 1</div>
+                        <h4 class="strat-name">Strong Attribute Locators (Tagged &amp; Wildcard)</h4>
+                        <span class="strat-syntax">//*[@resource-id='...'] | //*[@content-desc='...'] | //*[@name='...']</span>
+                        <p class="strat-desc">Generates both tag-qualified (<code>//android.widget.Button[@resource-id="..."]</code>) and universal wildcard (<code>//*[@resource-id="..."]</code>) paths for Resource ID, Accessibility ID, text, and label.</p>
+                    </div>
+
+                    <div class="locator-strat-card strat-2">
+                        <div class="strat-rank">Tier 2</div>
+                        <h4 class="strat-name">Combined Multi-Attribute Locators</h4>
+                        <span class="strat-syntax">//tag[@resource-id='...' and @text='...']</span>
+                        <p class="strat-desc">Pairs multiple stable attributes (e.g. ID + Text, ID + Content-Desc, or iOS Name + Label) to disambiguate identical elements on real devices.</p>
+                    </div>
+
+                    <div class="locator-strat-card strat-3">
+                        <div class="strat-rank">Tier 3</div>
+                        <h4 class="strat-name">Parent-Context Relative XPaths</h4>
+                        <span class="strat-syntax">//ancestor[@attr='...']//targetTag[@attr='...']</span>
+                        <p class="strat-desc">Traverses parent containers to find a stable ancestor with a strong attribute, creating scoped relative paths (e.g. inside list items, cards, or form rows).</p>
+                    </div>
+
+                    <div class="locator-strat-card strat-4">
+                        <div class="strat-rank">Tier 4</div>
+                        <h4 class="strat-name">Scoped Indexed Paths</h4>
+                        <span class="strat-syntax">(//ancestor[@attr='...']//targetTag)[1]</span>
+                        <p class="strat-desc">When multiple identical child elements exist inside a parent container, calculates 1-indexed relative positions guaranteed to point to that specific child.</p>
+                    </div>
+
+                    <div class="locator-strat-card strat-5">
+                        <div class="strat-rank">Tier 5</div>
+                        <h4 class="strat-name">Global Indexed Tag Paths</h4>
+                        <span class="strat-syntax">(//android.widget.EditText)[2]</span>
+                        <p class="strat-desc">Global index-based tag path evaluated across the entire XML hierarchy tree as a resilient fallback for generic widgets lacking IDs.</p>
+                    </div>
+
+                    <div class="locator-strat-card strat-6">
+                        <div class="strat-rank">Tier 6</div>
+                        <h4 class="strat-name">Structural Unique Tree XPath</h4>
+                        <span class="strat-syntax">//hierarchy/android.widget.FrameLayout[1]/...</span>
+                        <p class="strat-desc">Full hierarchical DOM tree trajectory computed by the structure resolver as the ultimate safety net.</p>
+                    </div>
                 </div>
 
-                <div class="pipeline-step">
-                    <div class="pipeline-step-badge-wrap">
-                        <span class="pipeline-step-num">04</span>
+                <!-- Authentic VS Code JSON Viewer -->
+                <div class="vscode-window about-vscode-window" id="aboutMultiLocatorVscode">
+                    <div class="vscode-header">
+                        <div class="vscode-mac-dots">
+                            <span class="dot red"></span>
+                            <span class="dot yellow"></span>
+                            <span class="dot green"></span>
+                        </div>
+                        <div class="vscode-tab">
+                            <svg viewBox="0 0 24 24" class="vscode-json-icon"><path fill="#fbc02d" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h2v6H7v2h6v-2h-2V9h2V7H7z"/></svg>
+                            <span>PageObject-MultiLocators.json</span>
+                        </div>
+                        <div class="vscode-actions">
+                            <span class="code-lang-tag">JSON</span>
+                            <button type="button" class="vscode-action-btn btn-copy" onclick="copyAboutJson(this, 'aboutMultiLocatorJson')" title="Copy JSON payload" aria-label="Copy JSON">
+                                <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M4 4v9h9V4H4zm1 1h7v7H5V5z"/><path d="M2 2v9h1V3h8V2H2z"/></svg>
+                            </button>
+                        </div>
                     </div>
-                    <div class="pipeline-step-content">
-                        <span class="pipeline-step-name">Export</span>
-                        <p class="pipeline-step-text">Download JSON datasets or sync directly to algoQA automation cloud.</p>
+                    <div class="vscode-body">
+                        <div class="vscode-gutter" aria-hidden="true">
+                            <div class="gutter-line"><span class="gutter-line-num">1</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">2</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">3</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">4</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">5</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">6</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">7</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">8</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">9</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">10</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">11</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">12</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">13</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">14</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">15</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">16</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">17</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">18</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">19</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">20</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">21</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">22</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">23</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">24</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">25</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">26</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">27</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">28</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">29</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">30</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">31</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">32</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">33</span></div>
+                            <div class="gutter-line"><span class="gutter-line-num">34</span></div>
+                        </div>
+                        <div class="vscode-code-area">
+                            <pre class="vscode-code" id="aboutMultiLocatorJson"><span class="json-bracket">[</span>
+  <span class="json-bracket">{</span>
+    <span class="json-key">"CONTROL NAME"</span><span class="json-colon">:</span> <span class="json-string">"loginSubmitBtn"</span><span class="json-comma">,</span>
+    <span class="json-key">"CONTROL TYPE"</span><span class="json-colon">:</span> <span class="json-string">"Button"</span><span class="json-comma">,</span>
+    <span class="json-key">"CONTROL ACTION"</span><span class="json-colon">:</span> <span class="json-string">"clicked"</span><span class="json-comma">,</span>
+    <span class="json-key">"IDENTIFICATION TYPE"</span><span class="json-colon">:</span> <span class="json-string">"XPATH"</span><span class="json-comma">,</span>
+    <span class="json-key">"XPATH"</span><span class="json-colon">:</span> <span class="json-bracket">[</span>
+      <span class="json-string">"//android.widget.Button[@resource-id=\"com.algoshack.demo:id/btn_login\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//*[@resource-id=\"com.algoshack.demo:id/btn_login\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//android.widget.Button[@resource-id=\"com.algoshack.demo:id/btn_login\" and @text=\"Log In\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//android.widget.LinearLayout[@resource-id=\"com.algoshack.demo:id/card_view\"]//android.widget.Button"</span><span class="json-comma">,</span>
+      <span class="json-string">"(//android.widget.Button)[1]"</span>
+    <span class="json-bracket">]</span><span class="json-comma">,</span>
+    <span class="json-key">"ControlId"</span><span class="json-colon">:</span> <span class="json-bracket">[</span>
+      <span class="json-string">"//android.widget.Button[@resource-id=\"com.algoshack.demo:id/btn_login\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//*[@resource-id=\"com.algoshack.demo:id/btn_login\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//android.widget.Button[@resource-id=\"com.algoshack.demo:id/btn_login\" and @text=\"Log In\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//android.widget.LinearLayout[@resource-id=\"com.algoshack.demo:id/card_view\"]//android.widget.Button"</span><span class="json-comma">,</span>
+      <span class="json-string">"(//android.widget.Button)[1]"</span>
+    <span class="json-bracket">]</span><span class="json-comma">,</span>
+    <span class="json-key">"allXpaths"</span><span class="json-colon">:</span> <span class="json-bracket">[</span>
+      <span class="json-string">"//android.widget.Button[@resource-id=\"com.algoshack.demo:id/btn_login\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//*[@resource-id=\"com.algoshack.demo:id/btn_login\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//android.widget.Button[@resource-id=\"com.algoshack.demo:id/btn_login\" and @text=\"Log In\"]"</span><span class="json-comma">,</span>
+      <span class="json-string">"//android.widget.LinearLayout[@resource-id=\"com.algoshack.demo:id/card_view\"]//android.widget.Button"</span><span class="json-comma">,</span>
+      <span class="json-string">"(//android.widget.Button)[1]"</span>
+    <span class="json-bracket">]</span><span class="json-comma">,</span>
+    <span class="json-key">"PAGE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+    <span class="json-key">"NODE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+    <span class="json-key">"FEATURE NAME"</span><span class="json-colon">:</span> <span class="json-string">"Authentication"</span><span class="json-comma">,</span>
+    <span class="json-key">"FINGERPRINT"</span><span class="json-colon">:</span> <span class="json-string">"{\"package\":\"com.algoshack.demo\",\"class\":\"android.widget.Button\",\"bounds\":\"[100,850][980,970]\"}"</span><span class="json-comma">,</span>
+    <span class="json-key">"APP URL"</span><span class="json-colon">:</span> <span class="json-string">""</span>
+  <span class="json-bracket">}</span>
+<span class="json-bracket">]</span></pre>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-tip-box success">
+                    <span class="tip-icon">💡</span>
+                    <span><strong>Interactive Locator Selection:</strong> In the Scraped Table on the Home page, click the <strong>CONTROL ID</strong> dropdown for any element to inspect and choose your preferred primary XPath from the generated candidate list. All computed fallback locators are automatically preserved in the <code>allXpaths</code> array in your repository JSON.</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. SECTION: SCENARIOS & FEATURE CREATION -->
+        <div class="about-guide-section" id="section-scenarios">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                </div>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Scenario Recording &amp; Feature Creation</h2>
+                    <span class="about-section-subtitle">Live action recording, feature naming, gesture sequencing, and Page Object mapping</span>
+                </div>
+            </div>
+
+            <div class="about-two-col-grid">
+                <!-- Sub-panel 1: Record Scenario -->
+                <div class="about-card-panel" data-searchable="record scenario live action recorder step capturing tap click type swipe assert assertion action steps">
+                    <div class="panel-header-badge">
+                        <span class="panel-badge-pill pill-amber">ACTION RECORDER</span>
+                        <h3 class="panel-main-title">Live Scenario Recording</h3>
+                    </div>
+                    <p class="panel-desc-text">
+                        Record complete end-to-end user workflows by performing natural actions directly on the device preview.
+                    </p>
+                    <div class="about-step-list">
+                        <div class="guide-step-item">
+                            <span class="step-bullet">1</span>
+                            <div class="step-info">
+                                <strong>Start Recording:</strong> Click <strong>Record Scenario</strong> on the Home dashboard and set your Page Name and Scenario Name (e.g. <em>User Checkout Flow</em>).
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">2</span>
+                            <div class="step-info">
+                                <strong>Capture Actions:</strong> Tap buttons, type text into fields, perform swipes, and capture sequential user interactions live from the viewport.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">3</span>
+                            <div class="step-info">
+                                <strong>Save Scenario Steps:</strong> Recorded steps are mapped to Page Object controls and saved to your project repository for export or cloud execution.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sub-panel 2: Creating Features -->
+                <div class="about-card-panel" data-searchable="create feature screen area feature naming tag feature grouping module organize">
+                    <div class="panel-header-badge">
+                        <span class="panel-badge-pill pill-green">FEATURE STUDIO</span>
+                        <h3 class="panel-main-title">Create Feature &amp; Screen Grouping</h3>
+                    </div>
+                    <p class="panel-desc-text">
+                        Group and name functional areas or modules on your mobile application screen.
+                    </p>
+                    <div class="about-step-list">
+                        <div class="guide-step-item">
+                            <span class="step-bullet">1</span>
+                            <div class="step-info">
+                                <strong>Create Feature Mode:</strong> Click <strong>Create Feature</strong> to activate feature selection on the device viewport.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">2</span>
+                            <div class="step-info">
+                                <strong>Name Feature Area:</strong> Enter a clean, descriptive feature name (e.g. <em>Header Navigation</em>, <em>Product Carousel</em>).
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">3</span>
+                            <div class="step-info">
+                                <strong>Organized Structure:</strong> Categorize scraped elements and scenarios cleanly under dedicated feature modules in your Repository.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Authentic VS Code Scenario JSON Viewer -->
+            <div class="vscode-window about-vscode-window" id="aboutScenarioVscode" data-searchable="recorded scenario json steps action click sendkeys swipe steps sequence">
+                <div class="vscode-header">
+                    <div class="vscode-mac-dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <div class="vscode-tab">
+                        <svg viewBox="0 0 24 24" class="vscode-json-icon"><path fill="#fbc02d" d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm2 4v2h2v6H7v2h6v-2h-2V9h2V7H7z"/></svg>
+                        <span>Scenario-ScrapedData-Export.json</span>
+                    </div>
+                    <div class="vscode-actions">
+                        <span class="code-lang-tag">SCENARIOS &amp; SCRAPED STEPS</span>
+                        <button type="button" class="vscode-action-btn btn-copy" onclick="copyAboutJson(this, 'aboutScenarioJson')" title="Copy JSON payload" aria-label="Copy JSON">
+                            <svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M4 4v9h9V4H4zm1 1h7v7H5V5z"/><path d="M2 2v9h1V3h8V2H2z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="vscode-body">
+                    <div class="vscode-gutter" aria-hidden="true">
+                        <div class="gutter-line"><span class="gutter-line-num">1</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">2</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">3</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">4</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">5</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">6</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">7</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">8</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">9</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">10</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">11</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">12</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">13</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">14</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">15</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">16</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">17</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">18</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">19</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">20</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">21</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">22</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">23</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">24</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">25</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">26</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">27</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">28</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">29</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">30</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">31</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">32</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">33</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">34</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">35</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">36</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">37</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">38</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">39</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">40</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">41</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">42</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">43</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">44</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">45</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">46</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">47</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">48</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">49</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">50</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">51</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">52</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">53</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">54</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">55</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">56</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">57</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">58</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">59</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">60</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">61</span></div>
+                        <div class="gutter-line"><span class="gutter-line-num">62</span></div>
+                    </div>
+                    <div class="vscode-code-area">
+                        <pre class="vscode-code" id="aboutScenarioJson"><span class="json-bracket">{</span>
+  <span class="json-key">"isRecordscenario"</span><span class="json-colon">:</span> <span class="json-boolean">true</span><span class="json-comma">,</span>
+  <span class="json-key">"dashboardControls"</span><span class="json-colon">:</span> <span class="json-bracket">{</span>
+    <span class="json-key">"APP URL"</span><span class="json-colon">:</span> <span class="json-string">""</span><span class="json-comma">,</span>
+    <span class="json-key">"SCENARIOS"</span><span class="json-colon">:</span> <span class="json-bracket">[</span>
+      <span class="json-bracket">{</span>
+        <span class="json-key">"SCENARIO_NAME"</span><span class="json-colon">:</span> <span class="json-string">"UserLoginSuccessFlow"</span><span class="json-comma">,</span>
+        <span class="json-key">"SCENARIO_OUTLINE"</span><span class="json-colon">:</span> <span class="json-string">"Verify authentication with valid credentials"</span><span class="json-comma">,</span>
+        <span class="json-key">"STEPS"</span><span class="json-colon">:</span> <span class="json-bracket">[</span>
+          <span class="json-bracket">{</span>
+            <span class="json-key">"CONTROL NAME"</span><span class="json-colon">:</span> <span class="json-string">"usernameInput"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL TYPE"</span><span class="json-colon">:</span> <span class="json-string">"Input"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL ACTION"</span><span class="json-colon">:</span> <span class="json-string">"entered"</span><span class="json-comma">,</span>
+            <span class="json-key">"XPATH"</span><span class="json-colon">:</span> <span class="json-string">"//android.widget.EditText[@resource-id=\"com.app:id/username_input\"]"</span><span class="json-comma">,</span>
+            <span class="json-key">"IDENTIFICATION TYPE"</span><span class="json-colon">:</span> <span class="json-string">"XPATH"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL VALUE"</span><span class="json-colon">:</span> <span class="json-string">"qa_admin"</span><span class="json-comma">,</span>
+            <span class="json-key">"FEATURE NAME"</span><span class="json-colon">:</span> <span class="json-string">"Authentication"</span><span class="json-comma">,</span>
+            <span class="json-key">"NODE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+            <span class="json-key">"PAGE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+            <span class="json-key">"FINGERPRINT"</span><span class="json-colon">:</span> <span class="json-bracket">{</span>
+              <span class="json-key">"package"</span><span class="json-colon">:</span> <span class="json-string">"com.app"</span><span class="json-comma">,</span>
+              <span class="json-key">"class"</span><span class="json-colon">:</span> <span class="json-string">"android.widget.EditText"</span><span class="json-comma">,</span>
+              <span class="json-key">"bounds"</span><span class="json-colon">:</span> <span class="json-string">"[80,450][920,530]"</span>
+            <span class="json-bracket">}</span>
+          <span class="json-bracket">}</span><span class="json-comma">,</span>
+          <span class="json-bracket">{</span>
+            <span class="json-key">"CONTROL NAME"</span><span class="json-colon">:</span> <span class="json-string">"passwordInput"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL TYPE"</span><span class="json-colon">:</span> <span class="json-string">"Input"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL ACTION"</span><span class="json-colon">:</span> <span class="json-string">"entered"</span><span class="json-comma">,</span>
+            <span class="json-key">"XPATH"</span><span class="json-colon">:</span> <span class="json-string">"//android.widget.EditText[@resource-id=\"com.app:id/password_input\"]"</span><span class="json-comma">,</span>
+            <span class="json-key">"IDENTIFICATION TYPE"</span><span class="json-colon">:</span> <span class="json-string">"XPATH"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL VALUE"</span><span class="json-colon">:</span> <span class="json-string">"SecretPass123"</span><span class="json-comma">,</span>
+            <span class="json-key">"FEATURE NAME"</span><span class="json-colon">:</span> <span class="json-string">"Authentication"</span><span class="json-comma">,</span>
+            <span class="json-key">"NODE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+            <span class="json-key">"PAGE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+            <span class="json-key">"FINGERPRINT"</span><span class="json-colon">:</span> <span class="json-bracket">{</span>
+              <span class="json-key">"package"</span><span class="json-colon">:</span> <span class="json-string">"com.app"</span><span class="json-comma">,</span>
+              <span class="json-key">"class"</span><span class="json-colon">:</span> <span class="json-string">"android.widget.EditText"</span><span class="json-comma">,</span>
+              <span class="json-key">"bounds"</span><span class="json-colon">:</span> <span class="json-string">"[80,560][920,640]"</span>
+            <span class="json-bracket">}</span>
+          <span class="json-bracket">}</span><span class="json-comma">,</span>
+          <span class="json-bracket">{</span>
+            <span class="json-key">"CONTROL NAME"</span><span class="json-colon">:</span> <span class="json-string">"loginButton"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL TYPE"</span><span class="json-colon">:</span> <span class="json-string">"Button"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL ACTION"</span><span class="json-colon">:</span> <span class="json-string">"clicked"</span><span class="json-comma">,</span>
+            <span class="json-key">"XPATH"</span><span class="json-colon">:</span> <span class="json-string">"//android.widget.Button[@resource-id=\"com.app:id/btn_login\"]"</span><span class="json-comma">,</span>
+            <span class="json-key">"IDENTIFICATION TYPE"</span><span class="json-colon">:</span> <span class="json-string">"XPATH"</span><span class="json-comma">,</span>
+            <span class="json-key">"CONTROL VALUE"</span><span class="json-colon">:</span> <span class="json-string">""</span><span class="json-comma">,</span>
+            <span class="json-key">"FEATURE NAME"</span><span class="json-colon">:</span> <span class="json-string">"Authentication"</span><span class="json-comma">,</span>
+            <span class="json-key">"NODE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+            <span class="json-key">"PAGE NAME"</span><span class="json-colon">:</span> <span class="json-string">"LoginPage"</span><span class="json-comma">,</span>
+            <span class="json-key">"FINGERPRINT"</span><span class="json-colon">:</span> <span class="json-bracket">{</span>
+              <span class="json-key">"package"</span><span class="json-colon">:</span> <span class="json-string">"com.app"</span><span class="json-comma">,</span>
+              <span class="json-key">"class"</span><span class="json-colon">:</span> <span class="json-string">"android.widget.Button"</span><span class="json-comma">,</span>
+              <span class="json-key">"bounds"</span><span class="json-colon">:</span> <span class="json-string">"[80,680][920,760]"</span>
+            <span class="json-bracket">}</span>
+          <span class="json-bracket">}</span>
+        <span class="json-bracket">]</span>
+      <span class="json-bracket">}</span>
+    <span class="json-bracket">]</span>
+  <span class="json-bracket">}</span>
+<span class="json-bracket">}</span></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. SECTION: KEYBOARD SHORTCUTS REFERENCE -->
+        <div class="about-guide-section" id="section-shortcuts">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="10" y1="12" x2="10" y2="12"></line><line x1="14" y1="12" x2="14" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line></svg>
+                </div>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Keyboard Shortcuts &amp; Hotkeys</h2>
+                    <span class="about-section-subtitle">Supported keyboard controls for Windows and macOS environments</span>
+                </div>
+            </div>
+
+            <div class="shortcut-os-panel" data-searchable="keyboard shortcuts windows mac ctrl f cmd f escape tab enter return intellisense search find">
+                <div class="shortcut-table-header">
+                    <div class="col-action">Action / Feature</div>
+                    <div class="col-os"><span class="os-pill win">🪟 Windows</span></div>
+                    <div class="col-os"><span class="os-pill mac">🍎 macOS</span></div>
+                </div>
+                <div class="shortcut-table-body">
+                    <!-- Category 1: Repository JSON Viewer -->
+                    <div class="shortcut-category-header">
+                        <span>Repository JSON Viewer</span>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Open JSON Search Widget</span>
+                        <div class="key-cell"><kbd>Ctrl</kbd> + <kbd>F</kbd></div>
+                        <div class="key-cell"><kbd>⌘</kbd> + <kbd>F</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Find Next Match</span>
+                        <div class="key-cell"><kbd>Enter</kbd> / <kbd>Ctrl+G</kbd></div>
+                        <div class="key-cell"><kbd>Return</kbd> / <kbd>⌘G</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Find Previous Match</span>
+                        <div class="key-cell"><kbd>Shift</kbd> + <kbd>Enter</kbd></div>
+                        <div class="key-cell"><kbd>⇧</kbd> + <kbd>Return</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Close Find Widget</span>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                    </div>
+
+                    <!-- Category 2: Configuration JSON Editor -->
+                    <div class="shortcut-category-header">
+                        <span>Configuration Code Editor</span>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Indent JSON (2 spaces)</span>
+                        <div class="key-cell"><kbd>Tab</kbd></div>
+                        <div class="key-cell"><kbd>Tab</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Navigate Autocomplete Suggestions</span>
+                        <div class="key-cell"><kbd>↑</kbd> <kbd>↓</kbd></div>
+                        <div class="key-cell"><kbd>↑</kbd> <kbd>↓</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Accept Selected Suggestion</span>
+                        <div class="key-cell"><kbd>Tab</kbd> / <kbd>Enter</kbd></div>
+                        <div class="key-cell"><kbd>Tab</kbd> / <kbd>Return</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Dismiss Suggestion Box</span>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                    </div>
+
+                    <!-- Category 3: Workspace & Scraped Table -->
+                    <div class="shortcut-category-header">
+                        <span>Workspace &amp; Table Editing</span>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Close Repository Split View / Inspector</span>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Save / Commit Inline Cell Edit</span>
+                        <div class="key-cell"><kbd>Enter</kbd></div>
+                        <div class="key-cell"><kbd>Return</kbd></div>
+                    </div>
+                    <div class="shortcut-table-row">
+                        <span class="action-name">Cancel Page Name Rename</span>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                        <div class="key-cell"><kbd>Esc</kbd></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. SECTION: REPOSITORY & CLOUD SYNC -->
+        <div class="about-guide-section" id="section-cloud-repo">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 17.58A5 5 0 0 0 18 8h-1.26A8 8 0 1 0 4 16.25"></path><polyline points="8 16 12 12 16 16"></polyline><line x1="12" y1="12" x2="12" y2="21"></line></svg>
+                </div>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Repository Management &amp; algoQA Cloud Sync</h2>
+                    <span class="about-section-subtitle">Organize test assets, export automation datasets, and connect to cloud engines</span>
+                </div>
+            </div>
+
+            <div class="about-two-col-grid">
+                <!-- Repository Info -->
+                <div class="about-card-panel" data-searchable="repository workspaces page objects project management saved artifacts import export json">
+                    <div class="panel-header-badge">
+                        <span class="panel-badge-pill pill-indigo">LOCAL WORKSPACE</span>
+                        <h3 class="panel-main-title">Repository &amp; Page Object Storage</h3>
+                    </div>
+                    <p class="panel-desc-text">
+                        All scraped elements, page definitions, recorded scenarios, and features are stored in dedicated project workspaces inside the Repository tab.
+                    </p>
+                    <ul class="about-check-list">
+                        <li><strong>Project Workspaces:</strong> Group test assets per mobile app or environment with isolated storage.</li>
+                        <li><strong>Page Object Hierarchy:</strong> Organize controls under logical page names (e.g. <code>HomeScreen</code>, <code>CartPage</code>).</li>
+                        <li><strong>JSON Import / Export:</strong> Download full project JSON bundles or import existing test packages for rapid sharing across QA teams.</li>
+                    </ul>
+                </div>
+
+                <!-- Cloud Sync Info -->
+                <div class="about-card-panel" data-searchable="algoqa cloud sync api token paste token authentication automatic ai test generation webhooks">
+                    <div class="panel-header-badge">
+                        <span class="panel-badge-pill pill-cyan">CLOUD INTEGRATION</span>
+                        <h3 class="panel-main-title">algoQA Cloud AI Synchronization</h3>
+                    </div>
+                    <p class="panel-desc-text">
+                        Synchronize scraped Page Objects, features, and recorded scenarios with <strong>algoQA</strong> to automatically generate complete test automation scripts.
+                    </p>
+                    <div class="about-step-list">
+                        <div class="guide-step-item">
+                            <span class="step-bullet">1</span>
+                            <div class="step-info">
+                                <strong>Paste Token:</strong> Enter your algoQA authentication token in the header input field and click <strong>algoQA</strong>.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">2</span>
+                            <div class="step-info">
+                                <strong>Select Cloud Project:</strong> Choose the destination project and workspace in your algoQA organization.
+                            </div>
+                        </div>
+                        <div class="guide-step-item">
+                            <span class="step-bullet">3</span>
+                            <div class="step-info">
+                                <strong>Publish Assets:</strong> Page Objects, multi-locators, and scenarios are uploaded instantly to power AI script generation.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. SECTION: FAQ & TROUBLESHOOTING -->
+        <div class="about-guide-section" id="section-faq">
+            <div class="about-section-header">
+                <div class="section-title-icon-wrap">
+                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                </div>
+                <div class="section-title-texts">
+                    <h2 class="about-section-title">Frequently Asked Questions &amp; Troubleshooting</h2>
+                    <span class="about-section-subtitle">Quick solutions for common connection and scraping scenarios</span>
+                </div>
+            </div>
+
+            <div class="about-faq-accordion">
+                <!-- FAQ 1: Device Detection -->
+                <div class="faq-item" data-searchable="faq device not detected adb unauthorized usb debugging ios webdriveragent xcuitest connection offline">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">My device is not appearing in the connected devices dropdown. How do I fix it?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p><strong>For Android:</strong> Ensure <em>USB Debugging</em> is enabled under Developer Options on your phone and accept the RSA computer authorization prompt. Run <code>adb devices</code> in your terminal to verify that the device is listed as <code>device</code> (not <code>unauthorized</code> or <code>offline</code>).</p>
+                        <p><strong>For iOS:</strong> Ensure Xcode is installed. On physical iPhones, trust Developer Certificates under <em>iOS Settings &gt; General &gt; VPN &amp; Device Management</em> and verify WebDriverAgentRunner is installed. For iOS Simulators, verify that the simulator is booted in Xcode.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 2: Package & Activity / Bundle ID -->
+                <div class="faq-item" data-searchable="faq package name app activity launcher activity bundle id info plist android manifest">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">How do I find the correct App Package &amp; Launcher Activity (Android) or Bundle ID (iOS)?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p><strong>For Android:</strong> Run <code>adb shell cmd package resolve-activity --brief &lt;package-name&gt;</code> while the app is running, or inspect the app APK using Android Studio / APK Analyzer to locate the exported Launcher Activity.</p>
+                        <p><strong>For iOS:</strong> Inspect your app's <code>Info.plist</code> file for the <code>CFBundleIdentifier</code> key, or run <code>ideviceinstaller -l</code> in terminal to list installed app bundle identifiers.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 3: Inspect Mode vs Interact Mode -->
+                <div class="faq-item" data-searchable="faq inspect mode interact mode dual mode viewport live touch tap gestures">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">What is the difference between Inspect Mode and Interact Mode?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p><strong>Inspect Mode (Tap = Scrape):</strong> Clicking the live device screen highlights element bounding boxes and extracts full attributes &amp; multi-XPaths directly into the Scraped Table without triggering actions on the device.</p>
+                        <p><strong>Interact Mode (Live Gestures):</strong> Transmits real touch inputs, clicks, drag-to-scroll gestures, and soft keyboard typing directly to the physical device or simulator via Appium / W3C WebDriver.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 4: Hybrid Apps & WebViews -->
+                <div class="faq-item" data-searchable="faq hybrid apps webview chrome custom tab embedded webview dom inspection">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">Can algoScraper inspect elements inside hybrid apps or WebViews?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p>Yes! algoScraper parses both native wrapper containers and child DOM elements in embedded WebViews and Chrome Custom Tabs. For Android debug builds, ensure <code>WebView.setWebContentsDebuggingEnabled(true)</code> is enabled in your application source code.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 5: Multi-XPath Dropdown Selection -->
+                <div class="faq-item" data-searchable="faq multi xpath locator selection control id dropdown fallback allxpaths priority">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">How do I select and customize element locators in the Scraped Table?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p>In the Scraped Table on the Home page, click the <strong>CONTROL ID</strong> dropdown for any element row. You can choose the primary locator from candidate options (Accessibility ID, Resource ID, Combined Text/ID, Parent-Relative XPath, or Indexed tag). All fallback candidates remain preserved in the <code>allXpaths</code> repository array.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 6: Scenario Recording & Action Types -->
+                <div class="faq-item" data-searchable="faq scenario recording action types clicked entered swipe steps sequence">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">How does Scenario Studio record user action flows?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p>When you click <strong>Record Scenario</strong> on the Home dashboard, live actions are captured sequentially: screen taps are recorded as <code>clicked</code>, typing into text inputs records the input string into <code>CONTROL VALUE</code> with action <code>entered</code>, and swipe gestures capture coordinate trajectories.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 7: Exporting & algoQA Sync -->
+                <div class="faq-item" data-searchable="faq export json save repository algoqa cloud sync api token publish">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">How do I export my project data or publish to algoQA Cloud?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p>In the <strong>Repository</strong> tab, click <strong>Export JSON</strong> to download standalone test artifact files. To publish to algoQA Cloud, paste your API token in the top header and click <strong>algoQA</strong> to sync features, page objects, and recorded scenarios directly into your cloud projects.</p>
+                    </div>
+                </div>
+
+                <!-- FAQ 8: Reset & Disconnect -->
+                <div class="faq-item" data-searchable="faq reset session clear table disconnect appium driver clean cache">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)">
+                        <span class="faq-q-text">How do I reset or start a fresh scraping session?</span>
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div class="faq-answer-content">
+                        <p>Click the <strong>Reset</strong> button on the top toolbar to clear scraped controls in memory, or use <strong>Disconnect</strong> to safely terminate the active Appium/W3C driver session and release connected device resources.</p>
                     </div>
                 </div>
             </div>
         </div>
 
     </div>
+
+    <!-- SCOPED INTERACTIVE HELPER SCRIPT FOR ABOUT TAB -->
+    <script>
+    (function() {
+        function copyAboutJson(btn, preId) {
+            var pre = document.getElementById(preId);
+            if (!pre) return;
+            var text = pre.innerText || pre.textContent;
+            navigator.clipboard.writeText(text).then(function() {
+                if (btn) {
+                    var origHtml = btn.innerHTML;
+                    btn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="#22c55e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+                    setTimeout(function() { btn.innerHTML = origHtml; }, 1500);
+                }
+            }).catch(function(err) {
+                console.error('Copy failed', err);
+            });
+        }
+        window.copyAboutJson = copyAboutJson;
+
+        function switchAboutSubtab(targetId) {
+            if (!targetId) return;
+            const container = document.getElementById('tab-about');
+            if (!container) return;
+
+            // 1. Update navigation pills
+            const pills = container.querySelectorAll('.about-nav-pill');
+            pills.forEach(function(p) {
+                const isMatch = p.getAttribute('data-about-target') === targetId;
+                p.classList.toggle('is-active', isMatch);
+                p.setAttribute('aria-selected', isMatch ? 'true' : 'false');
+            });
+
+            // 2. Reset search if active
+            const searchInput = document.getElementById('aboutHelpSearch');
+            const countBadge = document.getElementById('aboutSearchCount');
+            if (searchInput && searchInput.value.trim() !== '') {
+                searchInput.value = '';
+                if (countBadge) countBadge.style.display = 'none';
+            }
+
+            // 3. Switch guide sections
+            const sections = container.querySelectorAll('.about-guide-section');
+            sections.forEach(function(sec) {
+                const isMatch = sec.id === targetId;
+                sec.classList.remove('is-search-active');
+                sec.classList.toggle('is-active', isMatch);
+                // Ensure child cards are visible
+                sec.querySelectorAll('[data-searchable]').forEach(function(c) {
+                    c.style.display = '';
+                });
+            });
+
+            // 4. Scroll smoothly to target section
+            const targetSec = document.getElementById(targetId);
+            if (targetSec && typeof targetSec.scrollIntoView === 'function') {
+                targetSec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+        window.switchAboutSubtab = switchAboutSubtab;
+
+        // Search filter across all help topics
+        function initAboutSearch() {
+            const searchInput = document.getElementById('aboutHelpSearch');
+            const countBadge = document.getElementById('aboutSearchCount');
+            const container = document.getElementById('tab-about');
+            if (!searchInput || !container) return;
+
+            searchInput.addEventListener('input', function() {
+                const query = this.value.toLowerCase().trim();
+                const sections = container.querySelectorAll('.about-guide-section');
+
+                if (!query) {
+                    if (countBadge) countBadge.style.display = 'none';
+                    // Restore active tab view
+                    const activePill = container.querySelector('.about-nav-pill.is-active');
+                    const targetId = activePill ? activePill.getAttribute('data-about-target') : 'section-overview';
+                    sections.forEach(function(sec) {
+                        sec.classList.remove('is-search-active');
+                        sec.classList.toggle('is-active', sec.id === targetId);
+                        sec.querySelectorAll('[data-searchable]').forEach(function(c) {
+                            c.style.display = '';
+                        });
+                    });
+                    return;
+                }
+
+                // Search mode: examine all cards
+                let matchCount = 0;
+                sections.forEach(function(sec) {
+                    let secHasMatch = false;
+                    const cards = sec.querySelectorAll('[data-searchable]');
+                    cards.forEach(function(card) {
+                        const searchData = (card.getAttribute('data-searchable') || '') + ' ' + (card.innerText || '');
+                        if (searchData.toLowerCase().includes(query)) {
+                            card.style.display = '';
+                            secHasMatch = true;
+                            matchCount++;
+                        } else {
+                            card.style.display = 'none';
+                        }
+                    });
+
+                    sec.classList.remove('is-active');
+                    sec.classList.toggle('is-search-active', secHasMatch);
+                });
+
+                if (countBadge) {
+                    countBadge.textContent = matchCount + (matchCount === 1 ? ' match' : ' matches');
+                    countBadge.style.display = 'inline-block';
+                }
+            });
+        }
+
+        function toggleAboutFaq(el) {
+            if (!el) return;
+            const item = el.closest('.faq-item');
+            if (item) {
+                item.classList.toggle('is-open');
+            }
+        }
+        window.toggleAboutFaq = toggleAboutFaq;
+
+        // Global click event delegation for about nav pills
+        document.addEventListener('click', function(e) {
+            const pill = e.target.closest('.about-nav-pill');
+            if (pill) {
+                const targetId = pill.getAttribute('data-about-target');
+                if (targetId) {
+                    switchAboutSubtab(targetId);
+                }
+                return;
+            }
+        });
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initAboutSearch);
+        } else {
+            initAboutSearch();
+        }
+    })();
+    </script>
 </section>
 </div><!-- /.app-shell -->
 
