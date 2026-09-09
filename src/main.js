@@ -1845,6 +1845,7 @@
         height: 800,
         minWidth: 960,
         minHeight: 680,
+        useContentSize: true,
         backgroundColor: "#e8edf3",
         icon: getAppWindowIcon(),
         webPreferences: {
@@ -1897,9 +1898,9 @@
       const enforceMinBounds = () => {
         if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return;
         try {
-          const [currentWidth, currentHeight] = mainWindow.getSize();
+          const [currentWidth, currentHeight] = mainWindow.getContentSize();
           if (currentWidth < 960 || currentHeight < 680) {
-            mainWindow.setSize(Math.max(currentWidth, 960), Math.max(currentHeight, 680));
+            mainWindow.setContentSize(Math.max(currentWidth, 960), Math.max(currentHeight, 680));
           }
         } catch (_) {}
       };

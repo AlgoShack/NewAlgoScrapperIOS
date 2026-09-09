@@ -45,11 +45,12 @@
 html, body {
   background-color: var(--as-bg);
   height: 100vh;
-  min-width: 960px;
-  min-height: 680px;
+  width: 100%;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   overflow: hidden; /* Hard locks the window view frame, stopping whole-page scrolling */
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
   font-family: var(--as-font);
@@ -8705,8 +8706,10 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 /* --- FEATURES GRID --- */
 .about-features-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: clamp(8px, 1vw, 12px);
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .about-feature-card {
@@ -9079,8 +9082,10 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 
 .about-two-col-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: clamp(8px, 1vw, 14px);
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .about-card-panel {
@@ -13045,15 +13050,23 @@ html.platform-win #tab-about .about-content-scroll-container {
   height: auto !important;
   overflow-y: auto !important;
   overflow-x: hidden !important;
-  padding: 6px 2px 32px 2px !important;
+  overscroll-behavior-y: contain !important;
+  scroll-behavior: smooth !important;
+  -webkit-overflow-scrolling: touch !important;
+  padding: 6px 4px 32px 2px !important;
   gap: 12px !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 /* Responsive Features Grid on Windows */
 html.platform-win #tab-about .about-features-grid {
   display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)) !important;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)) !important;
   gap: clamp(8px, 1vw, 12px) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 html.platform-win #tab-about .about-feature-card {
@@ -13062,6 +13075,7 @@ html.platform-win #tab-about .about-feature-card {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03) !important;
+  box-sizing: border-box !important;
 }
 
 html.platform-win #tab-about .feature-title {
@@ -13118,8 +13132,10 @@ html.platform-win #tab-about .about-pipeline-strip .pipeline-arrow {
 /* Two-Column Panels */
 html.platform-win #tab-about .about-two-col-grid {
   display: grid !important;
-  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)) !important;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)) !important;
   gap: clamp(8px, 1vw, 12px) !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 html.platform-win #tab-about .about-card-panel {
@@ -13128,6 +13144,8 @@ html.platform-win #tab-about .about-card-panel {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03) !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
 }
 
 html.platform-win #tab-about .panel-main-title {
