@@ -1248,6 +1248,9 @@
             </div>
         </div>
 
+        <!-- SCROLLABLE CONTENT AREA (TOP HERO & NAV REMAIN FIXED) -->
+        <div class="about-content-scroll-container" id="aboutContentScrollContainer">
+
         <!-- 1. SECTION: OVERVIEW & ARCHITECTURE -->
         <div class="about-guide-section is-active" id="section-overview">
             <div class="about-section-header">
@@ -1897,7 +1900,7 @@
         </div>
 
         <!-- 5. SECTION: KEYBOARD SHORTCUTS REFERENCE -->
-        <div class="about-guide-section" id="section-shortcuts">
+                <div class="about-guide-section" id="section-shortcuts">
             <div class="about-section-header">
                 <div class="section-title-icon-wrap">
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect><line x1="6" y1="8" x2="6" y2="8"></line><line x1="10" y1="8" x2="10" y2="8"></line><line x1="14" y1="8" x2="14" y2="8"></line><line x1="18" y1="8" x2="18" y2="8"></line><line x1="6" y1="12" x2="6" y2="12"></line><line x1="10" y1="12" x2="10" y2="12"></line><line x1="14" y1="12" x2="14" y2="12"></line><line x1="18" y1="12" x2="18" y2="12"></line><line x1="7" y1="16" x2="17" y2="16"></line></svg>
@@ -1908,81 +1911,214 @@
                 </div>
             </div>
 
-            <div class="shortcut-os-panel" data-searchable="keyboard shortcuts windows mac ctrl f cmd f escape tab enter return intellisense search find">
-                <div class="shortcut-table-header">
-                    <div class="col-action">Action / Feature</div>
-                    <div class="col-os"><span class="os-pill win">🪟 Windows</span></div>
-                    <div class="col-os"><span class="os-pill mac">🍎 macOS</span></div>
+            <!-- CLEAN 3-COLUMN SHORTCUTS TABLE -->
+            <div class="sc-table-panel">
+                <div class="sc-thead">
+                    <div class="sc-th th-action">Action / Operation</div>
+                    <div class="sc-th th-os"><span class="os-badge-win"><svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor" class="os-icon-svg"><path d="M0 2.222L6.47 1.33v6.236H0V2.222zm0 6.134h6.47v6.236L0 13.704V8.356zm7.26-7.14L16 0v7.566H7.26V1.216zm8.74 7.14V16l-8.74-1.216V8.356H16z"/></svg> Windows</span></div>
+                    <div class="sc-th th-os"><span class="os-badge-mac"><svg viewBox="0 0 170 170" width="13" height="13" fill="currentColor" class="os-icon-svg"><path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.35.13-9.16-1.9-14.42-6.08-3.7-3.04-7.7-7.83-12.01-14.36-6.8-10.4-12.18-21.96-16.14-34.69-3.96-12.73-5.94-24.89-5.94-36.49 0-14.05 3.65-26.06 10.95-36.03 7.3-9.97 16.63-15.11 27.99-15.42 4.9 0 10.37 1.25 16.42 3.75 6.05 2.5 10.23 3.8 12.54 3.89 1.74 0 6.05-1.42 12.92-4.26 6.87-2.84 12.72-4.08 17.55-3.72 13.52 1.05 24.32 6.54 32.4 16.48-11.78 7.15-17.56 16.9-17.34 29.27.22 9.68 3.97 17.75 11.26 24.21 7.29 6.46 16.15 10.15 26.58 11.08-2.61 7.84-5.87 15.86-9.78 24.08zM119.22 33.64c0-7.39 2.67-14.43 8.01-21.12 5.34-6.69 11.96-10.94 19.86-12.75.98 7.39-1.25 14.52-6.7 21.39-5.45 6.87-12.28 11.19-20.49 12.96-.22-.16-.44-.32-.68-.48z"/></svg> macOS</span></div>
                 </div>
-                <div class="shortcut-table-body">
-                    <!-- Category 1: Repository JSON Viewer -->
-                    <div class="shortcut-category-header">
-                        <span>Repository JSON Viewer</span>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Open JSON Search Widget</span>
-                        <div class="key-cell"><kbd>Ctrl</kbd> + <kbd>F</kbd></div>
-                        <div class="key-cell"><kbd>⌘</kbd> + <kbd>F</kbd></div>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Find Next Match</span>
-                        <div class="key-cell"><kbd>Enter</kbd> / <kbd>Ctrl+G</kbd></div>
-                        <div class="key-cell"><kbd>Return</kbd> / <kbd>⌘G</kbd></div>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Find Previous Match</span>
-                        <div class="key-cell"><kbd>Shift</kbd> + <kbd>Enter</kbd></div>
-                        <div class="key-cell"><kbd>⇧</kbd> + <kbd>Return</kbd></div>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Close Find Widget</span>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
+
+                <div class="sc-tbody">
+                    <!-- Category 1: Viewport & Canvas -->
+                    <div class="sc-cat-header">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                        <span>Viewport &amp; Canvas Mirroring</span>
                     </div>
 
-                    <!-- Category 2: Configuration JSON Editor -->
-                    <div class="shortcut-category-header">
-                        <span>Configuration Code Editor</span>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Indent JSON (2 spaces)</span>
-                        <div class="key-cell"><kbd>Tab</kbd></div>
-                        <div class="key-cell"><kbd>Tab</kbd></div>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Navigate Autocomplete Suggestions</span>
-                        <div class="key-cell"><kbd>↑</kbd> <kbd>↓</kbd></div>
-                        <div class="key-cell"><kbd>↑</kbd> <kbd>↓</kbd></div>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Accept Selected Suggestion</span>
-                        <div class="key-cell"><kbd>Tab</kbd> / <kbd>Enter</kbd></div>
-                        <div class="key-cell"><kbd>Tab</kbd> / <kbd>Return</kbd></div>
-                    </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Dismiss Suggestion Box</span>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Reload Viewport</span>
+                            <span class="sc-act-sub">Capture instant screenshot &amp; sync device frame</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
                     </div>
 
-                    <!-- Category 3: Workspace & Scraped Table -->
-                    <div class="shortcut-category-header">
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Zoom In Viewport</span>
+                            <span class="sc-act-sub">Increase mobile canvas magnification</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">+</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">+</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Zoom Out Viewport</span>
+                            <span class="sc-act-sub">Scale down canvas to fit full device screen</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">-</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">-</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Reset Zoom (100%)</span>
+                            <span class="sc-act-sub">Restore default 1:1 crisp pixel scaling</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">0</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">0</kbd></div>
+                    </div>
+
+                    <!-- Category 2: Inspection & Recording -->
+                    <div class="sc-cat-header">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        <span>Inspection &amp; Scenario Recording</span>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Toggle Inspect Mode</span>
+                            <span class="sc-act-sub">Hover to highlight element bounding box &amp; XML node</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Alt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">I</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌥ Opt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">I</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Toggle Interact Mode</span>
+                            <span class="sc-act-sub">Direct touch, swipe &amp; keystroke emulation</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Alt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">M</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌥ Opt</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">M</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Record Action Step</span>
+                            <span class="sc-act-sub">Capture current UI interaction into scenario</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">R</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Clear Scenario Steps</span>
+                            <span class="sc-act-sub">Reset recorded flow timeline to start fresh</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">X</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">X</kbd></div>
+                    </div>
+
+                    <!-- Category 3: Repository & JSON Search -->
+                    <div class="sc-cat-header">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
+                        <span>Repository &amp; JSON Search</span>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Open Search Widget</span>
+                            <span class="sc-act-sub">Find keys, attributes, locator values, or XPath</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Ctrl</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">F</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⌘ Cmd</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">F</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Find Next Match</span>
+                            <span class="sc-act-sub">Jump forward to subsequent search hit</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Enter</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Ctrl+G</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Return</kbd> <span class="k-or">/</span> <kbd class="app-kbd">⌘G</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Find Previous Match</span>
+                            <span class="sc-act-sub">Navigate backward to prior matched item</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Enter</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">⇧ Shift</kbd> <span class="k-plus">+</span> <kbd class="app-kbd">Return</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Close Search Widget</span>
+                            <span class="sc-act-sub">Dismiss floating search overlay</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                    </div>
+
+                    <!-- Category 4: Configuration & Code Editor -->
+                    <div class="sc-cat-header">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+                        <span>Configuration &amp; Code Editor</span>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Indent JSON (2 Spaces)</span>
+                            <span class="sc-act-sub">Insert standardized 2-space tab indent</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Navigate Autocomplete</span>
+                            <span class="sc-act-sub">Cycle through suggestion list</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">↑</kbd> <kbd class="app-kbd">↓</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">↑</kbd> <kbd class="app-kbd">↓</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Accept Suggestion</span>
+                            <span class="sc-act-sub">Insert highlighted capability snippet</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Enter</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Tab</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Return</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Dismiss Suggestions</span>
+                            <span class="sc-act-sub">Close autocomplete popup box</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                    </div>
+
+                    <!-- Category 5: Table & Inline Editing -->
+                    <div class="sc-cat-header">
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
                         <span>Workspace &amp; Table Editing</span>
                     </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Close Repository Split View / Inspector</span>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Commit Cell Edit</span>
+                            <span class="sc-act-sub">Save edited control property or name</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Enter</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Return</kbd></div>
                     </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Save / Commit Inline Cell Edit</span>
-                        <div class="key-cell"><kbd>Enter</kbd></div>
-                        <div class="key-cell"><kbd>Return</kbd></div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Close Drawer / Inspector</span>
+                            <span class="sc-act-sub">Exit repository split view side panel</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
-                    <div class="shortcut-table-row">
-                        <span class="action-name">Cancel Page Name Rename</span>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
-                        <div class="key-cell"><kbd>Esc</kbd></div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Cancel Name Rename</span>
+                            <span class="sc-act-sub">Discard inline renaming changes</span>
+                        </div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
+                        <div class="sc-td td-os"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
                 </div>
             </div>
@@ -2156,6 +2292,8 @@
             </div>
         </div>
 
+        </div><!-- /.about-content-scroll-container -->
+
     </div>
 
     <!-- SCOPED INTERACTIVE HELPER SCRIPT FOR ABOUT TAB -->
@@ -2210,10 +2348,10 @@
                 });
             });
 
-            // 4. Scroll smoothly to target section
-            const targetSec = document.getElementById(targetId);
-            if (targetSec && typeof targetSec.scrollIntoView === 'function') {
-                targetSec.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            // 4. Scroll container reset to top
+            const scrollContainer = document.getElementById('aboutContentScrollContainer');
+            if (scrollContainer) {
+                scrollContainer.scrollTop = 0;
             }
         }
         window.switchAboutSubtab = switchAboutSubtab;
@@ -2280,6 +2418,8 @@
         }
         window.toggleAboutFaq = toggleAboutFaq;
 
+        
+        
         // Global click event delegation for about nav pills
         document.addEventListener('click', function(e) {
             const pill = e.target.closest('.about-nav-pill');
