@@ -4706,53 +4706,41 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 20px;
-  padding: 0 18px;
-  background: linear-gradient(180deg, #0d1527 0%, #080d1a 100%);
-  color: #ffffff;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  gap: 16px;
+  padding: 0 16px;
+  background: #ffffff !important;
+  color: #0f172a !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05) !important;
   z-index: 4000;
   box-sizing: border-box;
-  border-bottom: 1px solid rgba(56, 189, 248, 0.22);
+  border-bottom: 1px solid #e2e8f0 !important;
   position: relative;
 }
 
 .app-topnav::after {
-  content: "";
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 1.5px;
-  background: linear-gradient(90deg, transparent 0%, rgba(56, 189, 248, 0.6) 25%, rgba(99, 102, 241, 0.7) 50%, rgba(47, 139, 204, 0.6) 75%, transparent 100%);
-  pointer-events: none;
+  display: none !important;
 }
 
 .topnav-brand {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   min-width: 0;
   flex-shrink: 0;
 }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   flex-shrink: 0;
-  border-radius: 7px;
+  border-radius: 6px;
   overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 0 10px rgba(47, 139, 204, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.brand-mark:hover {
-  transform: scale(1.06);
-  box-shadow: 0 0 14px rgba(47, 139, 204, 0.7);
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
 
 .brand-mark img,
@@ -4760,8 +4748,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: cover;
-  border-radius: 7px;
+  object-fit: contain;
 }
 
 .brand-copy {
@@ -4773,62 +4760,66 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 .brand-name {
   font-size: 13.5px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: -0.2px;
-  color: #ffffff;
-  background: linear-gradient(135deg, #ffffff 30%, #93c5fd 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: #0f172a !important;
+  background: none !important;
+  -webkit-background-clip: initial !important;
+  -webkit-text-fill-color: initial !important;
 }
 
 .brand-sub {
   font-size: 9.5px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
-  letter-spacing: 0.02em;
+  font-weight: 500;
+  color: #64748b !important;
+  letter-spacing: 0.01em;
 }
 
 .topnav-tabs {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: flex-start;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
-  margin-left: 10px;
+  gap: 3px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 3px;
+  margin-left: 6px;
 }
 
 .topnav-tab {
-  height: 30px;
-  padding: 0 14px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.72);
+  height: 28px;
+  padding: 0 13px;
+  border: none !important;
+  border-radius: 6px;
+  background: transparent !important;
+  color: #64748b !important;
   font-size: 12px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
+  transition: all 0.15s ease;
+  outline: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
 }
 
 .topnav-tab:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: #ffffff;
-  transform: translateY(-1px);
+  background: #e2e8f0 !important;
+  color: #0f172a !important;
+  transform: none !important;
 }
 
 .topnav-tab.is-active,
 .app-topnav .topnav-tab.is-active,
 .app-topnav .topnav-tabs button.topnav-tab.is-active {
-  background: linear-gradient(135deg, #0ea5e9 0%, #2F8BCC 50%, #2563eb 100%) !important;
-  background-color: #2F8BCC !important;
+  background: #2F8BCC !important;
   color: #ffffff !important;
-  font-weight: 700 !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 2px 10px rgba(14, 165, 233, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
+  font-weight: 600 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 3px rgba(47, 139, 204, 0.3) !important;
 }
 
 .topnav-chip {
@@ -4847,106 +4838,91 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: flex !important;
   align-items: center !important;
   margin: 0 !important;
-  height: 30px !important;
+  height: 28px !important;
 }
 
 .app-topnav #tokenInput {
-  width: 200px !important;
-  height: 30px !important;
+  width: 190px !important;
+  height: 28px !important;
   margin: 0 !important;
-  padding: 0 12px !important;
-  border: 1px solid rgba(56, 189, 248, 0.35) !important;
-  border-radius: 7px !important;
-  background: rgba(255, 255, 255, 0.08) !important;
-  color: #ffffff !important;
+  padding: 0 10px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
   font-size: 11px !important;
   font-weight: 500 !important;
   box-sizing: border-box !important;
   outline: none !important;
-  transition: all 0.25s ease !important;
-  animation: tokenInputGlow 3.5s infinite ease-in-out !important;
-}
-
-.app-topnav #tokenInput::placeholder {
-  color: rgba(255, 255, 255, 0.65) !important;
-  opacity: 1;
-  transition: opacity 0.25s ease;
-  animation: tokenPlaceholderShimmer 3.5s infinite ease-in-out;
-}
-
-.app-topnav #tokenInput:focus {
-  border-color: #38bdf8 !important;
-  box-shadow: 0 0 0 2.5px rgba(56, 189, 248, 0.4), 0 0 12px rgba(56, 189, 248, 0.3) !important;
-  background: rgba(255, 255, 255, 0.14) !important;
+  transition: border-color 0.2s ease, background-color 0.2s ease !important;
   animation: none !important;
 }
 
-@keyframes tokenInputGlow {
-  0%, 100% {
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.05);
-  }
-  50% {
-    border-color: rgba(56, 189, 248, 0.7);
-    box-shadow: 0 0 10px rgba(56, 189, 248, 0.35), 0 0 0 2px rgba(47, 139, 204, 0.2);
-  }
+.app-topnav #tokenInput::placeholder {
+  color: #94a3b8 !important;
+  opacity: 1;
+  animation: none !important;
 }
 
-@keyframes tokenPlaceholderShimmer {
-  0%, 100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 0.95;
-  }
+.app-topnav #tokenInput:focus {
+  border-color: #2F8BCC !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 2px rgba(47, 139, 204, 0.2) !important;
+  animation: none !important;
 }
 
 .app-topnav #tokenStatus {
   display: none;
   min-width: 100px;
-  height: 30px !important;
-  padding: 0 12px !important;
-  border-radius: 7px !important;
+  height: 28px !important;
+  padding: 0 10px !important;
+  border-radius: 6px !important;
   font-size: 11px !important;
   font-weight: 700 !important;
-  line-height: 30px !important;
+  line-height: 28px !important;
   text-align: center;
   box-sizing: border-box !important;
 }
 
 .app-topnav .nav-ghost-btn {
-  height: 30px !important;
+  height: 28px !important;
   width: auto !important;
-  padding: 0 12px !important;
-  border-radius: 7px !important;
+  padding: 0 11px !important;
+  border-radius: 6px !important;
   font-size: 11px !important;
-  background: rgba(255, 255, 255, 0.1) !important;
-  box-shadow: none !important;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  transition: all 0.2s ease !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #334155 !important;
+  transition: all 0.15s ease !important;
 }
 
 .app-topnav .nav-ghost-btn:hover:not(:disabled) {
-  background: rgba(47, 139, 204, 0.9) !important;
-  border-color: #38bdf8 !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.4) !important;
+  background: #f1f5f9 !important;
+  border-color: #94a3b8 !important;
+  color: #0f172a !important;
+  transform: none !important;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
 }
 
 .app-topnav #algoQA.algoqa-styled-btn {
-  height: 30px !important;
-  border-radius: 7px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
   font-size: 11px !important;
+  font-weight: 600 !important;
   padding: 0 12px !important;
-  border: 1px solid rgba(255, 255, 255, 0.2) !important;
-  transition: all 0.2s ease !important;
+  background: linear-gradient(135deg, #a855f7 0%, #2F8BCC 100%) !important;
+  border: 1px solid rgba(47, 139, 204, 0.3) !important;
+  color: #ffffff !important;
+  box-shadow: 0 1px 3px rgba(47, 139, 204, 0.25) !important;
+  transition: all 0.15s ease !important;
 }
 
 .app-topnav #algoQA:hover:not(:disabled),
 .app-topnav .pill-btn.algoqa-styled-btn:hover:not(:disabled) {
-  background: linear-gradient(90deg, #d300ff, #2F8BCC) !important;
-  transform: translateY(-1px) !important;
-  box-shadow: 0 4px 12px rgba(211, 0, 255, 0.35) !important;
+  background: linear-gradient(135deg, #9333ea 0%, #2563eb 100%) !important;
+  box-shadow: 0 2px 8px rgba(168, 85, 247, 0.35) !important;
+  transform: none !important;
 }
 
 .app-shell {
@@ -9463,20 +9439,62 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   box-sizing: border-box;
 }
 
+/* Universal OS scoping for FAQ and Tips across the About guide */
+.faq-os-win-only,
+.os-win-only {
+  display: none !important;
+}
+
+.faq-os-mac-only,
+.os-mac-only {
+  display: flex !important;
+}
+
+html.platform-win .faq-os-win-only,
+html.platform-win .os-win-only {
+  display: flex !important;
+}
+
+html.platform-win .faq-os-mac-only,
+html.platform-win .os-mac-only {
+  display: none !important;
+}
+
+/* For inline text spans */
+span.faq-os-win-only,
+span.os-win-only {
+  display: none !important;
+}
+span.faq-os-mac-only,
+span.os-mac-only {
+  display: inline !important;
+}
+html.platform-win span.faq-os-win-only,
+html.platform-win span.os-win-only {
+  display: inline !important;
+}
+html.platform-win span.faq-os-mac-only,
+html.platform-win span.os-mac-only {
+  display: none !important;
+}
+
 .faq-os-pill,
 .faq-mode-pill,
 .faq-icon-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 2.5px 7px;
-  border-radius: 4px;
+  justify-content: center;
+  gap: 5px;
+  min-width: 96px;
+  padding: 3px 8px;
+  border-radius: 5px;
   font-size: 10px;
   font-weight: 700;
   white-space: nowrap;
   flex-shrink: 0;
   margin-top: 1px;
   line-height: 1.2;
+  box-sizing: border-box;
 }
 
 .faq-os-pill.pill-android { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
@@ -12732,6 +12750,15 @@ html.platform-win #tab-about .faq-answer-content {
 html.platform-win #tab-about .faq-guide-row {
   padding: 6px 9px !important;
   gap: 8px !important;
+}
+
+html.platform-win #tab-about .faq-os-pill,
+html.platform-win #tab-about .faq-mode-pill,
+html.platform-win #tab-about .faq-icon-pill {
+  min-width: 90px !important;
+  font-size: 9.5px !important;
+  padding: 2.5px 6px !important;
+  font-family: 'Segoe UI', system-ui, sans-serif !important;
 }
 
 html.platform-win #tab-about .faq-guide-text {

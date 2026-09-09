@@ -1366,7 +1366,10 @@
                     <div class="pipeline-step-badge-wrap"><span class="pipeline-step-num">01</span></div>
                     <div class="pipeline-step-content">
                         <span class="pipeline-step-name">Connect Device</span>
-                        <p class="pipeline-step-text">Choose platform (Android / iOS), select target app package/bundle, and launch Appium session.</p>
+                        <p class="pipeline-step-text">
+                        <span class="os-win-only">Connect Android device, select target app package/activity, and launch Appium session.</span>
+                        <span class="os-mac-only">Choose platform (Android / iOS), select target app package/bundle, and launch Appium session.</span>
+                    </p>
                     </div>
                 </div>
                 <div class="pipeline-arrow" aria-hidden="true">
@@ -1482,6 +1485,10 @@
                     <div class="panel-tip-box">
                         <span class="tip-icon">🚀</span>
                         <span><strong>Pro-Tip:</strong> When navigating to a new screen in your app, click <strong>Scrape UI</strong> to populate all controls at once, then refine names or remove unwanted rows.</span>
+                    </div>
+                    <div class="panel-tip-box" style="margin-top: 8px;">
+                        <span class="tip-icon">✨</span>
+                        <span><strong>Multi-Delete &amp; Batch Cleanup:</strong> Right-click the table header (or click the delete icon) to enable <strong>Multi-Delete Mode</strong>, select multiple element rows with checkboxes, and batch remove them.</span>
                     </div>
                 </div>
             </div>
@@ -2132,6 +2139,33 @@
                         <div class="sc-td td-win"><kbd class="app-kbd">Esc</kbd></div>
                         <div class="sc-td td-mac"><kbd class="app-kbd">Esc</kbd></div>
                     </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Toggle Multi-Delete Mode</span>
+                            <span class="sc-act-sub">Switch table between single row delete &amp; checkbox multi-select</span>
+                        </div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Right Click Header</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Trash Header</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Right Click Header</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Trash Header</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Multi-Select All Items</span>
+                            <span class="sc-act-sub">Select all visible rows in table or all project workspaces</span>
+                        </div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Select All Checkbox</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Select All Checkbox</kbd></div>
+                    </div>
+
+                    <div class="sc-trow">
+                        <div class="sc-td td-action">
+                            <span class="sc-act-title">Delete Selected Items</span>
+                            <span class="sc-act-sub">Permanently delete checked rows or project workspaces</span>
+                        </div>
+                        <div class="sc-td td-win"><kbd class="app-kbd">Delete Selected</kbd> <span class="k-or">/</span> <kbd class="app-kbd">Del</kbd></div>
+                        <div class="sc-td td-mac"><kbd class="app-kbd">Delete Selected</kbd> <span class="k-or">/</span> <kbd class="app-kbd">⌫ Backspace</kbd></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -2161,8 +2195,13 @@
                     <ul class="about-check-list">
                         <li><strong>Project Workspaces:</strong> Group test assets per mobile app or environment with isolated storage.</li>
                         <li><strong>Page Object Hierarchy:</strong> Organize controls under logical page names (e.g. <code>HomeScreen</code>, <code>CartPage</code>).</li>
+                        <li><strong>Batch Multi-Delete:</strong> Click <strong>Multi-Delete</strong> to check and delete multiple workspace cards at once with automatic live-session protection.</li>
                         <li><strong>JSON Import / Export:</strong> Download full project JSON bundles or import existing test packages for rapid sharing across QA teams.</li>
                     </ul>
+                    <div class="panel-tip-box" style="margin-top: 10px;">
+                        <span class="tip-icon">🗂️</span>
+                        <span><strong>Workspace Multi-Delete:</strong> Click the <strong>Multi-Delete</strong> button in the project search bar, check the projects you wish to delete, and click <strong>Delete Selected</strong>. Live connected sessions are automatically protected.</span>
+                    </div>
                 </div>
 
                 <!-- Cloud Sync Info -->
@@ -2206,12 +2245,12 @@
                 </div>
                 <div class="section-title-texts">
                     <h2 class="about-section-title">Frequently Asked Questions &amp; Troubleshooting</h2>
-                    <span class="about-section-subtitle">Quick solutions for common connection, scraping, and locator scenarios</span>
+                    <span class="about-section-subtitle">Quick solutions for common connection, scraping, locator, and batch workflow scenarios</span>
                 </div>
             </div>
 
             <div class="about-faq-accordion">
-                <!-- FAQ 1: Device Detection -->
+                <!-- FAQ 1: Device Detection (OS Filtered: Mac shows Android+iOS, Windows shows Android only) -->
                 <div class="faq-item" data-searchable="faq device not detected adb unauthorized usb debugging ios webdriveragent xcuitest connection offline">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
@@ -2223,14 +2262,24 @@
                         </div>
                     </button>
                     <div class="faq-answer-content">
-                        <div class="faq-guide-row">
+                        <!-- Android row (Windows specific) -->
+                        <div class="faq-guide-row faq-os-win-only">
                             <div class="faq-os-pill pill-android">
                                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
                                 <span>Android</span>
                             </div>
-                            <div class="faq-guide-text">Ensure <strong>USB Debugging</strong> is enabled under Developer Options on your phone and accept the RSA computer authorization prompt. Run <code class="faq-code">adb devices</code> in your terminal to verify that the device is listed as <span class="faq-status-tag valid">device</span> (not <code>unauthorized</code> or <code>offline</code>).</div>
+                            <div class="faq-guide-text">Ensure <strong>USB Debugging</strong> is enabled under Developer Options on your phone and accept the RSA computer authorization prompt. Run <code class="faq-code">adb devices</code> in Command Prompt or PowerShell to verify that the device is listed as <span class="faq-status-tag valid">device</span> (not <code>unauthorized</code> or <code>offline</code>). If missing, ensure OEM USB drivers are installed.</div>
                         </div>
-                        <div class="faq-guide-row">
+                        <!-- Android row (Mac specific) -->
+                        <div class="faq-guide-row faq-os-mac-only">
+                            <div class="faq-os-pill pill-android">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+                                <span>Android</span>
+                            </div>
+                            <div class="faq-guide-text">Ensure <strong>USB Debugging</strong> is enabled under Developer Options on your phone and accept the RSA computer authorization prompt. Run <code class="faq-code">adb devices</code> in Terminal to verify that the device is listed as <span class="faq-status-tag valid">device</span> (not <code>unauthorized</code> or <code>offline</code>).</div>
+                        </div>
+                        <!-- iOS row (Mac only) -->
+                        <div class="faq-guide-row faq-os-mac-only">
                             <div class="faq-os-pill pill-ios">
                                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><circle cx="12" cy="18" r="1"></circle></svg>
                                 <span>iOS</span>
@@ -2240,18 +2289,22 @@
                     </div>
                 </div>
 
-                <!-- FAQ 2: Package & Activity / Bundle ID -->
+                <!-- FAQ 2: Package & Activity / Bundle ID (OS Filtered: Mac shows Android+iOS, Windows shows Android only) -->
                 <div class="faq-item" data-searchable="faq package name app activity launcher activity bundle id info plist android manifest">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
                             <span class="faq-cat-badge badge-purple">CONFIG</span>
-                            <span class="faq-q-text">How do I find the correct App Package &amp; Launcher Activity (Android) or Bundle ID (iOS)?</span>
+                            <span class="faq-q-text">
+                                <span class="faq-os-win-only">How do I find the correct App Package &amp; Launcher Activity for my app?</span>
+                                <span class="faq-os-mac-only">How do I find the correct App Package &amp; Launcher Activity (Android) or Bundle ID (iOS)?</span>
+                            </span>
                         </div>
                         <div class="faq-chevron-box">
                             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
                         </div>
                     </button>
                     <div class="faq-answer-content">
+                        <!-- Android row -->
                         <div class="faq-guide-row">
                             <div class="faq-os-pill pill-android">
                                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
@@ -2259,7 +2312,8 @@
                             </div>
                             <div class="faq-guide-text">Run <code class="faq-code">adb shell cmd package resolve-activity --brief &lt;package-name&gt;</code> while the app is running, or inspect the APK using Android Studio / APK Analyzer to locate the exported Launcher Activity.</div>
                         </div>
-                        <div class="faq-guide-row">
+                        <!-- iOS row (Mac only) -->
+                        <div class="faq-guide-row faq-os-mac-only">
                             <div class="faq-os-pill pill-ios">
                                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"></rect><circle cx="12" cy="18" r="1"></circle></svg>
                                 <span>iOS</span>
@@ -2269,7 +2323,36 @@
                     </div>
                 </div>
 
-                <!-- FAQ 3: Inspect Mode vs Interact Mode -->
+                <!-- FAQ 3: Multi-Delete in Scraped Table & Repository -->
+                <div class="faq-item" data-searchable="faq multi delete bulk delete multiple select remove table repository batch delete workspace">
+                    <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
+                        <div class="faq-q-left">
+                            <span class="faq-cat-badge badge-rose">MULTI-DELETE</span>
+                            <span class="faq-q-text">How do I multi-select and batch delete items in the Scraped Table and Repository?</span>
+                        </div>
+                        <div class="faq-chevron-box">
+                            <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="faq-chevron"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </div>
+                    </button>
+                    <div class="faq-answer-content">
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-rose">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                                <span>Scraped Table</span>
+                            </div>
+                            <div class="faq-guide-text">Right-click the table header or click the delete column header to toggle <strong>Multi-Delete Mode</strong>. Individual checkboxes appear for each row alongside a master <strong>Select All</strong> checkbox in the header. Select the rows you wish to remove and click the red <strong>Delete Selected</strong> button (or press <code class="faq-code"><span class="os-win-only">Delete</span><span class="os-mac-only">⌫ Backspace</span></code>) to batch delete them with a single confirmation.</div>
+                        </div>
+                        <div class="faq-guide-row">
+                            <div class="faq-icon-pill pill-purple">
+                                <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+                                <span>Repository</span>
+                            </div>
+                            <div class="faq-guide-text">In the <strong>Repository</strong> tab, click the <strong>Multi-Delete</strong> button in the project search toolbar to enter multi-select mode. Select target project workspace cards or click <strong>Select All Projects</strong>, then click <strong>Delete Selected</strong> to purge multiple projects at once. Active/live project sessions are protected automatically.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FAQ 4: Inspect Mode vs Interact Mode -->
                 <div class="faq-item" data-searchable="faq inspect mode interact mode dual mode viewport live touch tap gestures">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
@@ -2293,12 +2376,12 @@
                                 <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                                 <span>Interact Mode</span>
                             </div>
-                            <div class="faq-guide-text"><strong>Live Gestures:</strong> Transmits real touch inputs, clicks, drag-to-scroll gestures, and soft keyboard typing directly to the physical device or simulator via Appium / W3C WebDriver.</div>
+                            <div class="faq-guide-text"><strong>Live Gestures:</strong> Transmits real touch inputs, clicks, drag-to-scroll gestures, and soft keyboard typing directly to the connected device or simulator via Appium / W3C WebDriver.</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- FAQ 4: Hybrid Apps & WebViews -->
+                <!-- FAQ 5: Hybrid Apps & WebViews -->
                 <div class="faq-item" data-searchable="faq hybrid apps webview chrome custom tab embedded webview dom inspection">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
@@ -2320,7 +2403,7 @@
                     </div>
                 </div>
 
-                <!-- FAQ 5: Multi-XPath Dropdown Selection -->
+                <!-- FAQ 6: Multi-XPath Dropdown Selection -->
                 <div class="faq-item" data-searchable="faq multi xpath locator selection control id dropdown fallback allxpaths priority">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
@@ -2342,7 +2425,7 @@
                     </div>
                 </div>
 
-                <!-- FAQ 6: Scenario Recording & Action Types -->
+                <!-- FAQ 7: Scenario Recording & Action Types -->
                 <div class="faq-item" data-searchable="faq scenario recording action types clicked entered swipe steps sequence">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
@@ -2364,7 +2447,7 @@
                     </div>
                 </div>
 
-                <!-- FAQ 7: Exporting & algoQA Sync -->
+                <!-- FAQ 8: Exporting & algoQA Sync -->
                 <div class="faq-item" data-searchable="faq export json save repository algoqa cloud sync api token publish">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
@@ -2386,7 +2469,7 @@
                     </div>
                 </div>
 
-                <!-- FAQ 8: Reset & Disconnect -->
+                <!-- FAQ 9: Reset & Disconnect -->
                 <div class="faq-item" data-searchable="faq reset session clear table disconnect appium driver clean cache">
                     <button type="button" class="faq-question-btn" onclick="toggleAboutFaq(this)" aria-expanded="false">
                         <div class="faq-q-left">
