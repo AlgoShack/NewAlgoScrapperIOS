@@ -6953,20 +6953,32 @@ pre#configJsonPreview::-webkit-scrollbar,
   flex: 1 1 auto !important;
   width: 100% !important;
   height: 100% !important;
+  min-width: 0 !important;
   margin: 0 !important;
+  position: relative !important;
 }
 
 .home-field .custom-select-trigger {
+  width: 100% !important;
+  max-width: 100% !important;
   height: 100% !important;
   min-height: 31px !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
   border: none !important;
   background: transparent !important;
   border-radius: 0 7px 7px 0 !important;
   box-shadow: none !important;
-  padding: 0 10px 0 10px !important;
+  padding: 0 8px 0 10px !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -6986,6 +6998,12 @@ pre#configJsonPreview::-webkit-scrollbar,
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  display: block !important;
 }
 
 .home-field .custom-select-label.is-placeholder {
@@ -6994,11 +7012,13 @@ pre#configJsonPreview::-webkit-scrollbar,
 }
 
 .home-field .custom-select-caret {
-  width: 16px !important;
-  height: 16px !important;
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
   flex-shrink: 0 !important;
   fill: #64748b !important;
   color: #64748b !important;
+  margin-left: auto !important;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), fill 0.2s ease !important;
 }
 
@@ -8025,13 +8045,13 @@ html.platform-win .home-field:has(#platformname) .custom-select-menu,
 
 html.platform-win .home-field-app {
   min-width: 120px !important;
-  max-width: 180px !important;
-  flex: 0 0 auto !important;
+  max-width: 190px !important;
+  flex: 0 1 auto !important;
 }
 
 html.platform-win .home-field-device {
   min-width: 160px !important;
-  max-width: 260px !important;
+  max-width: 280px !important;
   flex: 0 1 auto !important;
 }
 
@@ -8060,23 +8080,35 @@ html.platform-win .home-field .custom-select-wrap {
   flex: 1 1 auto !important;
   width: 100% !important;
   height: 100% !important;
+  min-width: 0 !important;
   margin: 0 !important;
   margin-top: 0 !important;
   margin-bottom: 0 !important;
   font-size: 12px !important;
+  position: relative !important;
 }
 
 html.platform-win .home-field .custom-select-trigger {
+  width: 100% !important;
+  max-width: 100% !important;
   height: 100% !important;
   min-height: 30px !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 6px !important;
   border: none !important;
   background: transparent !important;
   border-radius: 0 7px 7px 0 !important;
   box-shadow: none !important;
-  padding: 0 10px 0 10px !important;
+  padding: 0 8px 0 10px !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -8113,6 +8145,12 @@ html.platform-win .home-field .custom-select-label {
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  display: block !important;
 }
 
 html.platform-win .home-field .custom-select-label.is-placeholder {
@@ -8121,11 +8159,13 @@ html.platform-win .home-field .custom-select-label.is-placeholder {
 }
 
 html.platform-win .home-field .custom-select-caret {
-  width: 16px !important;
-  height: 16px !important;
+  width: 14px !important;
+  height: 14px !important;
+  flex: 0 0 14px !important;
   flex-shrink: 0 !important;
   fill: #64748b !important;
   color: #64748b !important;
+  margin-left: auto !important;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), fill 0.2s ease !important;
 }
 
