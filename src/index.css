@@ -6888,14 +6888,17 @@ pre#configJsonPreview::-webkit-scrollbar,
 }
 
 .home-field-app {
-  min-width: 175px;
+  min-width: 140px;
+  max-width: none !important;
+  width: auto !important;
   flex: 0 0 auto;
 }
 
 .home-field-device {
-  min-width: 250px;
-  max-width: 380px;
-  flex: 0 1 300px;
+  min-width: 180px;
+  max-width: none !important;
+  width: auto !important;
+  flex: 0 0 auto;
 }
 
 .home-field label {
@@ -6960,7 +6963,7 @@ pre#configJsonPreview::-webkit-scrollbar,
 
 .home-field .custom-select-trigger {
   width: 100% !important;
-  max-width: 100% !important;
+  max-width: none !important;
   height: 100% !important;
   min-height: 31px !important;
   min-width: 0 !important;
@@ -6968,17 +6971,18 @@ pre#configJsonPreview::-webkit-scrollbar,
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 6px !important;
+  gap: 8px !important;
   border: none !important;
   background: transparent !important;
   border-radius: 0 7px 7px 0 !important;
   box-shadow: none !important;
-  padding: 0 8px 0 10px !important;
+  padding: 0 10px 0 10px !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
   box-sizing: border-box !important;
-  overflow: hidden !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -6998,12 +7002,12 @@ pre#configJsonPreview::-webkit-scrollbar,
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
-  flex: 1 1 auto !important;
+  flex: 0 0 auto !important;
   min-width: 0 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   white-space: nowrap !important;
-  display: block !important;
+  display: inline-block !important;
 }
 
 .home-field .custom-select-label.is-placeholder {
@@ -8015,7 +8019,8 @@ html.platform-win .home-field {
 
 html.platform-win .home-field-platform {
   min-width: 100px !important;
-  max-width: 140px !important;
+  max-width: none !important;
+  width: auto !important;
   flex: 0 0 auto !important;
   cursor: default !important;
 }
@@ -8044,15 +8049,17 @@ html.platform-win .home-field:has(#platformname) .custom-select-menu,
 }
 
 html.platform-win .home-field-app {
-  min-width: 120px !important;
-  max-width: 190px !important;
-  flex: 0 1 auto !important;
+  min-width: 130px !important;
+  max-width: none !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
 }
 
 html.platform-win .home-field-device {
-  min-width: 160px !important;
-  max-width: 280px !important;
-  flex: 0 1 auto !important;
+  min-width: 180px !important;
+  max-width: none !important;
+  width: auto !important;
+  flex: 0 0 auto !important;
 }
 
 html.platform-win .home-field label {
@@ -8090,7 +8097,7 @@ html.platform-win .home-field .custom-select-wrap {
 
 html.platform-win .home-field .custom-select-trigger {
   width: 100% !important;
-  max-width: 100% !important;
+  max-width: none !important;
   height: 100% !important;
   min-height: 30px !important;
   min-width: 0 !important;
@@ -8098,17 +8105,18 @@ html.platform-win .home-field .custom-select-trigger {
   flex-direction: row !important;
   align-items: center !important;
   justify-content: space-between !important;
-  gap: 6px !important;
+  gap: 8px !important;
   border: none !important;
   background: transparent !important;
   border-radius: 0 7px 7px 0 !important;
   box-shadow: none !important;
-  padding: 0 8px 0 10px !important;
+  padding: 0 10px 0 10px !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
   box-sizing: border-box !important;
-  overflow: hidden !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
   transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
@@ -8145,12 +8153,12 @@ html.platform-win .home-field .custom-select-label {
   font-size: 12px !important;
   font-weight: 600 !important;
   color: #1e293b !important;
-  flex: 1 1 auto !important;
+  flex: 0 0 auto !important;
   min-width: 0 !important;
-  overflow: hidden !important;
-  text-overflow: ellipsis !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
   white-space: nowrap !important;
-  display: block !important;
+  display: inline-block !important;
 }
 
 html.platform-win .home-field .custom-select-label.is-placeholder {
@@ -8165,7 +8173,7 @@ html.platform-win .home-field .custom-select-caret {
   flex-shrink: 0 !important;
   fill: #64748b !important;
   color: #64748b !important;
-  margin-left: auto !important;
+  margin-left: 6px !important;
   transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), fill 0.2s ease !important;
 }
 
