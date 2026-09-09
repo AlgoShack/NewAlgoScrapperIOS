@@ -1894,6 +1894,44 @@
       Menu.setApplicationMenu(menu);
 
       let shown = false;
+      const enforceMinBounds = () => {
+        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return;
+        try {
+          const [currentWidth, currentHeight] = mainWindow.getSize();
+          if (currentWidth < 960 || currentHeight < 680) {
+            mainWindow.setSize(Math.max(currentWidth, 960), Math.max(currentHeight, 680));
+          }
+        } catch (_) {}
+      };
+
+      mainWindow.on('will-resize', (e, newBounds) => {
+        if (newBounds.width < 960 || newBounds.height < 680) {
+          e.preventDefault();
+          try {
+            mainWindow.setBounds({
+              x: newBounds.x,
+              y: newBounds.y,
+              width: Math.max(newBounds.width, 960),
+              height: Math.max(newBounds.height, 680)
+            });
+          } catch (_) {}
+        }
+      });
+
+      mainWindow.on('resize', enforceMinBounds);
+      mainWindow.on('unmaximize', () => {
+        try {
+          mainWindow.setMinimumSize(960, 680);
+          enforceMinBounds();
+        } catch (_) {}
+      });
+      mainWindow.on('restore', () => {
+        try {
+          mainWindow.setMinimumSize(960, 680);
+          enforceMinBounds();
+        } catch (_) {}
+      });
+
       const revealMainWindow = () => {
         if (shown || !mainWindow || mainWindow.isDestroyed()) return;
         shown = true;
@@ -1902,6 +1940,7 @@
           mainWindow.maximize();
           mainWindow.show();
           mainWindow.focus();
+          enforceMinBounds();
           mainWindow.webContents.send("launch-mode", launchedFromProtocol);
           flushPendingDeepLink();
         } catch (err) {
