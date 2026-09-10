@@ -2183,7 +2183,7 @@
                     item.addEventListener('mouseenter', () => {
                         if (opt.disabled) return;
                         if (typeof window.onOptionHover === 'function') {
-                            try { window.onOptionHover(opt.value); } catch (_) {}
+                            try { window.onOptionHover(opt.value, selectEl.closest('tr')); } catch (_) {}
                         }
                     });
                 }
@@ -7022,6 +7022,12 @@
 
             clearOverlay();
 
+            const hoverRow = xpathCell.closest('tr');
+            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(hoverRow)) {
+                lastXPath = "";
+                return;
+            }
+
             if (xpath.startsWith("SWIPE(")) {
                 const match = xpath.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
                 if (match) {
@@ -7102,7 +7108,7 @@
         }
 
         // Dedicated handler for option hover events (also exposed on window for legacy callers)
-        async function onOptionHover(xpath) {
+        async function onOptionHover(xpath, sourceRow) {
             if (!xpath || xpath === lastXPath) return;
 
             lastXPath = xpath;
@@ -7112,6 +7118,18 @@
             const currentRequestId = hoverRequestId;
 
             clearOverlay();
+
+            const optionRow = sourceRow || (() => {
+                const selectOption = document.querySelector(`#myTable tr:not(.empty-excel-row) select option[value="${CSS.escape(xpath)}"]`);
+                return selectOption ? selectOption.closest('tr') : Array.from(document.querySelectorAll('#myTable tr:not(.empty-excel-row)')).find(r => {
+                    const sel = r.querySelector('.xpath select');
+                    return (sel && sel.value === xpath) || (r.querySelector('.xpath')?.innerText.trim() === xpath);
+                });
+            })();
+            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(optionRow)) {
+                lastXPath = "";
+                return;
+            }
 
             if (xpath.startsWith("SWIPE(")) {
                 const match = xpath.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
@@ -7193,10 +7211,9 @@
             // Set lastXPath so that resting the mouse on the select doesn't immediately re-trigger
             lastXPath = xpath;
 
-            // Keep IDENTIFICATION TYPE in sync with the selected locator strategy
+            const hoverRow = selectElement.closest("tr");
             try {
-                const row = selectElement.closest("tr");
-                const idTypeCell = row && row.querySelector(".identificationType");
+                const idTypeCell = hoverRow && hoverRow.querySelector(".identificationType");
                 if (idTypeCell) {
                     idTypeCell.innerText = typeof inferIdentificationType === "function"
                         ? inferIdentificationType(xpath)
@@ -7208,6 +7225,10 @@
             } catch (_) {}
 
             if (!xpath) return;
+
+            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(hoverRow)) {
+                return;
+            }
 
             if (xpath.startsWith("SWIPE(")) {
                 const match = xpath.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
