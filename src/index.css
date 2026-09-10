@@ -13795,6 +13795,145 @@ html.os-win #tab-configuration .vscode-tab {
   font-family: inherit !important;
 }
 
+/* Windows only: Configuration fits one screen — nothing clipped, no page scroll */
+html.os-win #tab-configuration.is-active {
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+  padding: 8px 12px 8px !important;
+  flex: 1 1 0 !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  box-sizing: border-box !important;
+}
+
+html.os-win #tab-configuration .config-page-wrapper {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  gap: 6px !important;
+}
+
+html.os-win #tab-configuration .config-page-header {
+  flex-shrink: 0 !important;
+  padding: 0 2px 0 !important;
+}
+
+html.os-win #tab-configuration .config-header-title {
+  font-size: 14px !important;
+  margin: 0 0 1px !important;
+}
+
+html.os-win #tab-configuration .config-header-desc {
+  font-size: 10.5px !important;
+}
+
+html.os-win #tab-configuration .config-header-status {
+  padding: 3px 8px !important;
+  font-size: 10.5px !important;
+}
+
+html.os-win #tab-configuration .config-metrics-row {
+  flex-shrink: 0 !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+}
+
+html.os-win #tab-configuration .config-metric-chip {
+  padding: 6px 10px !important;
+}
+
+html.os-win #tab-configuration .metric-chip-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+html.os-win #tab-configuration .metric-chip-icon svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+html.os-win #tab-configuration .config-dashboard-grid {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card {
+  height: 100% !important;
+  min-height: 0 !important;
+}
+
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child {
+  overflow: visible !important;
+}
+
+html.os-win #tab-configuration .config-dash-card:hover {
+  transform: none !important;
+}
+
+html.os-win #tab-configuration .dash-card-header {
+  padding: 7px 12px !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child .dash-card-body {
+  padding: 8px 12px !important;
+  gap: 6px !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  justify-content: flex-start !important;
+}
+
+html.os-win #tab-configuration .dash-spec-item {
+  gap: 2px !important;
+}
+
+html.os-win #tab-configuration .dash-spec-hint {
+  display: block !important;
+  font-size: 9px !important;
+  line-height: 1.3 !important;
+}
+
+html.os-win #tab-configuration .dash-code-pill {
+  padding: 3px 6px 3px 8px !important;
+}
+
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:last-child .dash-card-body {
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+html.os-win #tab-configuration .vscode-window {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
+
+html.os-win #tab-configuration .vscode-body {
+  overflow: auto !important;
+}
+
+html.os-win #tab-configuration .config-project-launch-section {
+  margin-top: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .config-launch-card-header {
+  padding: 6px 12px !important;
+}
+
+html.os-win #tab-configuration .config-launch-card-body {
+  padding: 6px 12px 8px !important;
+}
+
+html.os-win #tab-configuration .config-project-card-box {
+  padding: 6px 10px !important;
+}
+
 /* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */
 html.os-win .error-icon-wrapper,
 html.os-win .error-info-icon,
