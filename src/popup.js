@@ -11253,11 +11253,14 @@ function isDistinctFeatureName(name, pageName) {
 }
 
 function featureIdentityKey(name, pageName, uniqueIdentifier, id, screenSignature) {
+    // Same created feature keeps one identity even if the live screen stamp
+    // changes (clock, highlight, scrape refresh). New Create Feature always
+    // gets a new id, so different screens still count separately.
+    if (id) return `id:${id}`;
     const n = repoNameKey(name);
     const p = repoNameKey(pageName || '');
     const uid = repoNameKey(uniqueIdentifier || '');
     const sig = repoNameKey(String(screenSignature || '').slice(0, 160));
-    if (id) return `id:${id}::scr:${sig}`;
     return `${n}::${p}::${uid}::${sig}`;
 }
 window.featureIdentityKey = featureIdentityKey;
@@ -11266,8 +11269,9 @@ function mergeFeatureItems() {
     const map = new Map();
     Array.from(arguments).forEach(list => {
         (list || []).forEach(f => {
-            const name = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
-            const pageHint = (f && typeof f === 'object') ? (f.pageName || '') : '';
+            if (!isUserCreatedFeature(f)) return;
+            const name = (f && f.name) || '';
+            const pageHint = (f && f.pageName) || '';
             if (!isDistinctFeatureName(name, pageHint)) return;
             const k = featureIdentityKey(name, pageHint, f && f.uniqueIdentifier, f && f.id, f && f.screenSignature);
             if (!map.has(k)) {
@@ -11293,8 +11297,15 @@ function mergeFeatureItems() {
                 if (!cur.uniqueIdentifier && f && f.uniqueIdentifier) cur.uniqueIdentifier = f.uniqueIdentifier;
                 if ((!cur.xpaths || !cur.xpaths.length) && f && f.xpaths) cur.xpaths = f.xpaths;
                 if (!cur.id && f && f.id) cur.id = f.id;
-                if (!cur.screenSignature && f && f.screenSignature) cur.screenSignature = f.screenSignature;
-                if (f && f.timestamp && (!cur.timestamp || f.timestamp >= cur.timestamp)) cur.timestamp = f.timestamp;
+                if (f && f.timestamp && (!cur.timestamp || f.timestamp >= cur.timestamp)) {
+                    cur.timestamp = f.timestamp;
+                    if (f.screenSignature) cur.screenSignature = f.screenSignature;
+                    if (f.screenContentKeys) cur.screenContentKeys = f.screenContentKeys;
+                } else if (!cur.screenSignature && f && f.screenSignature) {
+                    cur.screenSignature = f.screenSignature;
+                }
+                if (f && f.nodeText && !cur.nodeText) cur.nodeText = f.nodeText;
+                if (f && f.nodeFingerprint && !cur.nodeFingerprint) cur.nodeFingerprint = f.nodeFingerprint;
             }
         });
     });
@@ -11303,11 +11314,11 @@ function mergeFeatureItems() {
 
 function isUserCreatedFeature(f) {
     if (!f) return false;
-    if (typeof f === 'string') return isDistinctFeatureName(f, '');
+    if (typeof f === 'string') return false;
     if (typeof f !== 'object' || !f.name) return false;
-    // Created features carry identity/geometry/timestamp — bare {name,pageName} scrape ghosts do not
-    return !!(f.id || f.rect || f.fullPage || f.screenSignature || f.uniqueIdentifier
-        || f.timestamp || f.xpaths || f.nodeText || f.nodeFingerprint);
+    // Home Create Feature / table Sub-feature always stamp an id or a rect.
+    // Do not treat scraped table FEATURE NAME / timestamp-only ghosts as features.
+    return !!(f.id || f.rect || f.fullPage);
 }
 
 function featureItemsFromElements() {
@@ -11376,9 +11387,9 @@ function collectProjectFeatureNames(project) {
     if (!project) return names;
     // Only count features the user explicitly created on Home — not scraped element rows
     const add = (f, pageName) => {
-        if (!isUserCreatedFeature(f) && !(typeof f === 'string' && isDistinctFeatureName(f, pageName))) return;
-        const n = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
-        const p = (f && typeof f === 'object' && f.pageName) || pageName || '';
+        if (!isUserCreatedFeature(f)) return;
+        const n = (f && f.name) || '';
+        const p = (f && f.pageName) || pageName || '';
         if (!isDistinctFeatureName(n, p)) return;
         names.add(featureIdentityKey(n, p, f && f.uniqueIdentifier, f && f.id, f && f.screenSignature));
     };
@@ -11399,9 +11410,9 @@ function countProjectFeatures(project) {
 function listProjectFeatureDisplayNames(project) {
     const map = new Map();
     const add = (f, pageName) => {
-        if (!isUserCreatedFeature(f) && !(typeof f === 'string' && isDistinctFeatureName(f, pageName))) return;
-        const n = (f && (f.name || (typeof f === 'string' ? f : ''))) || '';
-        const p = (f && typeof f === 'object' && f.pageName) || pageName || '';
+        if (!isUserCreatedFeature(f)) return;
+        const n = (f && f.name) || '';
+        const p = (f && f.pageName) || pageName || '';
         if (!isDistinctFeatureName(n, p)) return;
         const k = featureIdentityKey(n, p, f && f.uniqueIdentifier, f && f.id, f && f.screenSignature);
         if (!map.has(k)) map.set(k, String(n).trim());
@@ -11421,7 +11432,7 @@ function dedupeProjectFeatureLists(project) {
     if (!project || typeof project !== 'object') return false;
     let modified = false;
     const cleanList = (list) => {
-        const kept = (list || []).filter(f => isUserCreatedFeature(f) || (typeof f === 'string' && isDistinctFeatureName(f, '')));
+        const kept = (list || []).filter(f => isUserCreatedFeature(f));
         return mergeFeatureItems(kept);
     };
     if (Array.isArray(project.features)) {
@@ -11434,7 +11445,7 @@ function dedupeProjectFeatureLists(project) {
     (project.pages || []).forEach(pg => {
         if (!Array.isArray(pg.features)) return;
         const next = cleanList(pg.features);
-        if (next.length !== pg.features.length) {
+        if (next.length !== pg.features.length || JSON.stringify(next) !== JSON.stringify(pg.features)) {
             pg.features = next;
             modified = true;
         }
@@ -11442,7 +11453,7 @@ function dedupeProjectFeatureLists(project) {
     (project.scenarios || []).forEach(sc => {
         if (!Array.isArray(sc.features)) return;
         const next = cleanList(sc.features);
-        if (next.length !== sc.features.length) {
+        if (next.length !== sc.features.length || JSON.stringify(next) !== JSON.stringify(sc.features)) {
             sc.features = next;
             modified = true;
         }
@@ -11470,10 +11481,11 @@ function migrateStandaloneFeaturesIntoOwners(project) {
             else if (f && f.name) existingNames.add(String(f.name).trim().toLowerCase() + '::' + String(f.pageName || '').trim().toLowerCase());
         });
         const restoreToProjectFeatures = (feat, pageName) => {
-        if (!feat) return;
-        const name = typeof feat === 'string' ? feat.trim() : (feat.name ? feat.name.trim() : '');
+        if (!feat || typeof feat !== 'object') return;
+        if (!isUserCreatedFeature(feat)) return;
+        const name = feat.name ? feat.name.trim() : '';
         if (!name) return;
-        const featId = (typeof feat === 'object' && feat.id) ? feat.id : '';
+        const featId = feat.id ? feat.id : '';
         if (featId && existingNames.has('id:' + featId)) return;
         if (!featId && existingNames.has(name.toLowerCase() + '::' + String(pageName || '').trim().toLowerCase())) return;
         if (!isDistinctFeatureName(name, pageName)) return;
@@ -11501,18 +11513,10 @@ function migrateStandaloneFeaturesIntoOwners(project) {
 
     (project.scenarios || []).forEach(s => {
         (s.features || []).forEach(f => restoreToProjectFeatures(f, s.pageName || s.name));
-        (s.elements || []).forEach(el => {
-            const fn = el && (el['FEATURE NAME'] || el.FeatureName);
-            if (fn) restoreToProjectFeatures(fn, s.pageName || (el && el['PAGE NAME']));
-        });
     });
 
     (project.pages || []).forEach(p => {
         (p.features || []).forEach(f => restoreToProjectFeatures(f, p.pageName));
-        (p.elements || []).forEach(el => {
-            const fn = el && (el['FEATURE NAME'] || el.FeatureName);
-            if (fn) restoreToProjectFeatures(fn, p.pageName || (el && el['PAGE NAME']));
-        });
     });
 
     return modified;
