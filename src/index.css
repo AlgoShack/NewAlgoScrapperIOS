@@ -5527,13 +5527,15 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   background: var(--as-bg) !important;
   width: 100% !important;
   height: 100% !important;
+  min-height: 0 !important;
 }
 
 #tab-configuration.is-active {
   display: flex !important;
   flex-direction: column !important;
-  padding: 8px 12px 8px !important;
+  padding: 10px 14px 10px !important;
   overflow: hidden !important;
+  flex: 1 1 0 !important;
   height: 100% !important;
   max-height: 100% !important;
   box-sizing: border-box !important;
@@ -5559,7 +5561,15 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   margin: 0 !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 6px !important;
+  gap: 10px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
 }
 
 /* TOP CLEAN HEADER */
@@ -5573,8 +5583,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .config-header-title {
-  margin: 0 0 1px;
-  font-size: 13px;
+  margin: 0 0 2px;
+  font-size: 15px;
   font-weight: 700;
   color: #1e293b;
   letter-spacing: -0.2px;
@@ -5582,7 +5592,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 .config-header-desc {
   margin: 0;
-  font-size: 10px;
+  font-size: 11px;
   color: #64748b;
   font-weight: 400;
 }
@@ -5593,9 +5603,9 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   gap: 6px;
   background: #ffffff;
   border: 1px solid var(--as-border);
-  padding: 3px 8px;
+  padding: 4px 10px;
   border-radius: 20px;
-  font-size: 10px;
+  font-size: 11px;
   color: #475569;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -5625,18 +5635,18 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .config-metrics-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  gap: 10px;
   flex-shrink: 0;
 }
 
 .config-metric-chip {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   background: #ffffff;
   border: 1px solid var(--as-border);
-  border-radius: 8px;
-  padding: 5px 8px;
+  border-radius: 10px;
+  padding: 8px 12px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
               box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
@@ -5650,8 +5660,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .metric-chip-icon {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
   border-radius: 7px;
   display: flex;
   align-items: center;
@@ -5669,21 +5679,21 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .metric-chip-icon.green { background: #f0fdf4; color: #16a34a; }
 .metric-chip-icon.orange { background: #fff7ed; color: #ea580c; }
 
-.metric-chip-icon svg { width: 12px; height: 12px; }
+.metric-chip-icon svg { width: 15px; height: 15px; }
 
 .metric-chip-content { display: flex; flex-direction: column; }
-.metric-chip-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
-.metric-chip-value { font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 0; }
+.metric-chip-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+.metric-chip-value { font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 1px; }
 
 /* 2-COLUMN DASHBOARD GRID */
 .config-dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  gap: 12px;
   align-items: stretch;
   width: 100%;
   box-sizing: border-box;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
 }
 
@@ -5706,13 +5716,17 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
               border-color 0.22s ease;
 }
 
+.config-dashboard-grid .config-dash-card {
+  height: 100%;
+}
+
 .config-dash-card:hover {
   border-color: #cbd5e1;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
 }
 
 .dash-card-header {
-  padding: 6px 10px;
+  padding: 10px 14px;
   background: #ffffff;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
@@ -5727,8 +5741,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .dash-icon-box {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -5743,26 +5757,26 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 .dash-icon-box.blue { background: #eff6ff; color: #2F8BCC; }
 .dash-icon-box.purple { background: #faf5ff; color: #a855f7; }
-.dash-icon-box svg { width: 12px; height: 12px; }
+.dash-icon-box svg { width: 14px; height: 14px; }
 
 .dash-card-title {
   margin: 0;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #1e293b;
 }
 
 .dash-card-subtitle {
   margin: 0;
-  font-size: 9px;
+  font-size: 10px;
   color: #64748b;
 }
 
 .dash-card-body {
-  padding: 6px 10px;
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 8px;
   flex: 1;
   min-height: 0;
   overflow: hidden;
@@ -5771,7 +5785,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .dash-spec-item {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 3px;
 }
 
 .dash-spec-label-row {
@@ -5781,7 +5795,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .dash-spec-label {
-  font-size: 8.5px;
+  font-size: 9.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5792,11 +5806,11 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 5px;
+  padding: 2px 7px;
   border-radius: 4px;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   color: #475569;
   cursor: pointer;
@@ -5816,8 +5830,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .dash-code-pill {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  padding: 2px 8px;
+  border-radius: 6px;
+  padding: 4px 10px;
   display: flex;
   align-items: center;
 }
@@ -5830,21 +5844,21 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   background: transparent !important;
   border: none !important;
   outline: none !important;
-  font-size: 11px !important;
-  font-weight: 600 !important;
-  color: #0f172a !important;
+  font-size: 12px !important;
   cursor: default !important;
   user-select: all !important;
 }
 
 .dash-prop-input.mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
-  font-size: 10.5px !important;
+  font-size: 11.5px !important;
   color: #1e293b !important;
 }
 
 .config-dashboard-grid .dash-spec-hint {
-  display: none;
+  display: block;
+  font-size: 9.5px;
+  color: #94a3b8;
 }
 
 #configProjectHint.dash-spec-hint {
@@ -5874,7 +5888,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 5px 10px;
+  padding: 8px 14px;
   border-bottom: 1px solid #f1f5f9;
   background: #fafbfc;
   gap: 12px;
@@ -5892,8 +5906,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 4px 11px;
-  font-size: 10.5px;
+  padding: 5px 13px;
+  font-size: 11.5px;
   font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
@@ -5938,20 +5952,22 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .config-launch-card-body {
-  padding: 6px 10px 7px;
+  padding: 10px 14px 10px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  overflow: hidden;
+  flex: 0 0 auto;
 }
 
 .config-project-card-box {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 5px 8px;
+  padding: 8px 12px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   transition: all 0.15s ease;
 }
 
@@ -6011,7 +6027,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .config-project-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
@@ -13771,7 +13787,7 @@ html.os-win #tab-configuration .vscode-window {
   border: 1px solid #2d2d2d !important;
 }
 html.os-win #tab-configuration .vscode-header {
-  height: 28px !important;
+  height: 34px !important;
   padding: 0 10px !important;
 }
 html.os-win #tab-configuration .vscode-mac-dots {
@@ -13779,47 +13795,50 @@ html.os-win #tab-configuration .vscode-mac-dots {
 }
 html.os-win #tab-configuration .vscode-tab {
   border-radius: 4px 4px 0 0 !important;
-  height: 24px !important;
-  padding: 2px 10px !important;
+  height: 26px !important;
+  padding: 4px 12px !important;
   border-top: 1px solid #007acc !important;
   border-right: none !important;
   font-family: inherit !important;
-  font-size: 10.5px !important;
 }
 
-/* Config JSON editor: no inner scroll — fit in the remaining card */
+/* JSON editor fills the right card; only the code pane may scroll */
+#tab-configuration .vscode-window {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+}
 #tab-configuration .vscode-header {
-  height: 28px !important;
+  height: 34px !important;
 }
 #tab-configuration .vscode-body {
-  height: calc(100% - 28px) !important;
+  height: calc(100% - 34px) !important;
   overflow: hidden !important;
-  font-size: 10px !important;
+  font-size: 11px !important;
 }
 #tab-configuration .vscode-gutter {
-  font-size: 9.5px !important;
-  line-height: 15px !important;
-  width: 32px !important;
-  min-width: 32px !important;
-  max-width: 32px !important;
-  padding: 4px 2px !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+  padding: 8px 6px !important;
 }
 #tab-configuration .gutter-line {
-  height: 15px !important;
-  line-height: 15px !important;
+  height: 18px !important;
+  line-height: 18px !important;
 }
 #tab-configuration .vscode-code-area {
-  left: 32px !important;
-  width: calc(100% - 32px) !important;
-  max-width: calc(100% - 32px) !important;
+  left: 44px !important;
+  width: calc(100% - 44px) !important;
+  max-width: calc(100% - 44px) !important;
   overflow: hidden !important;
 }
 #tab-configuration pre#configJsonPreview.vscode-code,
 #tab-configuration .vscode-json-textarea {
-  font-size: 10px !important;
-  line-height: 15px !important;
-  padding: 4px 6px !important;
-  overflow: hidden !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+  padding: 8px 10px !important;
 }
 
 /* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */
