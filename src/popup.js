@@ -2698,10 +2698,10 @@
                 if (menu) menu.remove();
             }
         }
-        const platformTabs = document.getElementById('repoPlatformFilterTabs');
-        if (platformTabs) platformTabs.style.display = 'none';
         const iosRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="iOS"]');
         if (iosRepoBtn) iosRepoBtn.style.display = 'none';
+        const androidRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="Android"]');
+        if (androidRepoBtn) androidRepoBtn.style.display = 'none';
     }
     lockPlatformToAndroidOnWindows();
 
@@ -21111,10 +21111,10 @@ if (platformVersionField) {
         if (tabPlatformAndroid) tabPlatformAndroid.textContent = androidCount;
 
         if (isWinOS || (typeof process !== 'undefined' && process.platform === 'win32')) {
-            const platformTabs = document.getElementById('repoPlatformFilterTabs');
-            if (platformTabs) platformTabs.style.display = 'none';
             const iosRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="iOS"]');
             if (iosRepoBtn) iosRepoBtn.style.display = 'none';
+            const androidRepoBtn = document.querySelector('#repoProjectsView [data-platform-filter="Android"]');
+            if (androidRepoBtn) androidRepoBtn.style.display = 'none';
         }
 
         const activeProj = currentSelectedProjectKey ? getProjectByKey(store, currentSelectedProjectKey) : null;

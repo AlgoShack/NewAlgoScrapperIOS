@@ -12933,19 +12933,21 @@ html.platform-win .repo-empty-state,
   max-width: 380px !important;
 }
 
-/* Windows: Hide platform filter tabs completely (Windows is Android-only) */
-html.platform-win #repoPlatformFilterTabs,
-.platform-win #repoPlatformFilterTabs,
-html.platform-win [data-platform-filter="iOS"],
-.platform-win [data-platform-filter="iOS"],
-html.platform-win .repo-filter-btn[data-platform-filter="iOS"],
-.platform-win .repo-filter-btn[data-platform-filter="iOS"] {
+/* Windows: keep the All Projects chip (same blue box as All Platforms). Hide iOS/Android tabs. */
+html.platform-win .repo-all-label-mac,
+.platform-win .repo-all-label-mac {
   display: none !important;
 }
 
-html.platform-win .repo-toolbar-top-row,
-.platform-win .repo-toolbar-top-row {
-  justify-content: flex-end !important;
+html:not(.platform-win) .repo-all-label-win {
+  display: none !important;
+}
+
+html.platform-win #repoPlatformFilterTabs [data-platform-filter="iOS"],
+.platform-win #repoPlatformFilterTabs [data-platform-filter="iOS"],
+html.platform-win #repoPlatformFilterTabs [data-platform-filter="Android"],
+.platform-win #repoPlatformFilterTabs [data-platform-filter="Android"] {
+  display: none !important;
 }
 
 html.platform-win .repo-toolbar-right,
