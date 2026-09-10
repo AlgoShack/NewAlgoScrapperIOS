@@ -4136,6 +4136,94 @@
         }
     };
 
+    function projectLinkedDeviceLabel(project) {
+        if (!project) return '';
+        return String(
+            (project.device && (project.device.label || project.device.name))
+            || project.deviceName
+            || (project.device && project.device.id)
+            || project.deviceId
+            || ''
+        ).trim();
+    }
+
+    function projectIsDeviceBound(project) {
+        if (!project) return false;
+        return !!(
+            project.deviceId
+            || project.deviceName
+            || (project.device && (project.device.id || project.device.name || project.device.label))
+        );
+    }
+
+    function connectedDeviceMatchesProject(device, project) {
+        if (!device || !project) return false;
+        const tokens = [];
+        [
+            project.deviceId,
+            project.deviceName,
+            project.device && project.device.id,
+            project.device && project.device.name,
+            project.device && project.device.label
+        ].forEach((v) => {
+            const s = String(v || '').trim().toLowerCase();
+            if (s) tokens.push(s);
+        });
+        if (!tokens.length) return false;
+        const bits = [
+            device.id,
+            device.name,
+            device.label,
+            (typeof deviceDisplayLabel === 'function') ? deviceDisplayLabel(device) : ''
+        ].map((v) => String(v || '').trim().toLowerCase()).filter(Boolean);
+        return bits.some((b) => tokens.indexOf(b) !== -1);
+    }
+
+    function findConnectedDeviceForProject(project, platform) {
+        const all = Array.isArray(connectedDevices) ? connectedDevices : [];
+        if (!all.length || !project) return null;
+        const plat = platform || project.platform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android');
+        let list = (typeof devicesForPlatform === 'function') ? devicesForPlatform(plat, all) : all;
+        if (!list || !list.length) list = all;
+        return list.find((d) => connectedDeviceMatchesProject(d, project)) || null;
+    }
+
+    async function selectHomeDeviceForLaunch(device) {
+        if (!device) return;
+        const deviceSelect = document.getElementById('devicename');
+        const udidEl = document.getElementById('udid');
+        const current = String((udidEl && udidEl.value) || deviceId || '').trim();
+        if (current && (current === device.id || current === device.name)) return;
+
+        window._applyingDevicesFromMonitor = true;
+        try {
+            deviceId = device.id;
+            deviceName = device.name;
+            if (udidEl) udidEl.value = device.id;
+            if (deviceSelect) {
+                const matchOpt = Array.from(deviceSelect.options || []).find((o) =>
+                    o.value === device.id
+                    || o.value === device.name
+                    || (o.dataset && (o.dataset.deviceId === device.id || o.dataset.deviceName === device.name))
+                );
+                if (matchOpt) deviceSelect.value = matchOpt.value;
+                if (typeof deviceSelect._rebuildCustomSelect === 'function') {
+                    deviceSelect._rebuildCustomSelect();
+                }
+            }
+            try {
+                localStorage.setItem('algo_active_selected_device_id', device.id);
+                localStorage.setItem('algo_active_selected_device_name', device.name);
+            } catch (_) {}
+            if (typeof requestInstalledAppsForDevice === 'function') {
+                requestInstalledAppsForDevice(device);
+                await new Promise((resolve) => setTimeout(resolve, 450));
+            }
+        } finally {
+            window._applyingDevicesFromMonitor = false;
+        }
+    }
+
     window.launchConfiguredProject = async function() {
         if (typeof checkUnsavedConfigJsonGuard === 'function' && !checkUnsavedConfigJsonGuard('launch_project')) {
             return;
@@ -4148,19 +4236,24 @@
             return;
         }
 
+        if (typeof updateConfigDashboard === 'function') {
+            try { updateConfigDashboard(); } catch (_) {}
+        }
+
         const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
         const currentPlatform = (typeof getSelectedPlatform === 'function') ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
-        const activeDevice = (typeof resolveActiveDeviceInfo === 'function') ? resolveActiveDeviceInfo(currentPlatform) : null;
-        const configuredInfo = (typeof getGlobalLastConfiguredProject === 'function')
-            ? getGlobalLastConfiguredProject(currentPlatform, activeDevice)
-            : null;
-        // Do not fall back to another device's project when a device is connected
-        const key = (configuredInfo && configuredInfo.key)
-            || (activeDevice ? null : (window.activeConfiguredProjectKey || null));
-        let project = (configuredInfo && configuredInfo.project) || (key ? store[key] : null);
+        let key = window.activeConfiguredProjectKey || null;
+        try {
+            const plat = String(currentPlatform).toLowerCase().includes('ios') ? 'ios' : 'android';
+            key = localStorage.getItem('algo_last_configured_project_platform_key_' + plat) || key;
+        } catch (_) {}
+        let project = (key && store[key]) ? store[key] : null;
         if (!project && key && typeof findProjectKeyInStore === 'function') {
             const found = findProjectKeyInStore(store, key);
-            if (found && found.project) project = found.project;
+            if (found && found.project) {
+                key = found.key || key;
+                project = found.project;
+            }
         }
 
         const projPlatform = project ? (String(project.platform || '').toLowerCase().includes('ios') ? 'IOS' : 'Android') : currentPlatform;
@@ -4193,6 +4286,28 @@
                 );
             }
             return;
+        }
+
+        const linkedMatch = findConnectedDeviceForProject(project, projPlatform);
+        const currentDeviceLabel = (() => {
+            const sel = document.getElementById('devicename');
+            const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+            const label = (opt && ((opt.dataset && opt.dataset.deviceName) || opt.text)) || deviceName || '';
+            return String(label || '').replace(/\s*\((emulator|simulator|device)\)\s*$/i, '').trim();
+        })();
+
+        if (projectIsDeviceBound(project) && !linkedMatch) {
+            if (typeof showAppPopup === 'function') {
+                showAppPopup('project_linked_other_device', {
+                    linkedDevice: projectLinkedDeviceLabel(project) || 'another device',
+                    currentDevice: currentDeviceLabel
+                });
+            }
+            return;
+        }
+
+        if (linkedMatch) {
+            await selectHomeDeviceForLaunch(linkedMatch);
         }
 
         // 2. Synchronize Platform & App in Home page if a project is configured
@@ -4250,33 +4365,6 @@
                 showAppPopup('device_required');
             }
             return;
-        }
-
-        // 3b. Bound Device validation (Ensure connected device matches the configured project)
-        if (project && (project.deviceId || project.deviceName || (project.device && (project.device.id || project.device.name || project.device.label)))) {
-            const pDevId = String(project.deviceId || project.device?.id || '').trim().toLowerCase();
-            const pDevName = String(project.deviceName || project.device?.name || project.device?.label || '').trim().toLowerCase();
-            const curDevId = udidName.toLowerCase();
-            const curDevName = devName.toLowerCase();
-
-            const isMatch = (!pDevId && !pDevName)
-                || (pDevId && (curDevId === pDevId || curDevName === pDevId))
-                || (pDevName && (curDevName === pDevName || curDevId === pDevName));
-
-            if (!isMatch) {
-                const targetDevLabel = project.deviceName || project.device?.label || project.device?.name || project.deviceId || project.device?.id || 'configured device';
-                if (typeof showStructuredAlert === 'function') {
-                    showStructuredAlert(
-                        "Different Device Connected",
-                        {
-                            lead: `This project is configured for "${targetDevLabel}".`,
-                            hint: `Please connect "${targetDevLabel}" (currently connected: "${devName}") to launch this project.`
-                        },
-                        "warning"
-                    );
-                }
-                return;
-            }
         }
 
         // 4. Application package / bundle validation
@@ -16266,6 +16354,22 @@ function getPopupCopy(kind, extras) {
                     }),
                 type: 'warning'
             };
+        case 'project_linked_other_device': {
+            const linked = String(x.linkedDevice || 'another device');
+            const current = String(x.currentDevice || '').trim();
+            return {
+                title: 'Linked with other device',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: `This project is linked with "${linked}".`,
+                        hint: current
+                            ? `Connect "${linked}" to launch this project. Currently connected: "${current}".`
+                            : `Connect "${linked}" to launch this project.`
+                    }),
+                type: 'error'
+            };
+        }
         case 'auth_required':
             return {
                 title: 'Authentication Required',
