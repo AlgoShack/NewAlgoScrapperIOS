@@ -9960,8 +9960,80 @@ html.platform-win span.os-win-only {
   display: inline !important;
 }
 html.platform-win span.faq-os-mac-only,
-html.platform-win span.os-mac-only {
+html.platform-win span.os-mac-only,
+html.os-win span.faq-os-mac-only,
+html.os-win span.os-mac-only {
   display: none !important;
+}
+
+html.os-win .faq-os-win-only,
+html.os-win .os-win-only {
+  display: flex !important;
+}
+
+html.os-win .faq-os-mac-only,
+html.os-win .os-mac-only {
+  display: none !important;
+}
+
+html.os-win span.faq-os-win-only,
+html.os-win span.os-win-only {
+  display: inline !important;
+}
+
+/* Windows: same Home/Config/Repo layout as Mac. Only hide iOS platform chrome. */
+html.os-win .home-field-platform .custom-select-caret,
+html.os-win .home-field:has(#platformname) .custom-select-caret {
+  display: none !important;
+}
+
+html.os-win .home-field-platform .custom-select-trigger,
+html.os-win .home-field:has(#platformname) .custom-select-trigger {
+  cursor: default !important;
+  pointer-events: none !important;
+  padding-right: 12px !important;
+}
+
+html.os-win .home-field-platform .custom-select-menu,
+html.os-win .home-field:has(#platformname) .custom-select-menu {
+  display: none !important;
+}
+
+html.os-win .vscode-window {
+  border-radius: 4px !important;
+  border: 1px solid #333333 !important;
+}
+
+html.os-win .vscode-header {
+  height: 30px !important;
+  padding: 0 10px 0 0 !important;
+  background: #252526 !important;
+}
+
+html.os-win .vscode-mac-dots {
+  display: none !important;
+}
+
+html.os-win .vscode-tab {
+  border-radius: 0 !important;
+  height: 30px !important;
+  padding: 0 14px !important;
+  background: #1e1e1e !important;
+  border-top: 2px solid #007acc !important;
+  border-right: 1px solid #2d2d2d !important;
+  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+html.os-win .th-mac,
+html.os-win .td-mac,
+html.os-win .sc-subtitle-mac {
+  display: none !important;
+}
+
+html.os-win .th-win,
+html.os-win .td-win,
+html.os-win .sc-subtitle-win {
+  display: flex !important;
 }
 
 .faq-os-pill,
@@ -12933,15 +13005,19 @@ html.platform-win .repo-empty-state,
 }
 
 /* Windows: keep the All Projects chip (same blue box as All Platforms). Hide iOS/Android tabs. */
+html.os-win .repo-all-label-mac,
 html.platform-win .repo-all-label-mac,
+.os-win .repo-all-label-mac,
 .platform-win .repo-all-label-mac {
   display: none !important;
 }
 
-html:not(.platform-win) .repo-all-label-win {
+html:not(.os-win):not(.platform-win) .repo-all-label-win {
   display: none !important;
 }
 
+html.os-win #repoPlatformFilterTabs [data-platform-filter="iOS"],
+html.os-win #repoPlatformFilterTabs [data-platform-filter="Android"],
 html.platform-win #repoPlatformFilterTabs [data-platform-filter="iOS"],
 .platform-win #repoPlatformFilterTabs [data-platform-filter="iOS"],
 html.platform-win #repoPlatformFilterTabs [data-platform-filter="Android"],
@@ -13668,5 +13744,27 @@ html.platform-win #tab-about .sc-trow:hover {
 html.platform-win #tab-about .app-kbd:hover {
   transform: translateY(-1px) !important;
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1) !important;
+}
+
+/* Shortcut badge on hover — does not capture the pointer so it vanishes on mouseleave */
+.as-keytip {
+  position: fixed;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #38bdf8 0%, #2F8BCC 100%);
+  color: #ffffff;
+  border: 1.5px solid #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.28);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 19px;
+  text-align: center;
+  pointer-events: none;
+  box-sizing: border-box;
+  user-select: none;
+  z-index: 2147483001;
 }
 

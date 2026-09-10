@@ -39,11 +39,11 @@
             var isWin = (typeof process !== 'undefined' && process.platform === 'win32') ||
                 (typeof navigator !== 'undefined' && ((navigator.platform && navigator.platform.toLowerCase().includes('win')) || (navigator.userAgent && navigator.userAgent.toLowerCase().includes('windows'))));
             if (isWin) {
-                document.documentElement.classList.add('platform-win');
-                document.documentElement.classList.remove('platform-mac');
+                document.documentElement.classList.add('os-win');
+                document.documentElement.classList.remove('platform-win', 'platform-mac');
             } else {
                 document.documentElement.classList.add('platform-mac');
-                document.documentElement.classList.remove('platform-win');
+                document.documentElement.classList.remove('os-win', 'platform-win');
             }
         })();
     </script>
