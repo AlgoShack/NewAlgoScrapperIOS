@@ -190,6 +190,21 @@
         }
     }
 
+    if (isWinOS) {
+        const nativeTitleHosts = '.rec-error-icon, .error-icon-wrapper, .error-info-icon, .info-icon-wrapper, .custom-tooltip-wrapper';
+        const stripNativeTitle = (el) => {
+            if (!el || !el.removeAttribute) return;
+            el.removeAttribute('title');
+            if (el.querySelectorAll) {
+                el.querySelectorAll('[title]').forEach((n) => n.removeAttribute('title'));
+            }
+        };
+        document.addEventListener('mouseover', (e) => {
+            const host = e.target && e.target.closest ? e.target.closest(nativeTitleHosts) : null;
+            if (host) stripNativeTitle(host);
+        }, true);
+    }
+
     const secretKey = "algoshackv5-123";
 
     function decryptData(cipherText) {
@@ -2426,13 +2441,8 @@
                 const text = (selectedOpt.textContent || selectedOpt.value || '').trim();
                 labelEl.textContent = text || 'Select...';
                 if (inTable) {
-                    if (selectEl.classList.contains('control-id-dropdown')) {
-                        labelEl.removeAttribute('title');
-                        trigger.removeAttribute('title');
-                    } else {
-                        labelEl.title = text || '';
-                        trigger.title = text || '';
-                    }
+                    labelEl.removeAttribute('title');
+                    trigger.removeAttribute('title');
                 }
                 const softPlaceholder = !text
                     || /^loading apps/i.test(text)
@@ -3692,7 +3702,6 @@
                 const option = document.createElement("option");
                 option.text = app.name;
                 option.value = app.bundleId;
-                option.title = app.bundleId;
                 dropdown.appendChild(option);
             });
 
@@ -15815,14 +15824,23 @@ function initScenarioOutlineLogic() {
         inputEl.classList.add("input-error-border");
         const icon = document.getElementById(iconId);
         const text = document.getElementById(textId);
-        if (icon) icon.style.display = "flex";
+        if (icon) {
+            icon.style.display = "flex";
+            icon.removeAttribute("title");
+            if (message) icon.setAttribute("aria-label", message);
+            else icon.removeAttribute("aria-label");
+        }
         if (text) text.innerText = message;
     }
 
     function clearEditError(inputEl, iconId) {
         inputEl.classList.remove("input-error-border");
         const icon = document.getElementById(iconId);
-        if (icon) icon.style.display = "none";
+        if (icon) {
+            icon.style.display = "none";
+            icon.removeAttribute("title");
+            icon.removeAttribute("aria-label");
+        }
     }
 
     if (soEditIcon) {
@@ -16628,7 +16646,9 @@ onDomReady(() => {
         if (icon) {
             icon.style.display = "flex";
             icon.setAttribute("aria-hidden", "false");
-            icon.title = message || "";
+            icon.removeAttribute("title");
+            if (message) icon.setAttribute("aria-label", message);
+            else icon.removeAttribute("aria-label");
         }
         if (text) text.innerText = message;
     }
@@ -16640,6 +16660,7 @@ onDomReady(() => {
             icon.style.display = "none";
             icon.setAttribute("aria-hidden", "true");
             icon.removeAttribute("title");
+            icon.removeAttribute("aria-label");
         }
     }
 
@@ -17060,7 +17081,9 @@ onDomReady(() => {
             if (icon) {
                 icon.style.display = "flex";
                 icon.setAttribute("aria-hidden", "false");
-                icon.title = message || "";
+                icon.removeAttribute("title");
+                if (message) icon.setAttribute("aria-label", message);
+                else icon.removeAttribute("aria-label");
             }
             if (text) text.innerText = message;
         }
@@ -17073,6 +17096,7 @@ onDomReady(() => {
                 icon.style.display = "none";
                 icon.setAttribute("aria-hidden", "true");
                 icon.removeAttribute("title");
+                icon.removeAttribute("aria-label");
             }
         }
 

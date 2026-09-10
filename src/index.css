@@ -3643,6 +3643,12 @@ th .resizer:hover {
     position: relative;
     display: inline-flex;
     align-items: center;
+    cursor: pointer;
+}
+
+.error-info-icon {
+    cursor: pointer;
+    display: block;
 }
 
 .error-info-tooltip {
@@ -3694,7 +3700,7 @@ th .resizer:hover {
 .error-icon-wrapper:hover .error-info-tooltip {
     opacity: 1;
     visibility: visible;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 /* Scenario Action Icons (Confirm/Cancel) */
@@ -3721,6 +3727,12 @@ th .resizer:hover {
     position: relative;
     display: inline-flex;
     align-items: center;
+    cursor: pointer;
+}
+
+.error-info-icon {
+    cursor: pointer;
+    display: block;
 }
 
 .error-info-tooltip {
@@ -3769,7 +3781,7 @@ th .resizer:hover {
 .error-icon-wrapper:hover .error-info-tooltip {
     opacity: 1;
     visibility: visible;
-    pointer-events: auto;
+    pointer-events: none;
 }
 
 
@@ -3863,7 +3875,7 @@ th .resizer:hover {
     display: none;
     align-items: center;
     justify-content: center;
-    cursor: help;
+    cursor: pointer;
     z-index: 12;
     background: #ffffff;
     border-radius: 50%;
@@ -13979,5 +13991,21 @@ html.os-win #tab-configuration .config-action-btn {
 
 html.os-win #tab-configuration .config-project-hint {
   font-size: 9px !important;
+}
+
+/* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */
+html.os-win .error-icon-wrapper,
+html.os-win .error-info-icon,
+html.os-win .rec-error-icon,
+html.os-win .info-icon-wrapper,
+html.os-win .info-icon {
+  cursor: pointer !important;
+}
+
+html.os-win .error-icon-wrapper:hover .error-info-tooltip,
+html.os-win .rec-error-icon:hover .rec-error-tooltip,
+html.os-win .info-icon-wrapper:hover .page-info-tooltip,
+html.os-win .custom-tooltip-wrapper:hover .custom-tooltip {
+  pointer-events: none !important;
 }
 
