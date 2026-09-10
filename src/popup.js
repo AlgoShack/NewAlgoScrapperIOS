@@ -430,6 +430,44 @@
     window.screenSignatureSimilarity = screenSignatureSimilarity;
 
     /** Feature names bind only to the exact device screen they were created on. */
+    const LIVE_SCREEN_MATCH_THRESHOLD = 0.92;
+
+    function rectsRoughlySame(a, b) {
+        if (!a || !b) return false;
+        const dx = Math.abs((Number(a.x) || 0) - (Number(b.x) || 0));
+        const dy = Math.abs((Number(a.y) || 0) - (Number(b.y) || 0));
+        const dw = Math.abs((Number(a.width) || 0) - (Number(b.width) || 0));
+        const dh = Math.abs((Number(a.height) || 0) - (Number(b.height) || 0));
+        return dx <= 28 && dy <= 28 && dw <= 40 && dh <= 40;
+    }
+
+    function locatorRectInLiveDoc(xpath, doc) {
+        const xp = String(xpath || '').trim();
+        const xml = doc || window.xmlDoc;
+        if (!xp || !xml) return null;
+        if (xp.startsWith('SWIPE(') || xp.startsWith('COORDINATE(') || xp === 'FULL_PAGE') return null;
+        if (typeof xml.evaluate !== 'function') return null;
+        try {
+            const res = xml.evaluate(xp, xml, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            const node = res && res.singleNodeValue;
+            if (!node) return null;
+            return (typeof parseNodeRect === 'function') ? parseNodeRect(node) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function isSameLiveScreenStamp(savedSig, liveSig) {
+        const saved = String(savedSig || '');
+        const live = String(liveSig || '');
+        if (!live) return false;
+        if (saved && saved === live) return true;
+        if (saved && typeof screenSignatureSimilarity === 'function') {
+            return screenSignatureSimilarity(saved, live) >= LIVE_SCREEN_MATCH_THRESHOLD;
+        }
+        return false;
+    }
+
     function isFeatureOnCurrentDeviceScreen(area, doc) {
         if (!area) return false;
         const currentDoc = doc || window.xmlDoc;
@@ -438,8 +476,20 @@
         const currentSig = (typeof computeScreenSignature === 'function')
             ? computeScreenSignature(currentDoc)
             : '';
-        if (!areaSig || !currentSig) return false;
-        return areaSig === currentSig;
+        if (!currentSig) return false;
+        if (isSameLiveScreenStamp(areaSig, currentSig)) return true;
+        if (areaSig && typeof screenSignatureSimilarity === 'function'
+            && screenSignatureSimilarity(areaSig, currentSig) < 0.75) {
+            return false;
+        }
+        const xpaths = Array.isArray(area.xpaths) ? area.xpaths : [];
+        for (let i = 0; i < xpaths.length; i++) {
+            const liveRect = locatorRectInLiveDoc(xpaths[i], currentDoc);
+            if (!liveRect) continue;
+            if (!area.rect || !area.rect.width) return !areaSig;
+            if (rectsRoughlySame(area.rect, liveRect)) return true;
+        }
+        return false;
     }
     window.isFeatureOnCurrentDeviceScreen = isFeatureOnCurrentDeviceScreen;
 
@@ -459,11 +509,23 @@
     }
 
     function rowIsOnLiveScreen(row) {
-        if (!row || !row.dataset) return false;
+        if (!row) return false;
         const live = getLiveScreenSignature();
-        const rowSig = String(row.dataset.screenSignature || '');
-        if (!live || !rowSig) return false;
-        return rowSig === live;
+        if (!live) return false;
+        const rowSig = String((row.dataset && row.dataset.screenSignature) || '');
+        if (isSameLiveScreenStamp(rowSig, live)) return true;
+        const xpaths = (typeof rowXPaths === 'function') ? rowXPaths(row) : [];
+        const xpath = (xpaths && xpaths[0]) || '';
+        const liveRect = locatorRectInLiveDoc(xpath, window.xmlDoc);
+        if (!liveRect) return false;
+        let stored = null;
+        try {
+            stored = row.dataset && row.dataset.rect ? JSON.parse(row.dataset.rect) : null;
+        } catch (_) {
+            stored = null;
+        }
+        if (stored && stored.width > 0) return rectsRoughlySame(stored, liveRect);
+        return !rowSig;
     }
     window.rowIsOnLiveScreen = rowIsOnLiveScreen;
 
@@ -478,11 +540,31 @@
     }
     window.bumpLiveFeatureScreenEpoch = bumpLiveFeatureScreenEpoch;
 
-    /** Keep live feature screen stamps aligned after refresh so validation keeps working. */
+    /**
+     * After Continue with old / first screenshot fetch, saved rows still have the
+     * previous session stamp (clock/highlight drift). Rebind only controls that
+     * are still on this live screen. Do not stamp a different screen's Search/Add.
+     */
     function realignLiveFeatureScreensToCurrentDoc() {
-        // Do not rewrite created features onto a new screen. Repeated chrome/icons
-        // on another page must stay as a different screen.
-        return;
+        const doc = window.xmlDoc;
+        if (!doc) return;
+        const liveSig = (typeof computeScreenSignature === 'function')
+            ? (computeScreenSignature(doc) || '')
+            : '';
+        if (!liveSig) return;
+
+        document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row)').forEach((row) => {
+            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(row)) return;
+            if (row.dataset) row.dataset.screenSignature = liveSig;
+        });
+
+        (registeredFeatureAreas || []).forEach((area) => {
+            if (!area || !area.name) return;
+            if (typeof isFeatureOnCurrentDeviceScreen === 'function' && !isFeatureOnCurrentDeviceScreen(area, doc)) return;
+            area.screenSignature = liveSig;
+        });
+        window.registeredFeatureAreas = registeredFeatureAreas;
+        try { lastXPath = ""; } catch (_) {}
     }
     window.realignLiveFeatureScreensToCurrentDoc = realignLiveFeatureScreensToCurrentDoc;
 
@@ -4518,6 +4600,9 @@
             try {
                 await launchApp(launchParams);
                 restoreProjectDataToHomePage(snapshot);
+                if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') {
+                    realignLiveFeatureScreensToCurrentDoc();
+                }
                 const devInfo = (typeof resolveActiveDeviceInfo === 'function')
                     ? resolveActiveDeviceInfo(snapshot.platform)
                     : null;
@@ -5678,6 +5763,9 @@
             const parser = new DOMParser();
             window.xmlDoc = parser.parseFromString(pageSource, "text/xml");
             if (typeof noteDeviceScreenChanged === 'function') noteDeviceScreenChanged();
+            if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') {
+                realignLiveFeatureScreensToCurrentDoc();
+            }
 
         } catch (error) {
             console.error("Screenshot capture failed:", error);
