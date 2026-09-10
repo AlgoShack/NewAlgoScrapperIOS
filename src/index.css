@@ -5527,19 +5527,18 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   background: var(--as-bg) !important;
   width: 100% !important;
   height: 100% !important;
-  min-height: 0 !important;
 }
 
 #tab-configuration.is-active {
-  display: flex !important;
-  flex-direction: column !important;
-  padding: 10px 14px 10px !important;
-  overflow: hidden !important;
-  flex: 1 1 0 !important;
+  display: block !important;
+  padding: clamp(8px, 1.2vw, 14px) clamp(10px, 1.5vw, 18px) 24px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
   height: 100% !important;
   max-height: 100% !important;
   box-sizing: border-box !important;
   background: var(--as-bg) !important;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* CONFIG TAB STAGGERED ENTRANCE */
@@ -5561,15 +5560,11 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   margin: 0 !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 10px !important;
+  gap: 12px !important;
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
-  flex: 1 1 0 !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  overflow: hidden !important;
 }
 
 /* TOP CLEAN HEADER */
@@ -5579,7 +5574,6 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   justify-content: space-between;
   padding: 2px 4px 4px;
   margin: 0;
-  flex-shrink: 0;
 }
 
 .config-header-title {
@@ -5634,9 +5628,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 /* 4 METRIC CHIPS */
 .config-metrics-row {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  flex-shrink: 0;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: clamp(8px, 1vw, 12px);
 }
 
 .config-metric-chip {
@@ -5688,13 +5681,11 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 /* 2-COLUMN DASHBOARD GRID */
 .config-dashboard-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: clamp(10px, 1.2vw, 16px);
   align-items: stretch;
   width: 100%;
   box-sizing: border-box;
-  flex: 1 1 0;
-  min-height: 0;
 }
 
 /* DASH CARD */
@@ -5707,22 +5698,19 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
-  min-height: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  height: auto;
-  transition: box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
-              border-color 0.22s ease;
-}
-
-.config-dashboard-grid .config-dash-card {
   height: 100%;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.22s ease;
 }
 
 .config-dash-card:hover {
   border-color: #cbd5e1;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
+  transform: translateY(-2px);
 }
 
 .dash-card-header {
@@ -5776,10 +5764,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   flex: 1;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .dash-spec-item {
@@ -5831,9 +5817,24 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 6px;
-  padding: 4px 10px;
+  padding: 4px 6px 4px 10px;
   display: flex;
   align-items: center;
+}
+
+.dash-code-pill .dash-prop-input {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+
+.dash-code-pill .dash-copy-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-left: 6px;
+  background: transparent;
+  border: none;
 }
 
 .dash-prop-input {
@@ -5845,6 +5846,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   border: none !important;
   outline: none !important;
   font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #0f172a !important;
   cursor: default !important;
   user-select: all !important;
 }
@@ -5855,23 +5858,15 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   color: #1e293b !important;
 }
 
-.config-dashboard-grid .dash-spec-hint {
-  display: block;
+.dash-spec-hint {
   font-size: 9.5px;
-  color: #94a3b8;
-}
-
-#configProjectHint.dash-spec-hint {
-  display: block;
-  font-size: 9px;
   color: #94a3b8;
 }
 
 /* CONFIG DASHBOARD LAST PROJECT & LAUNCH SECTION */
 .config-project-launch-section {
-  margin-top: 0;
+  margin-top: 10px;
   width: 100%;
-  flex-shrink: 0;
 }
 
 .config-project-launch-card {
@@ -5956,8 +5951,6 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  overflow: hidden;
-  flex: 0 0 auto;
 }
 
 .config-project-card-box {
@@ -13800,45 +13793,6 @@ html.os-win #tab-configuration .vscode-tab {
   border-top: 1px solid #007acc !important;
   border-right: none !important;
   font-family: inherit !important;
-}
-
-/* JSON editor fills the right card; only the code pane may scroll */
-#tab-configuration .vscode-window {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  height: 100% !important;
-}
-#tab-configuration .vscode-header {
-  height: 34px !important;
-}
-#tab-configuration .vscode-body {
-  height: calc(100% - 34px) !important;
-  overflow: hidden !important;
-  font-size: 11px !important;
-}
-#tab-configuration .vscode-gutter {
-  font-size: 11px !important;
-  line-height: 18px !important;
-  width: 44px !important;
-  min-width: 44px !important;
-  max-width: 44px !important;
-  padding: 8px 6px !important;
-}
-#tab-configuration .gutter-line {
-  height: 18px !important;
-  line-height: 18px !important;
-}
-#tab-configuration .vscode-code-area {
-  left: 44px !important;
-  width: calc(100% - 44px) !important;
-  max-width: calc(100% - 44px) !important;
-  overflow: hidden !important;
-}
-#tab-configuration pre#configJsonPreview.vscode-code,
-#tab-configuration .vscode-json-textarea {
-  font-size: 11px !important;
-  line-height: 18px !important;
-  padding: 8px 10px !important;
 }
 
 /* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */

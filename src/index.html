@@ -188,13 +188,12 @@
                     <div id="configDeviceNameItem" class="dash-spec-item">
                         <div class="dash-spec-label-row">
                             <span class="dash-spec-label">Target Device Name</span>
-                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('configDeviceName', this)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                <span>Copy</span>
-                            </button>
                         </div>
                         <div class="dash-code-pill">
                             <input type="text" id="configDeviceName" name="configDeviceName" class="dash-prop-input" readonly value="" placeholder="No device connected">
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('configDeviceName', this)" title="Copy" aria-label="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
                         </div>
                         <span class="dash-spec-hint">Connected target hardware or simulator model name</span>
                     </div>
@@ -203,13 +202,12 @@
                     <div class="dash-spec-item">
                         <div class="dash-spec-label-row">
                             <span class="dash-spec-label" id="udidLabel">Device Identifier (Serial / UDID)</span>
-                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('udid', this)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                <span>Copy</span>
-                            </button>
                         </div>
                         <div class="dash-code-pill">
                             <input type="text" id="udid" name="udid" class="dash-prop-input mono" readonly value="" placeholder="No device selected">
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('udid', this)" title="Copy" aria-label="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
                         </div>
                         <span class="dash-spec-hint">Connected physical hardware serial or simulator UUID</span>
                     </div>
@@ -218,13 +216,12 @@
                     <div id="appPkg" class="dash-spec-item" style="display: flex;">
                         <div class="dash-spec-label-row">
                             <span class="dash-spec-label">App Package</span>
-                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('apppackage', this)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                <span>Copy</span>
-                            </button>
                         </div>
                         <div class="dash-code-pill">
                             <input type="text" id="apppackage" name="apppackage" class="dash-prop-input mono" readonly value="" placeholder="No app selected">
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('apppackage', this)" title="Copy" aria-label="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
                         </div>
                         <span class="dash-spec-hint">Android package namespace identifier</span>
                     </div>
@@ -233,13 +230,12 @@
                     <div id="appActvty" class="dash-spec-item" style="display: flex;">
                         <div class="dash-spec-label-row">
                             <span class="dash-spec-label">App Activity</span>
-                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('appactivity', this)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                <span>Copy</span>
-                            </button>
                         </div>
                         <div class="dash-code-pill">
                             <input type="text" id="appactivity" name="appactivity" class="dash-prop-input mono" readonly value="" placeholder="No activity specified">
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('appactivity', this)" title="Copy" aria-label="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
                         </div>
                         <span class="dash-spec-hint">Main launch activity component invoked</span>
                     </div>
@@ -248,13 +244,12 @@
                     <div id="bndlID" class="dash-spec-item" style="display: none;">
                         <div class="dash-spec-label-row">
                             <span class="dash-spec-label">Bundle Identifier</span>
-                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('bundleID', this)">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
-                                <span>Copy</span>
-                            </button>
                         </div>
                         <div class="dash-code-pill">
                             <input type="text" id="bundleID" name="bundleID" class="dash-prop-input mono" readonly value="" placeholder="No app selected">
+                            <button type="button" class="dash-copy-btn" onclick="copyConfigProp('bundleID', this)" title="Copy" aria-label="Copy">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                            </button>
                         </div>
                         <span class="dash-spec-hint">Primary bundle identifier for iOS app bundle</span>
                     </div>
@@ -2670,7 +2665,7 @@
         if (val && navigator.clipboard) {
             navigator.clipboard.writeText(val.trim());
             var original = btn.innerHTML;
-            btn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg> <span>Copied</span>';
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="#16a34a" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>';
             setTimeout(function() { btn.innerHTML = original; }, 1500);
         }
     }
