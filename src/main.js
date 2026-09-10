@@ -1648,6 +1648,66 @@
         // startApp(message);
       }
      });
+
+    function pickJsonSavePath(event, payload) {
+        const suggested = String((payload && payload.defaultPath) || "download.json").replace(/[/\\?%*:|"<>]/g, "_");
+        const dialogTitle = String((payload && payload.title) || "Save JSON");
+        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        const downloadsDir = app.isReady() ? app.getPath("downloads") : os.homedir();
+        const filePath = dialog.showSaveDialogSync(win || undefined, {
+            title: dialogTitle,
+            defaultPath: path.join(downloadsDir, suggested),
+            filters: [{ name: "JSON", extensions: ["json"] }]
+        });
+        if (!filePath) return { canceled: true };
+        return { canceled: false, filePath };
+    }
+
+    function writeJsonToPickedPath(filePath, content) {
+        let dest = String(filePath || "");
+        if (!dest) throw new Error("No path selected");
+        if (!dest.toLowerCase().endsWith(".json")) dest += ".json";
+        const dir = path.dirname(dest);
+        if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(dest, content == null ? "" : String(content), "utf8");
+        if (!fs.existsSync(dest)) throw new Error("File was not stored at the selected path");
+        return dest;
+    }
+
+    function registerSaveJsonFileHandler() {
+        try { ipcMain.removeHandler("save-json-file"); } catch (_) {}
+        try { ipcMain.removeHandler("choose-json-save-path"); } catch (_) {}
+        ipcMain.removeAllListeners("choose-json-save-path-sync");
+
+        ipcMain.handle("choose-json-save-path", async (event, payload) => {
+            try {
+                return pickJsonSavePath(event, payload);
+            } catch (e) {
+                return { canceled: false, error: e && e.message ? e.message : String(e) };
+            }
+        });
+
+        ipcMain.on("choose-json-save-path-sync", (event, payload) => {
+            try {
+                event.returnValue = pickJsonSavePath(event, payload);
+            } catch (e) {
+                event.returnValue = { canceled: false, error: e && e.message ? e.message : String(e) };
+            }
+        });
+
+        ipcMain.handle("save-json-file", async (event, payload) => {
+            try {
+                const picked = pickJsonSavePath(event, payload);
+                if (picked.canceled) return { saved: false, canceled: true };
+                if (picked.error) return { saved: false, canceled: false, error: picked.error };
+                const dest = writeJsonToPickedPath(picked.filePath, payload && payload.content);
+                return { saved: true, filePath: dest };
+            } catch (e) {
+                return { saved: false, canceled: false, error: e && e.message ? e.message : String(e) };
+            }
+        });
+    }
+    registerSaveJsonFileHandler();
     // Handle creating/removing shortcuts on Windows when installing/uninstalling.
     if (require('electron-squirrel-startup')) {
       app.quit();
@@ -2368,6 +2428,8 @@
     app.on('ready', async () => {
         // Second instance already called app.quit() — do not boot Appium / windows
         if (!gotSingleInstanceLock) return;
+
+        registerSaveJsonFileHandler();
 
     // Set macOS Dock Icon for local dev (npm start)
         if (process.platform === 'darwin' && app.dock) {

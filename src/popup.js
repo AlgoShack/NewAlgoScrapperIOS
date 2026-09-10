@@ -100,6 +100,76 @@
         console.error('AlgoScraper require failed:', reqErr);
     }
 
+    window.saveExportedJsonFile = async function(filename, content, options) {
+        const safeName = String(filename || 'download.json').replace(/[/\\?%*:|"<>]/g, '_');
+        const body = typeof content === 'string' ? content : String(content == null ? '' : content);
+        const dialogTitle = (options && typeof options === 'object' && options.title)
+            ? String(options.title)
+            : 'Save JSON';
+
+        function writeToSelectedPath(filePath) {
+            if (!fs || typeof fs.writeFileSync !== 'function') {
+                throw new Error('File write is not available.');
+            }
+            let dest = String(filePath || '');
+            if (!dest) throw new Error('No path selected');
+            if (!dest.toLowerCase().endsWith('.json')) dest += '.json';
+            const dir = path.dirname(dest);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(dest, body, 'utf8');
+            if (!fs.existsSync(dest)) {
+                throw new Error('File was not stored at the selected path.');
+            }
+            return dest;
+        }
+
+        async function pickSavePath() {
+            const payload = { defaultPath: safeName, title: dialogTitle };
+            if (typeof ipcRenderer === 'undefined' || !ipcRenderer) return null;
+            if (typeof ipcRenderer.invoke === 'function') {
+                try {
+                    return await ipcRenderer.invoke('choose-json-save-path', payload);
+                } catch (_) {}
+                try {
+                    return await ipcRenderer.invoke('save-json-file', {
+                        defaultPath: safeName,
+                        content: body,
+                        title: dialogTitle
+                    });
+                } catch (_) {}
+            }
+            if (typeof ipcRenderer.sendSync === 'function') {
+                try {
+                    return ipcRenderer.sendSync('choose-json-save-path-sync', payload);
+                } catch (_) {}
+            }
+            return null;
+        }
+
+        try {
+            const picked = await pickSavePath();
+            if (!picked) {
+                return {
+                    saved: false,
+                    canceled: false,
+                    error: 'Save dialog is not available. Fully quit and reopen AlgoScraper.'
+                };
+            }
+            if (picked.canceled) return { saved: false, canceled: true };
+            if (picked.error && !picked.filePath) {
+                return { saved: false, canceled: false, error: picked.error };
+            }
+            const dest = writeToSelectedPath(picked.filePath);
+            return { saved: true, filePath: dest };
+        } catch (e) {
+            return {
+                saved: false,
+                canceled: false,
+                error: (e && e.message) ? e.message : String(e)
+            };
+        }
+    };
+
     // Windows: compact density & native Windows VS Code window styling (html.platform-win)
     const isWinOS = (typeof process !== 'undefined' && process.platform === 'win32') ||
         (typeof navigator !== 'undefined' && ((navigator.platform && navigator.platform.toLowerCase().includes('win')) || (navigator.userAgent && navigator.userAgent.toLowerCase().includes('windows'))));
@@ -4515,13 +4585,27 @@
      */
     window.applyRepoChangeToHome = function(change) {
         if (!change || window._restoringProject) return;
-        const activeKey = window.activeResumedProjectKey;
-        if (change.projectKey && activeKey && change.projectKey !== activeKey && !change.wipeSession) {
-            return;
-        }
 
         window._applyingRepoToHome = true;
         try {
+            const homeIsThisProject = (function() {
+                if (change.wipeSession) return true;
+                if (!change.projectKey) return true;
+                if (typeof window.isCurrentlyOpenRepoProject === 'function') {
+                    const store = (typeof window.getRepoProjectsStore === 'function')
+                        ? window.getRepoProjectsStore()
+                        : null;
+                    const proj = store && store[change.projectKey];
+                    if (window.isCurrentlyOpenRepoProject(change.projectKey, proj)) return true;
+                }
+                const activeKey = window.activeResumedProjectKey;
+                return !!(activeKey && String(activeKey) === String(change.projectKey));
+            })();
+
+            if (change.projectKey && !homeIsThisProject && !change.wipeSession) {
+                return;
+            }
+
             if (change.wipeSession) {
                 const tbody = document.getElementById('myTable');
                 if (tbody) tbody.innerHTML = '';
@@ -4531,9 +4615,11 @@
                     registeredFeatureAreas = [];
                     window.registeredFeatureAreas = registeredFeatureAreas;
                 }
-                const appName = window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '');
-                if (typeof window.setGlobalPageName === 'function' && appName) {
-                    window.setGlobalPageName(appName);
+                const defaultPageName = (typeof getProjectDefaultPageName === 'function')
+                    ? getProjectDefaultPageName()
+                    : (window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '') || 'DefaultPage');
+                if (typeof window.setGlobalPageName === 'function') {
+                    window.setGlobalPageName(defaultPageName);
                 }
                 finishHomeTableRefresh();
                 return;
@@ -4545,31 +4631,53 @@
                 return;
             }
 
-            if ((change.type === 'page' || change.type === 'scenario') && change.pageName) {
-                const pageName = String(change.pageName).trim();
-                removeHomeRowsForPage(pageName);
-                if (window.registeredPageNames) window.registeredPageNames.delete(pageName);
-                if (window.pageScenarioData) {
-                    delete window.pageScenarioData[pageName];
-                    Object.keys(window.pageScenarioData).forEach(k => {
-                        const s = window.pageScenarioData[k];
-                        if (s && (s.scenarioName || '').trim().toLowerCase() === pageName.toLowerCase()) {
-                            delete window.pageScenarioData[k];
-                        }
-                    });
-                }
-                const remaining = window.registeredPageNames
-                    ? Array.from(window.registeredPageNames).filter(p => p && p.trim() && p.toLowerCase() !== 'all')
-                    : [];
-                if (remaining.length === 0) {
-                    const appName = window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '');
-                    if (typeof window.setGlobalPageName === 'function' && appName) {
-                        window.setGlobalPageName(appName);
+            if (change.type === 'page' || change.type === 'scenario') {
+                const names = [];
+                const pushName = (n) => {
+                    const t = String(n || '').trim();
+                    if (t && t.toLowerCase() !== 'all' && names.every(x => x.toLowerCase() !== t.toLowerCase())) {
+                        names.push(t);
                     }
-                } else if (remaining.length === 1) {
-                    if (typeof window.setGlobalPageName === 'function') window.setGlobalPageName(remaining[0]);
-                } else if (typeof window.setGlobalPageName === 'function') {
-                    window.setGlobalPageName('All');
+                };
+                (change.pageNames || []).forEach(pushName);
+                pushName(change.pageName);
+                pushName(change.scenarioName);
+
+                names.forEach((pageName) => {
+                    removeHomeRowsForPage(pageName);
+                    if (window.registeredPageNames) {
+                        Array.from(window.registeredPageNames).forEach((p) => {
+                            if (String(p).trim().toLowerCase() === pageName.toLowerCase()) {
+                                window.registeredPageNames.delete(p);
+                            }
+                        });
+                    }
+                    if (window.pageScenarioData) {
+                        Object.keys(window.pageScenarioData).forEach((k) => {
+                            const s = window.pageScenarioData[k];
+                            const scenName = s && (s.scenarioName || s.name);
+                            if (k.toLowerCase() === pageName.toLowerCase()
+                                || (scenName && String(scenName).trim().toLowerCase() === pageName.toLowerCase())) {
+                                delete window.pageScenarioData[k];
+                            }
+                        });
+                    }
+                });
+
+                const defaultPageName = (typeof getProjectDefaultPageName === 'function')
+                    ? getProjectDefaultPageName()
+                    : (window.activeResumedAppName || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '') || 'DefaultPage');
+                const remaining = window.registeredPageNames
+                    ? Array.from(window.registeredPageNames).filter((p) => p && String(p).trim() && String(p).toLowerCase() !== 'all')
+                    : [];
+                if (typeof window.setGlobalPageName === 'function') {
+                    if (remaining.length === 0) {
+                        window.setGlobalPageName(defaultPageName);
+                    } else if (remaining.length === 1) {
+                        window.setGlobalPageName(remaining[0]);
+                    } else {
+                        window.setGlobalPageName('All');
+                    }
                 }
                 finishHomeTableRefresh();
             }
@@ -6181,12 +6289,12 @@
 
         document.getElementById("download") && document.getElementById("download").addEventListener('click', async () => {
             if (!tableCreated || !hasValidTableData('myTable')) {
-            showAppPopup('export_failed', { message: 'No scraped data found to download.' });
+            showAppPopup('download_failed', { message: 'No scraped data found to download.' });
                 return;
             }
 
             // Always download full scraped dataset completely, regardless of column visibility
-            downloadTableAsJSON('myTable');
+            await downloadTableAsJSON('myTable');
         });
 
     function extractAllTableData(tableId) {
@@ -6642,7 +6750,7 @@
     }
     window.buildScenarioPayload = buildScenarioPayload;
 
-    function downloadTableAsJSON(tableId) {
+    async function downloadTableAsJSON(tableId) {
         const statusBar = document.getElementById('sttus_bar_div');
         if (statusBar) statusBar.style.display = 'none';
 
@@ -6656,7 +6764,7 @@
 
         if (!dashboardControls || dashboardControls.length === 0) {
             if (typeof showAppPopup === 'function') {
-                showAppPopup('export_failed', { message: 'No scraped data found to download.' });
+                showAppPopup('download_failed', { message: 'No scraped data found to download.' });
             }
             return;
         }
@@ -6688,24 +6796,23 @@
         const fileName = `${cleanAppName}_${dateTime}.json`;
         const jsonString = JSON.stringify(jsonContent, null, 2);
 
-        if (typeof downloadFile === 'function') {
-            downloadFile(fileName, jsonString, 'application/json;charset=utf-8;');
-        } else {
-            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8;" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            setTimeout(() => {
-                try { URL.revokeObjectURL(url); } catch (_) {}
-            }, 60000);
+        const saver = (typeof window.saveExportedJsonFile === 'function')
+            ? window.saveExportedJsonFile
+            : (typeof downloadFile === 'function' ? downloadFile : null);
+        const result = saver
+            ? await saver(fileName, jsonString, { title: 'Download JSON' })
+            : null;
+
+        if (result && result.canceled) return;
+        if (!result || !result.saved) {
+            if (typeof showAppPopup === 'function') {
+                showAppPopup('download_failed', { message: (result && result.error) || 'Download was not completed.' });
+            }
+            return;
         }
 
         if (typeof showAppPopup === 'function') {
-            showAppPopup('export_success', { message: `Exported ${dashboardControls.length} controls successfully!` });
+            showAppPopup('download_success', { message: `Downloaded ${dashboardControls.length} controls successfully.` });
         }
     }
 
@@ -11315,11 +11422,75 @@ function seedInitialProjectPage(project, appName, platform) {
     return page;
 }
 
+function getProjectDefaultPageName(project) {
+    const raw = (project && project.appName)
+        || window.activeResumedAppName
+        || (typeof resolveActiveAppName === 'function' ? resolveActiveAppName() : '')
+        || '';
+    const cleaned = (typeof getCleanAppName === 'function') ? getCleanAppName(raw) : String(raw || '').trim();
+    return cleaned || 'DefaultPage';
+}
+
+function isRepoDefaultPageName(name, project) {
+    const n = repoNameKey(name);
+    if (!n) return false;
+    if (n === 'defaultpage' || n === 'default') return true;
+    return n === repoNameKey(getProjectDefaultPageName(project));
+}
+
+function isEmptyDefaultPage(page, project) {
+    if (!page || !isRepoDefaultPageName(page.pageName, project)) return false;
+    return !(Array.isArray(page.elements) && page.elements.length > 0);
+}
+
+function projectHasCreatedPagesOrScenarios(project) {
+    if (!project) return false;
+    if (Array.isArray(project.scenarios) && project.scenarios.length > 0) return true;
+    return (project.pages || []).some(pg => pg && !isEmptyDefaultPage(pg, project));
+}
+
 function isKeptInitialPage(project, page) {
     if (!page) return false;
+    if (isEmptyDefaultPage(page, project) && !projectHasCreatedPagesOrScenarios(project)) return true;
     if (page.isInitialPage) return true;
     return repoNameKey(page.pageName) === repoNameKey(project && project.appName);
 }
+
+function isRepoDefaultPage(project, page) {
+    if (!page) return false;
+    if (!isEmptyDefaultPage(page, project)) return false;
+    return !projectHasCreatedPagesOrScenarios(project);
+}
+
+function ensureRepoDefaultPage(project) {
+    if (!project) return null;
+    if (!Array.isArray(project.pages)) project.pages = [];
+    const defaultName = getProjectDefaultPageName(project);
+
+    if (projectHasCreatedPagesOrScenarios(project)) {
+        project.pages = (project.pages || []).filter((pg) => {
+            const n = repoNameKey(pg && pg.pageName);
+            const empty = !(pg && Array.isArray(pg.elements) && pg.elements.length > 0);
+            return !(empty && (n === 'defaultpage' || n === 'default'));
+        });
+        return null;
+    }
+
+    const existing = project.pages.find(pg => isEmptyDefaultPage(pg, project))
+        || project.pages.find(pg => repoNameKey(pg && pg.pageName) === repoNameKey(defaultName));
+    if (existing) {
+        existing.pageName = defaultName;
+        existing.isInitialPage = true;
+        if (!Array.isArray(existing.elements)) existing.elements = [];
+        project.lastActivePageName = defaultName;
+        return existing;
+    }
+
+    return seedInitialProjectPage(project, defaultName, project.platform);
+}
+window.getProjectDefaultPageName = getProjectDefaultPageName;
+window.isRepoDefaultPage = isRepoDefaultPage;
+window.ensureRepoDefaultPage = ensureRepoDefaultPage;
 
 function isRepoNameOwnedByScenario(project, name) {
     const key = repoNameKey(name);
@@ -11737,6 +11908,86 @@ function pruneProjectAssetOwnership(project) {
 }
 window.pruneProjectAssetOwnership = pruneProjectAssetOwnership;
 
+function purgeRepoPageOrScenario(project, opts) {
+    if (!project || !opts) return { pageNames: [] };
+    const type = opts.type;
+    const id = opts.id;
+    const names = [];
+    const addName = (n) => {
+        const t = String(n || '').trim();
+        if (!t || t.toLowerCase() === 'all') return;
+        if (names.every(x => x.toLowerCase() !== t.toLowerCase())) names.push(t);
+    };
+    const nameKeys = () => new Set(names.map(n => (typeof repoNameKey === 'function') ? repoNameKey(n) : n.toLowerCase()));
+    const matchesName = (n, keys) => {
+        const k = (typeof repoNameKey === 'function') ? repoNameKey(n) : String(n || '').trim().toLowerCase();
+        return !!(k && keys.has(k));
+    };
+    const keptFeatures = [];
+    const takeFeatures = (list) => {
+        (list || []).forEach((f) => {
+            if (typeof isUserCreatedFeature === 'function' && !isUserCreatedFeature(f)) return;
+            if (f) keptFeatures.push(f);
+        });
+    };
+
+    if (type === 'scenario') {
+        const list = project.scenarios || [];
+        addName(opts.pageName);
+        addName(opts.scenarioName);
+        const s = list.find(x => x && id && x.id === id)
+            || list.find(x => matchesName(x && x.pageName, nameKeys()) || matchesName(x && x.name, nameKeys()));
+        if (s) {
+            addName(s.pageName);
+            addName(s.name);
+            takeFeatures(s.features);
+        }
+        const keys = nameKeys();
+        project.scenarios = list.filter(x => {
+            if (!x) return false;
+            if (id && x.id === id) return false;
+            if (matchesName(x.pageName, keys) || matchesName(x.name, keys)) return false;
+            return true;
+        });
+    } else if (type === 'page') {
+        const list = project.pages || [];
+        addName(opts.pageName);
+        const p = list.find(x => x && id && x.id === id)
+            || list.find(x => matchesName(x && x.pageName, nameKeys()));
+        if (p) {
+            if (isRepoDefaultPage(project, p)) {
+                return { pageNames: [] };
+            }
+            addName(p.pageName);
+            takeFeatures(p.features);
+        }
+        const keys = nameKeys();
+        project.pages = list.filter(pg => {
+            if (!pg) return false;
+            if (id && pg.id === id) return false;
+            if (matchesName(pg.pageName, keys)) return false;
+            return true;
+        });
+    }
+
+    if (keptFeatures.length && typeof mergeFeatureItems === 'function') {
+        project.features = mergeFeatureItems(project.features, keptFeatures);
+    } else if (keptFeatures.length) {
+        project.features = (project.features || []).concat(keptFeatures);
+    }
+
+    if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
+
+    if (!projectHasCreatedPagesOrScenarios(project)) {
+        ensureRepoDefaultPage(project);
+        project.lastActivePageName = getProjectDefaultPageName(project);
+    }
+
+    project.lastUpdated = Date.now();
+    return { pageNames: names };
+}
+window.purgeRepoPageOrScenario = purgeRepoPageOrScenario;
+
 function getProjectStore() {
     if (window._activeRepoWriteStore) return window._activeRepoWriteStore;
     let store = {};
@@ -11874,11 +12125,22 @@ function getProjectStore() {
             });
 
             const total = (p.scenarios || []).length + (p.features || []).length + (p.pages || []).length;
-            if (total === 0 || (p.appName === 'Default App' && total === 0)) {
+            if (total === 0 && p.appName === 'Default App') {
                 delete store[k];
                 modified = true;
                 return;
             }
+                if (typeof ensureRepoDefaultPage === 'function') {
+                    if (projectHasCreatedPagesOrScenarios(p)) {
+                        const before = (p.pages || []).length;
+                        p.pages = (p.pages || []).filter((pg) => {
+                            const n = repoNameKey(pg && pg.pageName);
+                            const empty = !(pg && Array.isArray(pg.elements) && pg.elements.length > 0);
+                            return !(empty && (n === 'defaultpage' || n === 'default'));
+                        });
+                        if ((p.pages || []).length !== before) modified = true;
+                    }
+                }
 
             // Never remap unique-id keys such as "Calendar (iOS)::p_abc123"
             const properKey = `${p.appName || cleanName} (${plat})`;
@@ -13477,7 +13739,7 @@ function updateRowEyeButtonState() {
 
            } else if (pendingExportAction === "download") {
                pendingExportAction = null;
-               downloadTableAsJSON('myTable');
+               await downloadTableAsJSON('myTable');
 
            } else if (pendingExportAction === "algoQA") {
                pendingExportAction = null;
@@ -13743,38 +14005,41 @@ function updateRowEyeButtonState() {
             } else if (pendingExportAction === "confirmDeleteRepoItem") {
                 pendingExportAction = null;
                 if (pendingRepoDelete && pendingRepoDelete.projectKey && typeof window.getRepoProjectsStore === 'function') {
-                    const { projectKey, type, id } = pendingRepoDelete;
+                    const { projectKey, type } = pendingRepoDelete;
                     const store = window.getRepoProjectsStore();
-                    const proj = store[projectKey];
-                    const homeChange = { projectKey, type };
-                    if (proj) {
-                        if (type === 'scenario') {
-                            const s = (proj.scenarios || []).find(x => x.id === id);
-                            homeChange.pageName = (s && (s.pageName || s.name)) || pendingRepoDelete.pageName;
-                            homeChange.scenarioName = (s && s.name) || pendingRepoDelete.scenarioName;
-                            proj.scenarios = (proj.scenarios || []).filter(x => x.id !== id);
-                        } else if (type === 'feature') {
-                            const featObj = (proj.features || []).find(f => f.id === id || f.name === id);
-                            const featName = (featObj ? featObj.name : null) || pendingRepoDelete.featureName || id;
-                            homeChange.featureName = featName;
-                            if (typeof window.removeFeatureCompletely === 'function') {
-                                window.removeFeatureCompletely(featName, projectKey);
-                            } else {
-                                proj.features = (proj.features || []).filter(f => f.id !== id && f.name !== id);
-                            }
-                        } else if (type === 'page') {
-                            const p = (proj.pages || []).find(x => x.id === id);
-                            homeChange.pageName = (p && p.pageName) || pendingRepoDelete.pageName;
-                            proj.pages = (proj.pages || []).filter(x => x.id !== id);
+                    const found = (typeof findProjectKeyInStore === 'function')
+                        ? findProjectKeyInStore(store, projectKey)
+                        : { key: projectKey, project: store[projectKey] };
+                    const resolvedKey = found.key || projectKey;
+                    const proj = found.project || store[projectKey];
+                    let pageNames = [];
+                    if (proj && (type === 'page' || type === 'scenario') && typeof window.purgeRepoPageOrScenario === 'function') {
+                        const purged = window.purgeRepoPageOrScenario(proj, pendingRepoDelete);
+                        pageNames = (purged && purged.pageNames) || [];
+                        if (typeof window.isCurrentlyOpenRepoProject === 'function'
+                            && window.isCurrentlyOpenRepoProject(resolvedKey, proj)) {
+                            window._resumedProjectSnapshot = proj;
                         }
-                        proj.lastUpdated = Date.now();
                         window.setRepoProjectsStore(store);
-                    } else {
-                        homeChange.pageName = pendingRepoDelete.pageName;
-                        homeChange.featureName = pendingRepoDelete.featureName;
+                    } else if (proj && type === 'feature') {
+                        const featObj = (proj.features || []).find(f => f.id === pendingRepoDelete.id || f.name === pendingRepoDelete.id);
+                        const featName = (featObj ? featObj.name : null) || pendingRepoDelete.featureName || pendingRepoDelete.id;
+                        if (typeof window.removeFeatureCompletely === 'function') {
+                            window.removeFeatureCompletely(featName, resolvedKey);
+                        } else {
+                            proj.features = (proj.features || []).filter(f => f.id !== pendingRepoDelete.id && f.name !== pendingRepoDelete.id);
+                            proj.lastUpdated = Date.now();
+                            window.setRepoProjectsStore(store);
+                        }
                     }
                     if (type !== 'feature' && !pendingRepoDelete._appliedHome && typeof window.applyRepoChangeToHome === 'function') {
-                        window.applyRepoChangeToHome(homeChange);
+                        window.applyRepoChangeToHome({
+                            projectKey: resolvedKey,
+                            type,
+                            pageName: pendingRepoDelete.pageName,
+                            scenarioName: pendingRepoDelete.scenarioName,
+                            pageNames
+                        });
                         pendingRepoDelete._appliedHome = true;
                     }
                     pendingRepoDelete = null;
@@ -15871,6 +16136,25 @@ function getPopupCopy(kind, extras) {
                         hint: 'Scrape controls on Home, then try again.'
                     }),
                 type: 'error'
+            };
+        case 'download_failed':
+            return {
+                title: 'Download Failed',
+                message: x.message
+                    ? formatPopupMessage(x.message)
+                    : buildStructuredPopupHtml({
+                        lead: 'Download was not completed.',
+                        hint: 'Choose a location in the save dialog, then try again.'
+                    }),
+                type: 'error'
+            };
+        case 'download_success':
+            return {
+                title: 'Downloaded',
+                message: buildStructuredPopupHtml({
+                    lead: x.message || 'File downloaded successfully.'
+                }),
+                type: 'success'
             };
         case 'export_success':
             return {
@@ -19887,20 +20171,13 @@ if (platformVersionField) {
         return `${day} ${month}, ${strHours}:${minutes} ${ampm}`;
     }
 
-    function downloadFile(filename, content, type = 'application/json') {
-        const safeName = String(filename || 'download.json').replace(/[/\\?%*:|"<>]/g, '_');
-        const blob = new Blob([content], { type });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = safeName;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => {
-            try { URL.revokeObjectURL(url); } catch (_) {}
-        }, 60000);
+    async function downloadFile(filename, content, type = 'application/json') {
+        if (typeof window.saveExportedJsonFile === 'function') {
+            return window.saveExportedJsonFile(filename, content, type);
+        }
+        return { saved: false, canceled: false, error: 'Save is not available.' };
     }
+    window.downloadFile = downloadFile;
 
     function guessAppNameFromImport(data, fileName) {
         const fromFile = String(fileName || '')
@@ -20308,8 +20585,11 @@ if (platformVersionField) {
         return '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>';
     }
 
-    function repoAssetRowHtml(type, id, name, meta, selected) {
+    function repoAssetRowHtml(type, id, name, meta, selected, canDelete) {
         const label = type === 'scenario' ? 'Scenario' : (type === 'feature' ? 'Feature' : 'Page Object');
+        const deleteBtn = canDelete === false
+            ? ''
+            : `<button type="button" class="repo-icon-btn repo-btn-del" data-action="delete-item" data-id="${id}" data-type="${type}" title="Delete">${REPO_ICON_TRASH}</button>`;
         return `
         <div class="repo-card repo-card--compact repo-asset-row ${selected ? 'is-selected' : ''}" data-repo-type="${type}" data-repo-id="${id}">
             <span class="repo-asset-icon repo-asset-icon--${type}">${repoTypeGlyph(type)}</span>
@@ -20323,7 +20603,7 @@ if (platformVersionField) {
             <div class="repo-chip-actions">
                 <button type="button" class="repo-icon-btn repo-btn-view" data-action="view-json" data-id="${id}" data-type="${type}" title="Inspect JSON">${REPO_ICON_EYE}</button>
                 <button type="button" class="repo-icon-btn" data-action="download-json" data-id="${id}" data-type="${type}" title="Export JSON">${REPO_ICON_DL}</button>
-                <button type="button" class="repo-icon-btn repo-btn-del" data-action="delete-item" data-id="${id}" data-type="${type}" title="Delete">${REPO_ICON_TRASH}</button>
+                ${deleteBtn}
             </div>
         </div>`;
     }
@@ -21165,7 +21445,8 @@ if (platformVersionField) {
                     item.id,
                     item.pageName,
                     `${elList.length} ${elList.length === 1 ? 'control' : 'controls'}${pageFeatHint}`,
-                    isSelected
+                    isSelected,
+                    !(typeof isRepoDefaultPage === 'function' && isRepoDefaultPage(project, item))
                 );
             } else if (item.type === 'feature') {
                 const featId = item.id || item.name;
@@ -21187,8 +21468,33 @@ if (platformVersionField) {
         openRepoJsonSideView(foundActive || items[0]);
     };
 
+    async function exportJsonAndNotify(filename, jsonText, successLead, options) {
+        const saveOpts = {
+            title: (options && options.title) || (successLead && /download/i.test(successLead) ? 'Download JSON' : 'Export JSON')
+        };
+        const result = (typeof window.saveExportedJsonFile === 'function')
+            ? await window.saveExportedJsonFile(filename, jsonText, saveOpts)
+            : await downloadFile(filename, jsonText, saveOpts);
+        if (result && result.canceled) return;
+        if (result && result.saved) {
+            if (typeof showAppPopup === 'function') {
+                const isDownload = !!(successLead && /download/i.test(successLead));
+                showAppPopup(isDownload ? 'download_success' : 'export_success', {
+                    message: successLead || (isDownload ? 'Downloaded successfully.' : 'Exported successfully.')
+                });
+            }
+            return;
+        }
+        if (typeof showAppPopup === 'function') {
+            const isDownload = !!(successLead && /download/i.test(successLead));
+            showAppPopup(isDownload ? 'download_failed' : 'export_failed', {
+                message: (result && result.error) || (isDownload ? 'Download was not completed.' : 'Export was not completed.')
+            });
+        }
+    }
+
     // Global Click Delegation for Repository Tab
-    document.addEventListener('click', function(e) {
+    document.addEventListener('click', async function(e) {
         // 1. Breadcrumb Root / Back to Projects buttons (Top and Inline)
         if (e.target.closest('#repoCrumbRoot') || e.target.closest('#repoBackToProjectsBtn') || e.target.closest('#repoInlineBackBtn') || e.target.closest('.repo-crumb-btn.is-back-btn') || e.target.closest('.repo-back-nav-btn')) {
             if (currentSelectedProjectKey) {
@@ -21353,7 +21659,7 @@ if (platformVersionField) {
                     exportedAt: new Date().toISOString(),
                     project: proj
                 };
-                downloadFile(`${(proj.appName || 'project').replace(/\s+/g, '_')}_project_suite.json`, JSON.stringify(bundle, null, 2));
+                await exportJsonAndNotify(`${(proj.appName || 'project').replace(/\s+/g, '_')}_project_suite.json`, JSON.stringify(bundle, null, 2), 'Project exported successfully.');
             }
             return;
         }
@@ -21418,7 +21724,7 @@ if (platformVersionField) {
                     exportedAt: new Date().toISOString(),
                     project: proj
                 };
-                downloadFile(`${(proj.appName || 'project').replace(/\s+/g, '_')}_project_suite.json`, JSON.stringify(bundle, null, 2));
+                await exportJsonAndNotify(`${(proj.appName || 'project').replace(/\s+/g, '_')}_project_suite.json`, JSON.stringify(bundle, null, 2), 'Project exported successfully.');
             }
             return;
         }
@@ -21582,7 +21888,7 @@ if (platformVersionField) {
         if (e.target.closest('#repoJsonDownloadBtn')) {
             if (currentViewerPayload && currentViewerPayload.data) {
                 const jsonStr = JSON.stringify(currentViewerPayload.data, null, 2);
-                downloadFile(currentViewerPayload.filename || 'download.json', jsonStr, 'application/json');
+                await exportJsonAndNotify(currentViewerPayload.filename || 'download.json', jsonStr, 'JSON downloaded successfully.');
             }
             return;
         }
@@ -21608,7 +21914,7 @@ if (platformVersionField) {
                 if (item) {
                     const payloadInfo = getItemJsonPayload({ type, ...item }, currentSelectedProjectKey);
                     if (payloadInfo && payloadInfo.data) {
-                        downloadFile(payloadInfo.filename, JSON.stringify(payloadInfo.data, null, 2), 'application/json');
+                        await exportJsonAndNotify(payloadInfo.filename, JSON.stringify(payloadInfo.data, null, 2), 'JSON downloaded successfully.');
                     }
                 }
             }
@@ -21625,6 +21931,9 @@ if (platformVersionField) {
 
             const scenItem = type === 'scenario' ? (project.scenarios || []).find(s => s.id === id) : null;
             const pageItem = type === 'page' ? (project.pages || []).find(p => p.id === id) : null;
+            if (type === 'page' && pageItem && typeof isRepoDefaultPage === 'function' && isRepoDefaultPage(project, pageItem)) {
+                return;
+            }
             const featItem = type === 'feature' ? (project.features || []).find(f => f.id === id || f.name === id) : null;
             const featDisplayName = featItem ? featItem.name : 'this feature';
 
@@ -21641,46 +21950,10 @@ if (platformVersionField) {
             showConfirmDialog({
                 title: `Delete Saved ${label}?`,
                 mainText: `Do you really want to delete ${type === 'feature' ? `feature "<b>${escapeDummyHtml(featDisplayName)}</b>"` : `this ${label}`}?`,
-                subText: `If deleted from here, this action cannot be undone and you will not be able to recover it.${type === 'feature' ? ' The feature will be removed completely from the application, and any table rows assigned to this feature will automatically be updated to their page name.' : ' Home will update at the same time.'}`,
+                subText: `If deleted from here, this action cannot be undone and you will not be able to recover it.${type === 'feature' ? ' The feature will be removed completely from the application, and any table rows assigned to this feature will automatically be updated to their page name.' : ' Home will switch to DefaultPage so you can scrape again.'}`,
                 action: 'confirmDeleteRepoItem',
                 theme: 'error',
-                okayBtnText: 'Delete',
-                onOkay: () => {
-                    if (type === 'feature') {
-                        const featName = (featItem && featItem.name) || id;
-                        if (typeof window.removeFeatureCompletely === 'function') {
-                            window.removeFeatureCompletely(featName, currentSelectedProjectKey);
-                        }
-                    } else if (type === 'scenario') {
-                        project.scenarios = (project.scenarios || []).filter(s => s.id !== id);
-                        project.lastUpdated = Date.now();
-                        window.setRepoProjectsStore(store);
-                        if (typeof window.applyRepoChangeToHome === 'function') {
-                            window.applyRepoChangeToHome({
-                                projectKey: currentSelectedProjectKey,
-                                type: 'scenario',
-                                pageName: pendingRepoDelete.pageName,
-                                scenarioName: pendingRepoDelete.scenarioName
-                            });
-                            pendingRepoDelete._appliedHome = true;
-                        }
-                    } else if (type === 'page') {
-                        project.pages = (project.pages || []).filter(p => p.id !== id);
-                        project.lastUpdated = Date.now();
-                        window.setRepoProjectsStore(store);
-                        if (typeof window.applyRepoChangeToHome === 'function') {
-                            window.applyRepoChangeToHome({
-                                projectKey: currentSelectedProjectKey,
-                                type: 'page',
-                                pageName: pendingRepoDelete.pageName
-                            });
-                            pendingRepoDelete._appliedHome = true;
-                        }
-                    }
-                    if (typeof window.renderRepositoryView === 'function') {
-                        window.renderRepositoryView();
-                    }
-                }
+                okayBtnText: 'Delete'
             });
             return;
         }
