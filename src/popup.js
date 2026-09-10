@@ -319,9 +319,50 @@
     }
     window.isFeatureAreaApplicableToPage = isFeatureAreaApplicableToPage;
 
+    function computeAndroidScreenSignature(doc) {
+        if (!doc) return "";
+        const all = doc.getElementsByTagName("*");
+        const parts = [];
+        for (let i = 0; i < all.length; i++) {
+            const node = all[i];
+            const tag = (typeof getUiNodeName === "function" ? getUiNodeName(node) : "") || node.nodeName || "";
+            if (!tag || tag === "hierarchy" || /StatusBar|SystemUi|navigationbar/i.test(tag)) continue;
+            const pkg = String(node.getAttribute("package") || "").toLowerCase();
+            if (pkg === "com.android.systemui") continue;
+            const rid = String(node.getAttribute("resource-id") || "").toLowerCase();
+            if (rid.includes("status_bar") || rid.includes("navigation_bar") || rid.includes("/nav_bar")) continue;
+            const rect = (typeof parseNodeRect === "function") ? parseNodeRect(node) : null;
+            if (!rect || rect.width <= 6 || rect.height <= 6) continue;
+            const text = String(
+                node.getAttribute("text")
+                || node.getAttribute("content-desc")
+                || node.getAttribute("resource-id")
+                || ""
+            ).trim().replace(/\|/g, " ").slice(0, 48);
+            if (text && /^\d{1,2}:\d{2}/.test(text)) continue;
+            parts.push([
+                tag,
+                text,
+                Math.round((rect.x || 0) / 4),
+                Math.round((rect.y || 0) / 4),
+                Math.round((rect.width || 0) / 8),
+                Math.round((rect.height || 0) / 8)
+            ].join(":"));
+        }
+        if (!parts.length) return "";
+        parts.sort();
+        return `${parts.length}##${parts.join("|")}`;
+    }
+
     function computeScreenSignature(doc) {
         if (!doc) return "";
         try {
+            // Windows / Android only — iOS keeps the XCUI layout identity below.
+            if (typeof isIOSPlatform === "function" ? !isIOSPlatform() : true) {
+                const androidSig = computeAndroidScreenSignature(doc);
+                if (androidSig) return androidSig;
+            }
+
             const nodes = (typeof extractContentNodes === 'function') ? extractContentNodes(doc) : [];
             if (!nodes || nodes.length === 0) return "";
 
@@ -597,6 +638,32 @@
     }
     window.isFeatureAreaApplicableToCurrentScreen = isFeatureAreaApplicableToCurrentScreen;
 
+    function rowScreenSignature(tr) {
+        return (tr && tr.dataset && tr.dataset.screenSignature) ? String(tr.dataset.screenSignature) : '';
+    }
+
+    function sameScreenStamp(a, b) {
+        const sa = String(a || '');
+        const sb = String(b || '');
+        if (!sa || !sb) return false;
+        return sa === sb;
+    }
+
+    function rowXPaths(tr) {
+        if (!tr || !tr.dataset) return [];
+        try {
+            const raw = tr.dataset.xpaths;
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                if (Array.isArray(parsed)) return parsed.filter(Boolean);
+            }
+        } catch (_) {}
+        const xpathCell = tr.querySelector('.xpath');
+        const selectEl = xpathCell ? xpathCell.querySelector('select') : null;
+        const xpath = selectEl ? selectEl.value : (xpathCell ? (xpathCell.innerText || '').replace(/\u00a0/g, ' ').trim() : '');
+        return xpath ? [xpath] : [];
+    }
+
     function applyTableFeatureSubFeature(cell, newName) {
         if (!cell || !newName) return;
         const trimmed = String(newName).trim();
@@ -610,6 +677,9 @@
         const pageCell = tr ? tr.querySelector('.page') : null;
         const pageName = (pageCell && pageCell.innerText.trim())
             || ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '');
+        const rowSig = rowScreenSignature(tr);
+        const liveSig = (typeof computeScreenSignature === 'function') ? (computeScreenSignature(window.xmlDoc) || '') : '';
+        const useLiveXml = !rowSig || sameScreenStamp(rowSig, liveSig);
 
         let rect = null;
         try {
@@ -618,7 +688,7 @@
             rect = null;
         }
 
-        if (!rect && tr) {
+        if (!rect && tr && useLiveXml) {
             const xpathCell = tr.querySelector('.xpath');
             const selectEl = xpathCell ? xpathCell.querySelector('select') : null;
             const xpath = selectEl ? selectEl.value : (xpathCell ? (xpathCell.innerText || '').replace(/\u00a0/g, ' ').trim() : '');
@@ -633,33 +703,64 @@
             }
         }
 
+        const xpaths = rowXPaths(tr);
+        const screenSignature = rowSig || (useLiveXml ? liveSig : '');
         const existingAreaIdx = (registeredFeatureAreas || []).findIndex(a =>
-            a && a.name && String(a.name).trim().toLowerCase() === lower && isFeatureAreaApplicableToPage(a, pageName)
+            a && a.name && String(a.name).trim().toLowerCase() === lower
+            && isFeatureAreaApplicableToPage(a, pageName)
+            && (!screenSignature || sameScreenStamp(a.screenSignature, screenSignature))
         );
         if (existingAreaIdx >= 0) {
             if (rect && !registeredFeatureAreas[existingAreaIdx].rect) {
                 registeredFeatureAreas[existingAreaIdx].rect = rect;
             }
+            if (screenSignature && !registeredFeatureAreas[existingAreaIdx].screenSignature) {
+                registeredFeatureAreas[existingAreaIdx].screenSignature = screenSignature;
+            }
+            if (tr && tr.dataset && registeredFeatureAreas[existingAreaIdx].id) {
+                tr.dataset.featureId = registeredFeatureAreas[existingAreaIdx].id;
+            }
         } else {
+            const newId = 'feat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+            if (tr && tr.dataset) tr.dataset.featureId = newId;
             registeredFeatureAreas.push({
+                id: newId,
                 rect: rect,
                 name: trimmed,
                 fullPage: false,
                 pageName: pageName,
-                screenSignature: computeScreenSignature(window.xmlDoc),
-                screenContentKeys: computeScreenContentKeys(window.xmlDoc, rect),
+                screenSignature: screenSignature,
+                screenContentKeys: (useLiveXml && typeof computeScreenContentKeys === 'function')
+                    ? computeScreenContentKeys(window.xmlDoc, rect)
+                    : [],
+                uniqueIdentifier: (tr && tr.dataset.fingerprint) || "",
+                xpaths: xpaths,
                 nodeText: (tr && tr.querySelector('.cn')) ? tr.querySelector('.cn').innerText.trim() : ""
             });
             window.registeredFeatureAreas = registeredFeatureAreas;
             if (typeof window.saveFeatureToRepo === 'function') {
-                window.saveFeatureToRepo(trimmed, rect, false, null, null, pageName, computeScreenSignature(window.xmlDoc), computeScreenContentKeys(window.xmlDoc, rect));
+                window.saveFeatureToRepo(
+                    trimmed,
+                    rect,
+                    false,
+                    null,
+                    null,
+                    pageName,
+                    screenSignature,
+                    [],
+                    (tr && tr.querySelector('.cn')) ? tr.querySelector('.cn').innerText.trim() : "",
+                    (tr && tr.dataset.fingerprint) || "",
+                    (tr && tr.dataset.fingerprint) || "",
+                    xpaths,
+                    newId
+                );
             }
         }
         if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     }
     window.applyTableFeatureSubFeature = applyTableFeatureSubFeature;
 
-    function applyTableFeatureRenameAll(oldName, newName, pageName) {
+    function applyTableFeatureRenameAll(oldName, newName, pageName, screenSignature) {
         const oldLower = String(oldName || '').trim().toLowerCase();
         const trimmed = String(newName || '').trim();
         if (!oldLower || !trimmed) return;
@@ -674,14 +775,20 @@
                 : String(p || '').trim().toLowerCase();
             return key === pageKey;
         };
+        const stamp = String(screenSignature || '');
+        const matchesRowScreen = (tr) => {
+            if (!stamp) return true;
+            return sameScreenStamp(rowScreenSignature(tr), stamp);
+        };
 
-        // 1. Rename table rows on this page only
+        // 1. Rename table rows on this page + this screen (including rows not currently displayed)
         document.querySelectorAll('#myTable .featureName').forEach(cell => {
             if ((cell.innerText || '').replace(/\u00a0/g, ' ').trim().toLowerCase() !== oldLower) return;
             const tr = cell.closest('tr');
             const pageCell = tr ? tr.querySelector('.page') : null;
             const rowPage = pageCell ? pageCell.innerText.trim() : '';
             if (pageKey && !matchesPage(rowPage)) return;
+            if (!matchesRowScreen(tr)) return;
             cell.innerText = trimmed;
             cell.dataset.oldFeature = trimmed;
             if (tr && tr.dataset) {
@@ -689,18 +796,18 @@
             }
         });
 
-        // 2. Rename registered feature areas created on this page only
+        // 2. Rename registered feature areas on this page + this screen only
         (registeredFeatureAreas || []).forEach(area => {
             if (!area || !area.name) return;
             if (String(area.name).trim().toLowerCase() !== oldLower) return;
             if (pageKey && !matchesPage(area.pageName)) return;
+            if (stamp && !sameScreenStamp(area.screenSignature, stamp)) return;
             area.name = trimmed;
         });
         window.registeredFeatureAreas = registeredFeatureAreas;
 
-        const currentPage = (typeof getActiveHomePageName === 'function' ? getActiveHomePageName() : '')
-            || (document.getElementById('pagename_searchbox')?.value || '');
-        if (!pageKey || matchesPage(currentPage)) {
+        const liveSig = (typeof computeScreenSignature === 'function') ? (computeScreenSignature(window.xmlDoc) || '') : '';
+        if (!stamp || sameScreenStamp(stamp, liveSig)) {
             const overlay = document.getElementById("overlayContainer");
             if (overlay) {
                 overlay.querySelectorAll('.feature-area-label').forEach(el => {
@@ -716,9 +823,9 @@
             }
         }
 
-        // 3. Rename this page's features, elements, and scenarios in repository
+        // 3. Rename this page+screen in repository
         if (typeof window.renameFeatureInRepo === 'function') {
-            window.renameFeatureInRepo(oldName, trimmed, pageName);
+            window.renameFeatureInRepo(oldName, trimmed, pageName, stamp);
         }
         if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     }
@@ -765,6 +872,15 @@
             if (!(x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height)) continue;
             const area = rect.width * rect.height;
             if (screenArea > 0 && (area / screenArea) > 0.50) continue;
+            // Android (Windows + Mac): skip large layout shells so the dashed box is the control, not the page
+            if (typeof isIOSPlatform === "function" && !isIOSPlatform()) {
+                const uiName = (typeof getUiNodeName === "function") ? getUiNodeName(node) : node.nodeName;
+                if (screenArea > 0 && (area / screenArea) > 0.35
+                    && /FrameLayout$|ViewGroup$|DecorView$|^android\.view\.View$|^node$/i.test(uiName)
+                    && !(typeof isMeaningfulControlNode === "function" && isMeaningfulControlNode(node))) {
+                    continue;
+                }
+            }
             hits.push({
                 node,
                 rect,
@@ -6720,19 +6836,21 @@
                 oldName: oldName,
                 newName: newFeatureNameValue,
                 cellElement: featCell,
-                pageName: rowPageName
+                pageName: rowPageName,
+                screenSignature: (tr && tr.dataset && tr.dataset.screenSignature) ? String(tr.dataset.screenSignature) : ''
             };
             showConfirmDialog({
                 title: "Update Feature Name",
                 mainText: `How would you like to apply "<b>${newFeatureNameValue}</b>" on page <b>${rowPageName}</b>?`,
-                subText: "Rename All updates this feature on this page only. Other pages keep their own feature names. Sub-feature applies it to this element only. Cancel keeps the previous name.",
+                subText: "Rename All updates this feature on that page and that screen only, even if another page is displayed. Sub-feature creates a new feature for this element on that same screen. Cancel keeps the previous name.",
                 action: "renameFeature",
                 theme: "confirm",
                 okayBtnText: "Rename All",
                 extraBtnText: "Sub-feature",
                 onOkay: () => {
+                    const rowStamp = (tr && tr.dataset && tr.dataset.screenSignature) ? String(tr.dataset.screenSignature) : '';
                     if (typeof applyTableFeatureRenameAll === 'function') {
-                        applyTableFeatureRenameAll(oldName, newFeatureNameValue, rowPageName);
+                        applyTableFeatureRenameAll(oldName, newFeatureNameValue, rowPageName, rowStamp);
                     }
                     featCell.dataset.oldFeature = newFeatureNameValue;
                     pendingFeatureRename = null;
@@ -12139,18 +12257,27 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
             return;
         }
 
+        const nodeTypeName = (typeof isIOSPlatform === "function" && !isIOSPlatform() && typeof getUiNodeName === "function")
+            ? getUiNodeName(matchedNode)
+            : matchedNode.nodeName;
         const featName = generateProfessionalControlName(matchedNode);
-        const featureNodeText = (
-            matchedNode.getAttribute("text")
-            || matchedNode.getAttribute("label")
-            || matchedNode.getAttribute("name")
-            || matchedNode.getAttribute("content-desc")
-            || ""
-        ).trim();
+        const featureNodeText = (typeof isIOSPlatform === "function" && !isIOSPlatform())
+            ? (
+                matchedNode.getAttribute("text")
+                || matchedNode.getAttribute("content-desc")
+                || ""
+            ).trim()
+            : (
+                matchedNode.getAttribute("text")
+                || matchedNode.getAttribute("label")
+                || matchedNode.getAttribute("name")
+                || matchedNode.getAttribute("content-desc")
+                || ""
+            ).trim();
 
         pendingFeatureData = {
             ControlName: featName,
-            ControlType: mapControlType(matchedNode.nodeName, matchedNode),
+            ControlType: mapControlType(nodeTypeName, matchedNode),
             ControlId: nodeAllXPaths,
             ControlValue: getInputControlValue(matchedNode, featName),
             Fingerprint: generateNodeFingerprint(matchedNode),
@@ -13199,10 +13326,10 @@ function updateRowEyeButtonState() {
                pendingExportAction = null;
 
                if (pendingFeatureRename) {
-                   const { oldName, newName, cellElement, pageName } = pendingFeatureRename;
+                   const { oldName, newName, cellElement, pageName, screenSignature } = pendingFeatureRename;
 
                    if (currentAction === "renameFeature") {
-                        applyTableFeatureRenameAll(oldName, newName, pageName);
+                        applyTableFeatureRenameAll(oldName, newName, pageName, screenSignature);
                    } else if (currentAction === "createNewFeature") {
                         applyTableFeatureSubFeature(cellElement, newName);
                    }
@@ -19196,7 +19323,7 @@ if (platformVersionField) {
         }
     };
 
-    window.renameFeatureInRepo = function(oldName, newName, pageName) {
+    window.renameFeatureInRepo = function(oldName, newName, pageName, screenSignature) {
         const oldLower = String(oldName || '').trim().toLowerCase();
         const trimmed = String(newName || '').trim();
         if (!oldLower || !trimmed) return;
@@ -19211,6 +19338,12 @@ if (platformVersionField) {
                 : String(p || '').trim().toLowerCase();
             return key === pageKey;
         };
+        const stamp = String(screenSignature || '');
+        const matchesScreen = (sig) => {
+            if (!stamp) return true;
+            const s = String(sig || '');
+            return s && s === stamp;
+        };
 
         const store = beginRepoWrite();
         try {
@@ -19218,39 +19351,41 @@ if (platformVersionField) {
             const project = projectKey ? store[projectKey] : null;
             if (!project) return;
 
-            // 1. Rename top-level features created on this page only
+            // 1. Rename top-level features created on this page + screen only
             if (Array.isArray(project.features)) {
                 project.features.forEach(f => {
                     if (!f || !f.name) return;
                     if (String(f.name).trim().toLowerCase() !== oldLower) return;
                     if (pageKey && !matchesPage(f.pageName)) return;
+                    if (!matchesScreen(f.screenSignature)) return;
                     f.name = trimmed;
                 });
             }
 
-            // 2. Rename features/elements on this page only
+            // 2. Rename features/elements on this page + screen only
             (project.pages || []).forEach(pg => {
                 if (pageKey && !matchesPage(pg.pageName)) return;
                 if (Array.isArray(pg.features)) {
                     pg.features.forEach(f => {
                         if (!f || !f.name) return;
-                        if (String(f.name).trim().toLowerCase() === oldLower) {
-                            f.name = trimmed;
-                        }
+                        if (String(f.name).trim().toLowerCase() !== oldLower) return;
+                        if (!matchesScreen(f.screenSignature)) return;
+                        f.name = trimmed;
                     });
                 }
                 if (Array.isArray(pg.elements)) {
                     pg.elements.forEach(el => {
                         const curFeat = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
-                        if (curFeat === oldLower) {
-                            el['FEATURE NAME'] = trimmed;
-                            if (el.FeatureName !== undefined) el.FeatureName = trimmed;
-                        }
+                        if (curFeat !== oldLower) return;
+                        if (stamp && el.screenSignature && el.screenSignature !== stamp) return;
+                        if (stamp && !el.screenSignature) return;
+                        el['FEATURE NAME'] = trimmed;
+                        if (el.FeatureName !== undefined) el.FeatureName = trimmed;
                     });
                 }
             });
 
-            // 3. Rename features/elements in scenarios that belong to this page only
+            // 3. Rename features/elements in scenarios that belong to this page + screen only
             (project.scenarios || []).forEach(sc => {
                 if (pageKey && !matchesPage(sc.pageName)) return;
                 if (Array.isArray(sc.features)) {
@@ -19258,16 +19393,18 @@ if (platformVersionField) {
                         if (!f || !f.name) return;
                         if (String(f.name).trim().toLowerCase() !== oldLower) return;
                         if (f.pageName && !matchesPage(f.pageName)) return;
+                        if (!matchesScreen(f.screenSignature)) return;
                         f.name = trimmed;
                     });
                 }
                 if (Array.isArray(sc.elements)) {
                     sc.elements.forEach(el => {
                         const curFeat = (el['FEATURE NAME'] || el.FeatureName || '').trim().toLowerCase();
-                        if (curFeat === oldLower) {
-                            el['FEATURE NAME'] = trimmed;
-                            if (el.FeatureName !== undefined) el.FeatureName = trimmed;
-                        }
+                        if (curFeat !== oldLower) return;
+                        if (stamp && el.screenSignature && el.screenSignature !== stamp) return;
+                        if (stamp && !el.screenSignature) return;
+                        el['FEATURE NAME'] = trimmed;
+                        if (el.FeatureName !== undefined) el.FeatureName = trimmed;
                     });
                 }
             });
