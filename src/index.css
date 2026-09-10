@@ -5530,15 +5530,14 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 #tab-configuration.is-active {
-  display: block !important;
-  padding: clamp(8px, 1.2vw, 14px) clamp(10px, 1.5vw, 18px) 24px !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  padding: clamp(8px, 1.2vw, 14px) clamp(10px, 1.5vw, 18px) 12px !important;
+  overflow: hidden !important;
   height: 100% !important;
   max-height: 100% !important;
   box-sizing: border-box !important;
   background: var(--as-bg) !important;
-  -webkit-overflow-scrolling: touch;
 }
 
 /* CONFIG TAB STAGGERED ENTRANCE */
@@ -5565,6 +5564,10 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
 }
 
 /* TOP CLEAN HEADER */
@@ -5574,6 +5577,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   justify-content: space-between;
   padding: 2px 4px 4px;
   margin: 0;
+  flex-shrink: 0;
 }
 
 .config-header-title {
@@ -5628,8 +5632,9 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 /* 4 METRIC CHIPS */
 .config-metrics-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(8px, 1vw, 12px);
+  flex-shrink: 0;
 }
 
 .config-metric-chip {
@@ -5681,11 +5686,13 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 /* 2-COLUMN DASHBOARD GRID */
 .config-dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: clamp(10px, 1.2vw, 16px);
   align-items: stretch;
   width: 100%;
   box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* DASH CARD */
@@ -5698,19 +5705,18 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   flex-direction: column;
   overflow: hidden;
   min-width: 0;
+  min-height: 0;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  height: 100%;
-  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
-              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
+  height: auto;
+  transition: box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
               border-color 0.22s ease;
 }
 
 .config-dash-card:hover {
   border-color: #cbd5e1;
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
-  transform: translateY(-2px);
 }
 
 .dash-card-header {
@@ -5766,6 +5772,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   flex-direction: column;
   gap: 10px;
   flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .dash-spec-item {
@@ -5850,8 +5858,9 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 /* CONFIG DASHBOARD LAST PROJECT & LAUNCH SECTION */
 .config-project-launch-section {
-  margin-top: 10px;
+  margin-top: 0;
   width: 100%;
+  flex-shrink: 0;
 }
 
 .config-project-launch-card {
