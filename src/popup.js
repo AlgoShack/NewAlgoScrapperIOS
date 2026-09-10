@@ -1815,70 +1815,6 @@
     }
     window.setPageNameBoxEnabled = setPageNameBoxEnabled;
 
-    function hideHomeChipMenu(el) {
-        if (!el) return;
-        el.classList.remove('is-visible');
-        el.style.setProperty('display', 'none', 'important');
-        if (el.id === 'pageNameDropdown') {
-            document.querySelectorAll('.screen-name-badge').forEach((b) => {
-                b.classList.remove('is-menu-open');
-                const infoTip = b.querySelector('.page-info-tooltip');
-                const infoWrap = b.querySelector('.info-icon-wrapper');
-                if (infoTip) {
-                    infoTip.style.removeProperty('display');
-                    infoTip.style.removeProperty('opacity');
-                }
-                if (infoWrap) infoWrap.style.removeProperty('pointer-events');
-            });
-        }
-        if (el.id === 'scenarioOutlineDropdown') {
-            const bar = document.getElementById('scenarioOutlineBar');
-            if (bar) bar.classList.remove('is-menu-open');
-        }
-    }
-
-    function closeHomeChipDropdowns(exceptMenu) {
-        ['pageNameDropdown', 'scenarioOutlineDropdown'].forEach((id) => {
-            const el = document.getElementById(id);
-            if (!el || el === exceptMenu) return;
-            hideHomeChipMenu(el);
-        });
-    }
-
-    function positionHomeChipDropdown(anchorEl, menuEl) {
-        if (!anchorEl || !menuEl) return;
-        if (menuEl.parentNode !== document.body) {
-            document.body.appendChild(menuEl);
-        }
-        const chip = anchorEl.closest('.screen-name-badge, .scenario-outline-bar') || anchorEl;
-        const r = chip.getBoundingClientRect();
-        menuEl.style.setProperty('position', 'fixed', 'important');
-        menuEl.style.setProperty('top', `${Math.round(r.bottom + 4)}px`, 'important');
-        menuEl.style.setProperty('left', `${Math.round(r.left)}px`, 'important');
-        menuEl.style.setProperty('right', 'auto', 'important');
-        menuEl.style.setProperty('bottom', 'auto', 'important');
-        menuEl.style.setProperty('min-width', '160px', 'important');
-        menuEl.style.setProperty('width', 'auto', 'important');
-        menuEl.style.setProperty('max-width', '280px', 'important');
-        menuEl.style.setProperty('background', '#ffffff', 'important');
-        menuEl.style.setProperty('z-index', '999999', 'important');
-        menuEl.style.setProperty('display', 'block', 'important');
-        menuEl.classList.add('is-visible', 'custom-select-menu');
-        chip.classList.add('is-menu-open');
-        const infoTip = chip.querySelector('.page-info-tooltip');
-        const infoWrap = chip.querySelector('.info-icon-wrapper');
-        if (infoTip) {
-            infoTip.style.setProperty('display', 'none', 'important');
-            infoTip.style.setProperty('opacity', '0', 'important');
-        }
-        if (infoWrap) {
-            infoWrap.style.setProperty('pointer-events', 'none', 'important');
-        }
-    }
-    window.closeHomeChipDropdowns = closeHomeChipDropdowns;
-    window.positionHomeChipDropdown = positionHomeChipDropdown;
-    window.hideHomeChipMenu = hideHomeChipMenu;
-
     /** Keep configuration fields accessible and editable for user customization. */
     function lockSecondaryLaunchFields() {
         const isIos = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android') === 'IOS';
@@ -2654,21 +2590,6 @@
     }
     window.enhanceTableCustomSelects = enhanceTableCustomSelects;
 
-    document.addEventListener('click', function(e) {
-        const pageMenu = document.getElementById('pageNameDropdown');
-        const soMenu = document.getElementById('scenarioOutlineDropdown');
-        if (e.target && e.target.closest && (
-            e.target.closest('#pageNameDropdown') ||
-            e.target.closest('#scenarioOutlineDropdown') ||
-            e.target.closest('.screen-name-badge .dropdown-icon') ||
-            e.target.closest('#so_dropdown_icon')
-        )) {
-            return;
-        }
-        if (pageMenu) hideHomeChipMenu(pageMenu);
-        if (soMenu) hideHomeChipMenu(soMenu);
-    });
-
     function initAllCustomSelects() {
         document.querySelectorAll('select.js-custom-select, #platformname, #appname, #devicename').forEach((el) => {
             if (el.tagName !== 'SELECT') return;
@@ -2700,11 +2621,7 @@
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             try { closeAllCustomSelects(); } catch (_) {}
-            try { closeHomeChipDropdowns(); } catch (_) {}
         }
-    });
-    window.addEventListener('resize', () => {
-        try { closeHomeChipDropdowns(); } catch (_) {}
     });
 
     // ===========================================================================
@@ -12478,7 +12395,8 @@ function isScenarioNameInRepo(name) {
     if (!name || typeof name !== 'string') return false;
     const lower = name.trim().toLowerCase();
     const assets = getRepoAssetsForActiveApp();
-    return assets.scenarioNames.has(lower) || assets.pages.has(lower) || assets.featureNames.has(lower);
+    // Only real recorded scenarios — feature names like "new" in the table are not scenarios
+    return assets.scenarioNames.has(lower);
 }
 
 function isScenarioOutlineInRepo(outline) {
@@ -15129,9 +15047,13 @@ function initPageNameLogic() {
         if (!window._restoringProject && !window._applyingRepoToHome && typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     };
 
-    // --- Page Name dropdown (click, same as App dropdown — one box, no hover menu) ---
+    // --- MODERN DROPDOWN HOVER LOGIC ---
         if (dropdownIcon && dropdownMenu) {
-            function openPageNameMenu() {
+            let pageDropdownTimer; // Timer to hold the delay
+
+            // 1. Show on Hover (Icon)
+            dropdownIcon.addEventListener('mouseenter', function(e) {
+                clearTimeout(pageDropdownTimer); // Stop it from closing if returning
                 if (isEditMode) return;
 
                 if (!window.registeredPageNames) window.registeredPageNames = new Set();
@@ -15151,7 +15073,7 @@ function initPageNameLogic() {
                 }
 
                 if (uniquePages.size === 0) {
-                    hideHomeChipMenu(dropdownMenu);
+                    dropdownMenu.style.display = 'none';
                     return;
                 }
 
@@ -15189,7 +15111,7 @@ function initPageNameLogic() {
                     allItem.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         window.setGlobalPageName("All");
-                        hideHomeChipMenu(dropdownMenu);
+                        dropdownMenu.style.display = 'none';
 
                         pageNameInput.readOnly = true;
                         pageNameInput.style.cursor = 'default';
@@ -15242,7 +15164,7 @@ function initPageNameLogic() {
                     item.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         window.setGlobalPageName(page);
-                        hideHomeChipMenu(dropdownMenu);
+                        dropdownMenu.style.display = 'none';
 
                         pageNameInput.readOnly = true;
                         pageNameInput.style.cursor = 'default';
@@ -15285,7 +15207,7 @@ function initPageNameLogic() {
                             theme: "confirm"
                         });
 
-                        hideHomeChipMenu(dropdownMenu);
+                        dropdownMenu.style.display = 'none';
                     });
 
                     item.appendChild(textSpan);
@@ -15294,26 +15216,25 @@ function initPageNameLogic() {
                 });
 
                 dropdownMenu.style.display = 'block';
-                dropdownMenu.classList.add('is-visible');
-                if (typeof closeAllCustomSelects === 'function') closeAllCustomSelects();
-                if (typeof closeHomeChipDropdowns === 'function') closeHomeChipDropdowns(dropdownMenu);
-                if (typeof positionHomeChipDropdown === 'function') {
-                    positionHomeChipDropdown(badgeWrapper || dropdownIcon, dropdownMenu);
-                }
-            }
+            });
 
-            dropdownIcon.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                if (isEditMode) return;
-                const isOpen = dropdownMenu.classList.contains('is-visible')
-                    && dropdownMenu.style.display === 'block';
-                if (isOpen) {
-                    hideHomeChipMenu(dropdownMenu);
-                    dropdownMenu.classList.remove('is-visible');
-                    return;
-                }
-                openPageNameMenu();
+            // 2. Start timer when leaving the icon
+            dropdownIcon.addEventListener('mouseleave', function() {
+                pageDropdownTimer = setTimeout(() => {
+                    dropdownMenu.style.display = 'none';
+                }, 200); // 500ms gap allowance
+            });
+
+            // 3. Keep menu open if mouse enters the dropdown itself
+            dropdownMenu.addEventListener('mouseenter', function() {
+                clearTimeout(pageDropdownTimer);
+            });
+
+            // 4. Hide menu when mouse finally leaves the dropdown
+            dropdownMenu.addEventListener('mouseleave', function() {
+                pageDropdownTimer = setTimeout(() => {
+                    dropdownMenu.style.display = 'none';
+                }, 300);
             });
         }
 
@@ -15718,12 +15639,15 @@ function initScenarioOutlineLogic() {
 
     if (!soInput) return;
 
-    // --- SCENARIO DROPDOWN (click, same as App) ---
+    // --- MODERN DROPDOWN HOVER LOGIC ---
     if (soDropdownIcon && soDropdownMenu) {
-        function openScenarioMenu() {
+        let soDropdownTimer;
+
+        soDropdownIcon.addEventListener('mouseenter', function(e) {
+            clearTimeout(soDropdownTimer);
+
             if (!window.pageScenarioData || Object.keys(window.pageScenarioData).length === 0) {
-                hideHomeChipMenu(soDropdownMenu);
-                soDropdownMenu.classList.remove('is-visible');
+                soDropdownMenu.style.display = 'none';
                 return;
             }
 
@@ -15734,8 +15658,7 @@ function initScenarioOutlineLogic() {
             const validPages = Object.keys(window.pageScenarioData).filter(p => window.pageScenarioData[p] && window.pageScenarioData[p].scenarioOutline);
 
             if (validPages.length === 0) {
-                hideHomeChipMenu(soDropdownMenu);
-                soDropdownMenu.classList.remove('is-visible');
+                soDropdownMenu.style.display = 'none';
                 return;
             }
 
@@ -15771,7 +15694,7 @@ function initScenarioOutlineLogic() {
                 allItem.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     window.setGlobalPageName("All");
-                    hideHomeChipMenu(soDropdownMenu);
+                    soDropdownMenu.style.display = 'none';
                 });
 
                 soDropdownMenu.appendChild(allItem);
@@ -15820,7 +15743,7 @@ function initScenarioOutlineLogic() {
                 item.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     window.setGlobalPageName(page);
-                    hideHomeChipMenu(soDropdownMenu);
+                    soDropdownMenu.style.display = 'none';
                 });
 
                 // Trash Icon
@@ -15852,7 +15775,7 @@ function initScenarioOutlineLogic() {
                         theme: "confirm"
                     });
 
-                    hideHomeChipMenu(soDropdownMenu);
+                    soDropdownMenu.style.display = 'none';
                 });
 
                 item.appendChild(textSpan);
@@ -15861,31 +15784,27 @@ function initScenarioOutlineLogic() {
             });
 
             if (!hasItems) {
-                hideHomeChipMenu(soDropdownMenu);
-                soDropdownMenu.classList.remove('is-visible');
+                soDropdownMenu.style.display = 'none';
                 return;
             }
 
             soDropdownMenu.style.display = 'block';
-            soDropdownMenu.classList.add('is-visible');
-            if (typeof closeAllCustomSelects === 'function') closeAllCustomSelects();
-            if (typeof closeHomeChipDropdowns === 'function') closeHomeChipDropdowns(soDropdownMenu);
-            if (typeof positionHomeChipDropdown === 'function') {
-                positionHomeChipDropdown(document.getElementById('scenarioOutlineBar') || soDropdownIcon, soDropdownMenu);
-            }
-        }
+        });
 
-        soDropdownIcon.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-            const isOpen = soDropdownMenu.classList.contains('is-visible')
-                && soDropdownMenu.style.display === 'block';
-            if (isOpen) {
-                hideHomeChipMenu(soDropdownMenu);
-                soDropdownMenu.classList.remove('is-visible');
-                return;
-            }
-            openScenarioMenu();
+        soDropdownIcon.addEventListener('mouseleave', function() {
+            soDropdownTimer = setTimeout(() => {
+                soDropdownMenu.style.display = 'none';
+            }, 500);
+        });
+
+        soDropdownMenu.addEventListener('mouseenter', function() {
+            clearTimeout(soDropdownTimer);
+        });
+
+        soDropdownMenu.addEventListener('mouseleave', function() {
+            soDropdownTimer = setTimeout(() => {
+                soDropdownMenu.style.display = 'none';
+            }, 200);
         });
     }
 
@@ -16686,7 +16605,7 @@ onDomReady(() => {
             }
         }
 
-        // Check repository scenario names for this application
+        // Check repository for an actual scenario with this name (not a feature or page)
         if (typeof isScenarioNameInRepo === 'function' && isScenarioNameInRepo(trimmedVal)) {
             const isSelfRename = currentScenarioMode === "RECORD" && initialModalPageName && window.pageScenarioData && window.pageScenarioData[initialModalPageName] && window.pageScenarioData[initialModalPageName].scenarioName && window.pageScenarioData[initialModalPageName].scenarioName.trim().toLowerCase() === lowerVal;
             if (!isSelfRename) {

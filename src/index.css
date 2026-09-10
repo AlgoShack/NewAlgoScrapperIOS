@@ -3309,18 +3309,10 @@ th .resizer:hover {
 }
 
 /* Make both icons pop (slightly larger) when hovered */
-.badge-content .edit-icon:hover {
-    fill: #2F8BCC !important;
-    transform: scale(1.15);
-}
-
+.badge-content .edit-icon:hover,
 .badge-content .dropdown-icon:hover {
     fill: #2F8BCC !important;
-    transform: none !important;
-    background: transparent !important;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
+    transform: scale(1.15);
 }
 
 .badge-content .dropdown-icon:hover polygon {
@@ -3405,28 +3397,28 @@ th .resizer:hover {
 
 .scenario-outline-dropdown {
     display: none;
-    position: fixed !important;
-    top: 0;
-    left: 0;
-    right: auto !important;
+    position: absolute !important;
+    top: calc(100% + 6px) !important;
+    right: 0 !important;
     background: #ffffff !important;
-    border: 1px solid rgba(226, 232, 240, 0.95) !important;
+    border: 1px solid #e2e8f0 !important;
     border-radius: 10px !important;
-    max-height: 240px !important;
-    overflow-x: hidden !important;
+    max-height: 220px !important;
     overflow-y: auto !important;
-    z-index: 999999 !important;
-    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08) !important;
-    min-width: 180px !important;
-    padding: 5px !important;
-    box-sizing: border-box !important;
-    scrollbar-width: none !important;
+    z-index: 20050 !important;
+    box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 4px 10px -2px rgba(15, 23, 42, 0.08) !important;
+    min-width: 240px !important;
+    padding: 6px !important;
 }
 
-.scenario-outline-dropdown::-webkit-scrollbar {
-    width: 0 !important;
-    height: 0 !important;
-    display: none !important;
+.scenario-outline-dropdown::before {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 0;
+    right: 0;
+    height: 8px;
+    background: transparent;
 }
 
 .scenario-input {
@@ -3597,14 +3589,6 @@ th .resizer:hover {
 
 .scenario-dropdown-icon polygon {
     fill: #888888 !important;
-}
-
-.scenario-dropdown-icon:hover {
-    transform: none !important;
-    background: transparent !important;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
 }
 
 .scenario-dropdown-icon:hover polygon {
@@ -4182,15 +4166,8 @@ textarea.floating-input ~ .rec-error-icon {
 
 /* Make icons pop (slightly larger/blue) when hovered */
 .badge-content .add-page-icon:hover { stroke: #2F8BCC !important; transform: scale(1.15); }
-.badge-content .edit-icon:hover { fill: #2F8BCC !important; transform: scale(1.15); }
-.badge-content .dropdown-icon:hover {
-    fill: #2F8BCC !important;
-    transform: none !important;
-    background: transparent !important;
-    border: none !important;
-    outline: none !important;
-    box-shadow: none !important;
-}
+.badge-content .edit-icon:hover,
+.badge-content .dropdown-icon:hover { fill: #2F8BCC !important; transform: scale(1.15); }
 
 /* Force color change on internal polygon of dropdown arrow */
 .badge-content .dropdown-icon:hover polygon { fill: #2F8BCC !important; }
@@ -4765,7 +4742,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   Ensures the dropdown menu paints over the sticky table headers
 */
 #scenarioOutlineDropdown {
-    z-index: 999999 !important;
+    z-index: 1001 !important;
 }
 
 /* =============================================================================
@@ -5490,7 +5467,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   Ensures the dropdown menu paints over the sticky table headers
 */
 #scenarioOutlineDropdown {
-    z-index: 999999 !important;
+    z-index: 1001 !important;
 }
 
 /* =============================================================================
@@ -7499,37 +7476,6 @@ pre#configJsonPreview::-webkit-scrollbar,
   pointer-events: auto !important;
 }
 
-/* Beat badge:hover (same/higher specificity) so caret/menu never also shows the info tooltip box */
-.home-toolbar .screen-name-badge:not(.is-disabled).is-menu-open .info-icon-wrapper,
-.home-toolbar .screen-name-badge:not(.is-disabled):has(.dropdown-icon:hover) .info-icon-wrapper,
-.screen-name-badge:not(.is-disabled).is-menu-open .info-icon-wrapper,
-.screen-name-badge:not(.is-disabled):has(.dropdown-icon:hover) .info-icon-wrapper {
-  display: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-.home-toolbar .screen-name-badge:not(.is-disabled).is-menu-open .page-info-tooltip,
-.home-toolbar .screen-name-badge:not(.is-disabled):has(.dropdown-icon:hover) .page-info-tooltip,
-.screen-name-badge:not(.is-disabled).is-menu-open .page-info-tooltip,
-.screen-name-badge:not(.is-disabled):has(.dropdown-icon:hover) .page-info-tooltip {
-  display: none !important;
-  opacity: 0 !important;
-  visibility: hidden !important;
-  pointer-events: none !important;
-}
-
-.home-toolbar .screen-name-badge.is-menu-open,
-.screen-name-badge.is-menu-open {
-  box-shadow: 0 1px 2px rgba(47, 139, 204, 0.08) !important;
-}
-
-.home-toolbar .screen-name-badge:not(.is-disabled):has(.dropdown-icon:hover) .badge-content input[type="text"]#pagename_searchbox,
-.screen-name-badge:not(.is-disabled):has(.dropdown-icon:hover) .badge-content input[type="text"]#pagename_searchbox {
-  padding-left: 0 !important;
-}
-
 .home-toolbar .badge-content .add-page-icon,
 .home-toolbar .badge-content .edit-icon,
 .home-toolbar .badge-content .confirm-edit-icon,
@@ -7549,66 +7495,26 @@ pre#configJsonPreview::-webkit-scrollbar,
   transform: scale(1.15) !important;
 }
 
-.home-toolbar .badge-content .dropdown-icon:hover {
-  transform: none !important;
-  background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  box-shadow: none !important;
-}
-
 .home-toolbar .badge-content .dropdown-icon:hover polygon {
   fill: #2F8BCC !important;
 }
 
 #pageNameDropdown,
-.page-name-dropdown,
-#scenarioOutlineDropdown,
-.scenario-outline-dropdown {
+.page-name-dropdown {
   display: none;
-  position: fixed !important;
-  top: 0;
-  left: 0;
-  right: auto !important;
-  width: auto !important;
+  position: absolute !important;
+  top: calc(100% + 6px) !important;
+  right: 0 !important;
   background: #ffffff !important;
-  border: 1px solid rgba(226, 232, 240, 0.95) !important;
+  border: 1px solid #e2e8f0 !important;
   border-radius: 10px !important;
-  max-height: 240px !important;
-  overflow-x: hidden !important;
+  max-height: 220px !important;
   overflow-y: auto !important;
-  z-index: 999999 !important;
-  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 8px 10px -6px rgba(15, 23, 42, 0.08) !important;
-  min-width: 160px !important;
-  max-width: 280px !important;
-  padding: 5px !important;
-  box-sizing: border-box !important;
+  z-index: 100005 !important;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.15), 0 4px 10px -2px rgba(15, 23, 42, 0.08) !important;
+  min-width: 180px !important;
+  padding: 6px !important;
   scrollbar-width: none !important;
-  outline: none !important;
-}
-
-#pageNameDropdown > div,
-.page-name-dropdown > div,
-#scenarioOutlineDropdown > div,
-.scenario-outline-dropdown > div {
-  width: 100% !important;
-  box-sizing: border-box !important;
-}
-
-#pageNameDropdown.is-visible,
-.page-name-dropdown.is-visible,
-#scenarioOutlineDropdown.is-visible,
-.scenario-outline-dropdown.is-visible {
-  display: block;
-}
-
-#pageNameDropdown::-webkit-scrollbar,
-.page-name-dropdown::-webkit-scrollbar,
-#scenarioOutlineDropdown::-webkit-scrollbar,
-.scenario-outline-dropdown::-webkit-scrollbar {
-  width: 0 !important;
-  height: 0 !important;
-  display: none !important;
 }
 
 .home-toolbar .screen-name-badge.is-disabled {
