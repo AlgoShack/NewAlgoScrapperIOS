@@ -58,11 +58,6 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* Windows: match Mac compact fonts and control sizes on large monitors */
-html.platform-win {
-  zoom: 0.9;
-}
-
 /* =============================================================================
  * ZERO-SCROLLBAR SYSTEM (WINDOWS & MACOS PARITY)
  * Completely hides all scrollbars everywhere while preserving smooth scrolling
