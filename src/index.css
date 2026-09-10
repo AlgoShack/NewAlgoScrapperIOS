@@ -13773,8 +13773,28 @@ html.platform-win #tab-about .app-kbd:hover {
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1) !important;
 }
 
+/* Keep Configuration JSON editor as-is (same chrome as Mac) */
+html.os-win #tab-configuration .vscode-window {
+  border-radius: 8px !important;
+  border: 1px solid #2d2d2d !important;
+}
+html.os-win #tab-configuration .vscode-header {
+  height: 34px !important;
+  padding: 0 10px !important;
+}
+html.os-win #tab-configuration .vscode-mac-dots {
+  display: flex !important;
+}
+html.os-win #tab-configuration .vscode-tab {
+  border-radius: 4px 4px 0 0 !important;
+  height: 26px !important;
+  padding: 4px 12px !important;
+  border-top: 1px solid #007acc !important;
+  border-right: none !important;
+  font-family: inherit !important;
+}
 
-/* Windows only: Configuration cards hug content — no empty inner space, one screen */
+/* Windows only: Target Device + Last Configured Project hug content */
 html.os-win #tab-configuration.is-active {
   display: flex !important;
   flex-direction: column !important;
@@ -13811,7 +13831,7 @@ html.os-win #tab-configuration .config-metric-chip {
   box-shadow: none !important;
 }
 
-html.os-win #tab-configuration .config-dash-card,
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child,
 html.os-win #tab-configuration .config-project-launch-card {
   height: auto !important;
   border: 1px solid #e2e8f0 !important;
@@ -13832,12 +13852,13 @@ html.os-win #tab-configuration .config-dashboard-grid {
   align-items: stretch !important;
 }
 
-html.os-win #tab-configuration .config-dashboard-grid .config-dash-card {
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child {
   height: auto !important;
   min-height: 0 !important;
 }
 
-html.os-win #tab-configuration .dash-card-header {
+html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child .dash-card-header,
+html.os-win #tab-configuration .config-launch-card-header {
   padding: 8px 12px !important;
   flex-shrink: 0 !important;
 }
@@ -13863,27 +13884,6 @@ html.os-win #tab-configuration .dash-spec-hint {
 
 html.os-win #tab-configuration .dash-code-pill {
   padding: 3px 6px 3px 8px !important;
-}
-
-html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:last-child .dash-card-body {
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  overflow: hidden !important;
-  padding: 0 !important;
-}
-
-html.os-win #tab-configuration .vscode-window {
-  flex: 1 1 auto !important;
-  min-height: 220px !important;
-  height: 100% !important;
-  border: none !important;
-  border-top: 1px solid #2d2d2d !important;
-  border-radius: 0 0 10px 10px !important;
-  box-shadow: none !important;
-}
-
-html.os-win #tab-configuration .vscode-body {
-  overflow: auto !important;
 }
 
 html.os-win #tab-configuration .config-project-launch-section {
