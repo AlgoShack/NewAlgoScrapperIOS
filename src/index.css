@@ -13758,6 +13758,246 @@ html.platform-win #tab-about .app-kbd:hover {
   box-shadow: 0 2px 4px rgba(15, 23, 42, 0.1) !important;
 }
 
+/* Windows Configuration: fit everything on one screen, no page scroll */
+html.os-win #tab-configuration.is-active {
+  display: flex !important;
+  flex-direction: column !important;
+  padding: 8px 12px 10px !important;
+  overflow: hidden !important;
+  height: calc(100vh - 46px) !important;
+  max-height: calc(100vh - 46px) !important;
+  box-sizing: border-box !important;
+}
+
+html.os-win #tab-configuration .config-page-wrapper {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  gap: 7px !important;
+  overflow: hidden !important;
+  height: 100% !important;
+}
+
+html.os-win #tab-configuration .config-page-header {
+  padding: 0 2px 0 !important;
+  margin: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .config-header-title {
+  font-size: 13px !important;
+  margin: 0 0 1px !important;
+}
+
+html.os-win #tab-configuration .config-header-desc {
+  font-size: 10px !important;
+}
+
+html.os-win #tab-configuration .config-header-status {
+  padding: 3px 8px !important;
+  font-size: 10px !important;
+}
+
+html.os-win #tab-configuration .config-metrics-row {
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 7px !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .config-metric-chip {
+  padding: 5px 9px !important;
+  gap: 7px !important;
+  border-radius: 8px !important;
+}
+
+html.os-win #tab-configuration .config-metric-chip:hover {
+  transform: none !important;
+}
+
+html.os-win #tab-configuration .metric-chip-icon {
+  width: 24px !important;
+  height: 24px !important;
+}
+
+html.os-win #tab-configuration .metric-chip-icon svg {
+  width: 13px !important;
+  height: 13px !important;
+}
+
+html.os-win #tab-configuration .metric-chip-label {
+  font-size: 9px !important;
+}
+
+html.os-win #tab-configuration .metric-chip-value {
+  font-size: 11px !important;
+}
+
+html.os-win #tab-configuration .config-dashboard-grid {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 8px !important;
+  align-items: stretch !important;
+}
+
+html.os-win #tab-configuration .config-dash-card {
+  min-height: 0 !important;
+  overflow: hidden !important;
+  border-radius: 8px !important;
+  height: auto !important;
+}
+
+html.os-win #tab-configuration .config-dash-card:hover {
+  transform: none !important;
+}
+
+html.os-win #tab-configuration .dash-card-header {
+  padding: 6px 10px !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .dash-icon-box {
+  width: 22px !important;
+  height: 22px !important;
+}
+
+html.os-win #tab-configuration .dash-icon-box svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+html.os-win #tab-configuration .dash-card-title {
+  font-size: 11px !important;
+}
+
+html.os-win #tab-configuration .dash-card-subtitle {
+  font-size: 9px !important;
+}
+
+html.os-win #tab-configuration .dash-card-body {
+  padding: 7px 10px !important;
+  gap: 6px !important;
+  min-height: 0 !important;
+  overflow: auto !important;
+  flex: 1 1 auto !important;
+}
+
+html.os-win #tab-configuration .dash-spec-item {
+  gap: 1px !important;
+}
+
+html.os-win #tab-configuration .dash-spec-label {
+  font-size: 9px !important;
+}
+
+html.os-win #tab-configuration .dash-copy-btn {
+  font-size: 9px !important;
+  padding: 1px 5px !important;
+}
+
+html.os-win #tab-configuration .dash-prop-input {
+  font-size: 11px !important;
+}
+
+html.os-win #tab-configuration .dash-prop-input.mono {
+  font-size: 10.5px !important;
+}
+
+html.os-win #tab-configuration .dash-spec-hint {
+  font-size: 9px !important;
+}
+
+html.os-win #tab-configuration .vscode-window {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  height: auto !important;
+  max-height: none !important;
+  border-radius: 6px !important;
+  overflow: hidden !important;
+}
+
+html.os-win #tab-configuration .vscode-header {
+  height: 26px !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .vscode-tab {
+  height: 26px !important;
+  font-size: 10.5px !important;
+  padding: 0 10px !important;
+}
+
+html.os-win #tab-configuration .vscode-body {
+  min-height: 0 !important;
+  height: calc(100% - 26px) !important;
+  font-size: 10.5px !important;
+  line-height: 16px !important;
+}
+
+html.os-win #tab-configuration pre#configJsonPreview.vscode-code,
+html.os-win #tab-configuration .vscode-json-textarea {
+  font-size: 10.5px !important;
+  line-height: 16px !important;
+  padding: 3px 6px !important;
+}
+
+html.os-win #tab-configuration .vscode-gutter {
+  font-size: 9.5px !important;
+  line-height: 16px !important;
+  width: 30px !important;
+  min-width: 30px !important;
+  max-width: 30px !important;
+}
+
+html.os-win #tab-configuration .gutter-line {
+  height: 16px !important;
+  line-height: 16px !important;
+}
+
+html.os-win #tab-configuration .vscode-code-area {
+  left: 30px !important;
+  width: calc(100% - 30px) !important;
+  max-width: calc(100% - 30px) !important;
+}
+
+html.os-win #tab-configuration .config-project-launch-section {
+  margin-top: 0 !important;
+  flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .config-launch-card-header {
+  padding: 5px 10px !important;
+}
+
+html.os-win #tab-configuration .config-launch-card-body {
+  padding: 5px 10px 7px !important;
+  gap: 4px !important;
+}
+
+html.os-win #tab-configuration .config-project-card-box {
+  padding: 5px 8px !important;
+}
+
+html.os-win #tab-configuration .config-project-name {
+  font-size: 11px !important;
+}
+
+html.os-win #tab-configuration .config-project-key {
+  font-size: 9px !important;
+}
+
+html.os-win #tab-configuration .config-project-stat-pill {
+  font-size: 9px !important;
+}
+
+html.os-win #tab-configuration .config-action-btn {
+  padding: 4px 10px !important;
+  font-size: 10.5px !important;
+}
+
+html.os-win #tab-configuration .config-project-hint {
+  font-size: 9px !important;
+}
+
 /* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */
 html.os-win .error-icon-wrapper,
 html.os-win .error-info-icon,
