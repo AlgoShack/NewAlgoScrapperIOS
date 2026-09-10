@@ -58,6 +58,11 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Windows: match Mac compact fonts and control sizes on large monitors */
+html.platform-win {
+  zoom: 0.9;
+}
+
 /* =============================================================================
  * ZERO-SCROLLBAR SYSTEM (WINDOWS & MACOS PARITY)
  * Completely hides all scrollbars everywhere while preserving smooth scrolling
@@ -10124,9 +10129,9 @@ html.platform-win span.os-mac-only {
 }
 
 .repo-page-wrapper {
-  padding: 12px clamp(10px, 1.5vw, 20px) 40px !important;
-  max-width: 1300px;
-  margin: 0 auto;
+  padding: 12px clamp(10px, 1.5vw, 18px) 40px !important;
+  max-width: 100%;
+  margin: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
