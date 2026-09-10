@@ -477,19 +477,9 @@
             ? computeScreenSignature(currentDoc)
             : '';
         if (!currentSig) return false;
-        if (isSameLiveScreenStamp(areaSig, currentSig)) return true;
-        if (areaSig && typeof screenSignatureSimilarity === 'function'
-            && screenSignatureSimilarity(areaSig, currentSig) < 0.75) {
-            return false;
-        }
-        const xpaths = Array.isArray(area.xpaths) ? area.xpaths : [];
-        for (let i = 0; i < xpaths.length; i++) {
-            const liveRect = locatorRectInLiveDoc(xpaths[i], currentDoc);
-            if (!liveRect) continue;
-            if (!area.rect || !area.rect.width) return !areaSig;
-            if (rectsRoughlySame(area.rect, liveRect)) return true;
-        }
-        return false;
+        if (areaSig && areaSig === currentSig) return true;
+        if (!areaSig) return false;
+        return isSameLiveScreenStamp(areaSig, currentSig);
     }
     window.isFeatureOnCurrentDeviceScreen = isFeatureOnCurrentDeviceScreen;
 
@@ -508,26 +498,69 @@
         }
     }
 
+    function liveRectForRow(row) {
+        const xpaths = (typeof rowXPaths === 'function') ? rowXPaths(row) : [];
+        for (let i = 0; i < (xpaths || []).length; i++) {
+            const rect = locatorRectInLiveDoc(xpaths[i], window.xmlDoc);
+            if (rect && rect.width > 0 && rect.height > 0) return rect;
+        }
+        return null;
+    }
+
     function rowIsOnLiveScreen(row) {
         if (!row) return false;
         const live = getLiveScreenSignature();
         if (!live) return false;
         const rowSig = String((row.dataset && row.dataset.screenSignature) || '');
-        if (isSameLiveScreenStamp(rowSig, live)) return true;
-        const xpaths = (typeof rowXPaths === 'function') ? rowXPaths(row) : [];
-        const xpath = (xpaths && xpaths[0]) || '';
-        const liveRect = locatorRectInLiveDoc(xpath, window.xmlDoc);
+        if (rowSig && rowSig === live) return true;
+
+        const liveRect = liveRectForRow(row);
         if (!liveRect) return false;
-        let stored = null;
-        try {
-            stored = row.dataset && row.dataset.rect ? JSON.parse(row.dataset.rect) : null;
-        } catch (_) {
-            stored = null;
-        }
-        if (stored && stored.width > 0) return rectsRoughlySame(stored, liveRect);
-        return !rowSig;
+
+        const stored = storedRectForRow(row);
+        if (stored && stored.width > 0 && !rectsRoughlySame(stored, liveRect)) return false;
+
+        // Opened this screen (clock/layout drift) vs another screen with the same Search/Add xpath
+        if (rowSig) return isSameLiveScreenStamp(rowSig, live);
+        return !!(stored && stored.width > 0);
     }
     window.rowIsOnLiveScreen = rowIsOnLiveScreen;
+
+    function hoverRowToken(row) {
+        if (!row) return '';
+        return [
+            row.rowIndex || '',
+            String((row.dataset && row.dataset.screenSignature) || ''),
+            String((row.dataset && row.dataset.featureId) || '')
+        ].join('|');
+    }
+
+    function storedRectForRow(row) {
+        try {
+            return (row && row.dataset && row.dataset.rect) ? JSON.parse(row.dataset.rect) : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function controlIdBelongsOnOpenScreen(row, liveRect) {
+        if (!rowIsOnLiveScreen(row)) return false;
+        if (!liveRect || !liveRect.width) return false;
+        const live = getLiveScreenSignature();
+        const rowSig = String((row.dataset && row.dataset.screenSignature) || '');
+        if (rowSig && live && rowSig === live) return true;
+        const stored = storedRectForRow(row);
+        if (stored && stored.width > 0) return rectsRoughlySame(stored, liveRect);
+        return true;
+    }
+
+    function stopControlIdHoverPreview() {
+        lastXPath = "";
+        lastHoverRowToken = "";
+        hoverRequestId++;
+        clearTimeout(hoverTimer);
+        try { clearOverlay(); } catch (_) {}
+    }
 
     window._liveFeatureScreenEpoch = window._liveFeatureScreenEpoch || 1;
     function bumpLiveFeatureScreenEpoch(reason) {
@@ -554,17 +587,20 @@
         if (!liveSig) return;
 
         document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row)').forEach((row) => {
-            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(row)) return;
+            if (!rowIsOnLiveScreen(row)) return;
             if (row.dataset) row.dataset.screenSignature = liveSig;
         });
 
         (registeredFeatureAreas || []).forEach((area) => {
             if (!area || !area.name) return;
-            if (typeof isFeatureOnCurrentDeviceScreen === 'function' && !isFeatureOnCurrentDeviceScreen(area, doc)) return;
+            if (!isFeatureOnCurrentDeviceScreen(area, doc)) return;
             area.screenSignature = liveSig;
         });
         window.registeredFeatureAreas = registeredFeatureAreas;
-        try { lastXPath = ""; } catch (_) {}
+        try {
+            lastXPath = "";
+            lastHoverRowToken = "";
+        } catch (_) {}
     }
     window.realignLiveFeatureScreensToCurrentDoc = realignLiveFeatureScreensToCurrentDoc;
 
@@ -576,6 +612,9 @@
             if (prev && sig && typeof screenSignatureSimilarity === 'function'
                 && screenSignatureSimilarity(prev, sig) < 0.92) {
                 bumpLiveFeatureScreenEpoch('device-screen');
+            }
+            if (typeof realignLiveFeatureScreensToCurrentDoc === 'function') {
+                realignLiveFeatureScreensToCurrentDoc();
             }
         } catch (_) {}
     }
@@ -1069,6 +1108,7 @@
     let hoverRequestId = 0;
     let hoverTimer = null;
     let lastXPath = "";
+    let lastHoverRowToken = "";
     let oldFeatureNameValue = "";
     let oldControlNameValue = "";
     let pendingFeatureRename = null;
@@ -7094,27 +7134,29 @@
 
             const selectEl = xpathCell.querySelector("select");
             const xpath = selectEl ? selectEl.value.trim() : xpathCell.innerText.trim();
+            const hoverRow = xpathCell.closest('tr');
+            const rowToken = hoverRowToken(hoverRow);
 
             if (!xpath) {
                 onShowElementLeave(e);
                 return;
             }
 
-            if (xpath === lastXPath) return;
+            if (!rowIsOnLiveScreen(hoverRow)) {
+                stopControlIdHoverPreview();
+                return;
+            }
+
+            if (xpath === lastXPath && rowToken && rowToken === lastHoverRowToken) return;
 
             lastXPath = xpath;
+            lastHoverRowToken = rowToken;
             clearTimeout(hoverTimer);
 
             hoverRequestId++;
             const currentRequestId = hoverRequestId;
 
             clearOverlay();
-
-            const hoverRow = xpathCell.closest('tr');
-            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(hoverRow)) {
-                lastXPath = "";
-                return;
-            }
 
             if (xpath.startsWith("SWIPE(")) {
                 const match = xpath.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
@@ -7132,19 +7174,12 @@
                 return;
             }
 
-            // Prefer row-stored rect (instant) before XML/Appium lookup
-            try {
-                const row = xpathCell.closest('tr');
-                if (row && row.dataset && row.dataset.rect) {
-                    const stored = JSON.parse(row.dataset.rect);
-                    if (stored && stored.width > 0 && stored.height > 0) {
-                        drawShowElementMarker(stored);
-                    }
-                }
-            } catch (_) {}
-
             hoverTimer = setTimeout(async () => {
                 if (currentRequestId !== hoverRequestId) return;
+                if (!rowIsOnLiveScreen(hoverRow)) {
+                    stopControlIdHoverPreview();
+                    return;
+                }
 
                 showElementHover = true;
                 try {
@@ -7154,30 +7189,20 @@
 
                     if (currentRequestId !== hoverRequestId) return;
 
-                    if (!resolved) {
+                    if (!resolved || resolved.kind !== 'rect' || !controlIdBelongsOnOpenScreen(hoverRow, resolved)) {
                         clearOverlay();
-                        return;
-                    }
-
-                    if (resolved.kind === 'swipe') {
-                        drawSwipeHoverMarker(resolved.x1, resolved.y1, resolved.x2, resolved.y2);
-                        return;
-                    }
-                    if (resolved.kind === 'coordinate') {
-                        drawCoordinateHoverMarker(resolved.x, resolved.y);
                         return;
                     }
 
                     drawShowElementMarker(resolved);
 
-                    const row = xpathCell ? xpathCell.closest('tr') : null;
-                    const featCell = row ? row.querySelector('.featureName') : null;
+                    const featCell = hoverRow ? hoverRow.querySelector('.featureName') : null;
                     const rowFeatName = featCell ? (featCell.innerText || '').replace(/\u00a0/g, ' ').trim() : '';
-                    const pageCell = row ? row.querySelector('.page') : null;
+                    const pageCell = hoverRow ? hoverRow.querySelector('.page') : null;
                     const rowPageName = pageCell ? (pageCell.innerText || '').trim() : (document.getElementById('pagename_searchbox')?.value || '').trim();
                     const isPlaceholder = !rowFeatName || (rowPageName && rowFeatName.toLowerCase() === rowPageName.toLowerCase());
 
-                    if (!isPlaceholder && rowIsOnLiveScreen(row)) {
+                    if (!isPlaceholder && rowIsOnLiveScreen(hoverRow)) {
                         const targetLower = rowFeatName.toLowerCase();
                         let matchedArea = (registeredFeatureAreas || []).find(a =>
                             a && a.name && String(a.name).trim().toLowerCase() === targetLower && isFeatureAreaApplicableToPage(a, rowPageName)
@@ -7197,27 +7222,25 @@
 
         // Dedicated handler for option hover events (also exposed on window for legacy callers)
         async function onOptionHover(xpath, sourceRow) {
-            if (!xpath || xpath === lastXPath) return;
+            const optionRow = sourceRow || null;
+            if (!xpath) return;
+
+            if (!optionRow || !rowIsOnLiveScreen(optionRow)) {
+                stopControlIdHoverPreview();
+                return;
+            }
+
+            const rowToken = hoverRowToken(optionRow);
+            if (xpath === lastXPath && rowToken && rowToken === lastHoverRowToken) return;
 
             lastXPath = xpath;
+            lastHoverRowToken = rowToken;
             clearTimeout(hoverTimer);
 
             hoverRequestId++;
             const currentRequestId = hoverRequestId;
 
             clearOverlay();
-
-            const optionRow = sourceRow || (() => {
-                const selectOption = document.querySelector(`#myTable tr:not(.empty-excel-row) select option[value="${CSS.escape(xpath)}"]`);
-                return selectOption ? selectOption.closest('tr') : Array.from(document.querySelectorAll('#myTable tr:not(.empty-excel-row)')).find(r => {
-                    const sel = r.querySelector('.xpath select');
-                    return (sel && sel.value === xpath) || (r.querySelector('.xpath')?.innerText.trim() === xpath);
-                });
-            })();
-            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(optionRow)) {
-                lastXPath = "";
-                return;
-            }
 
             if (xpath.startsWith("SWIPE(")) {
                 const match = xpath.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
@@ -7237,6 +7260,10 @@
 
             hoverTimer = setTimeout(async () => {
                 if (currentRequestId !== hoverRequestId) return;
+                if (!rowIsOnLiveScreen(optionRow)) {
+                    stopControlIdHoverPreview();
+                    return;
+                }
 
                 showElementHover = true;
 
@@ -7246,29 +7273,20 @@
                         : null;
 
                     if (currentRequestId !== hoverRequestId) return;
-                    if (!resolved || resolved.kind !== 'rect') {
+                    if (!resolved || resolved.kind !== 'rect' || !controlIdBelongsOnOpenScreen(optionRow, resolved)) {
                         clearOverlay();
                         return;
                     }
 
                     drawShowElementMarker(resolved);
 
-                    let rowFeatName = '';
-                    let rowPageName = '';
-                    const selectOption = document.querySelector(`#myTable tr:not(.empty-excel-row) select option[value="${CSS.escape(xpath)}"]`);
-                    const matchingRow = selectOption ? selectOption.closest('tr') : Array.from(document.querySelectorAll('#myTable tr:not(.empty-excel-row)')).find(r => {
-                        const sel = r.querySelector('.xpath select');
-                        return (sel && sel.value === xpath) || (r.querySelector('.xpath')?.innerText.trim() === xpath);
-                    });
-                    if (matchingRow) {
-                        const fc = matchingRow.querySelector('.featureName');
-                        rowFeatName = fc ? (fc.innerText || '').replace(/\u00a0/g, ' ').trim() : '';
-                        const pc = matchingRow.querySelector('.page');
-                        rowPageName = pc ? (pc.innerText || '').trim() : (document.getElementById('pagename_searchbox')?.value || '').trim();
-                    }
+                    const fc = optionRow.querySelector('.featureName');
+                    const rowFeatName = fc ? (fc.innerText || '').replace(/\u00a0/g, ' ').trim() : '';
+                    const pc = optionRow.querySelector('.page');
+                    const rowPageName = pc ? (pc.innerText || '').trim() : (document.getElementById('pagename_searchbox')?.value || '').trim();
                     const isPlaceholder = !rowFeatName || (rowPageName && rowFeatName.toLowerCase() === rowPageName.toLowerCase());
 
-                    if (!isPlaceholder && rowIsOnLiveScreen(matchingRow)) {
+                    if (!isPlaceholder && rowIsOnLiveScreen(optionRow)) {
                         const targetLower = rowFeatName.toLowerCase();
                         let matchedArea = (registeredFeatureAreas || []).find(a =>
                             a && a.name && String(a.name).trim().toLowerCase() === targetLower && isFeatureAreaApplicableToPage(a, rowPageName)
@@ -7314,9 +7332,11 @@
 
             if (!xpath) return;
 
-            if (typeof rowIsOnLiveScreen === 'function' && !rowIsOnLiveScreen(hoverRow)) {
+            if (!rowIsOnLiveScreen(hoverRow)) {
+                stopControlIdHoverPreview();
                 return;
             }
+            lastHoverRowToken = hoverRowToken(hoverRow);
 
             if (xpath.startsWith("SWIPE(")) {
                 const match = xpath.match(/SWIPE\((\d+),(\d+),(\d+),(\d+)\)/);
@@ -7338,7 +7358,7 @@
                 const resolved = (typeof resolveHoverRectForLocator === 'function')
                     ? await resolveHoverRectForLocator(xpath)
                     : null;
-                if (resolved && resolved.kind === 'rect') {
+                if (resolved && resolved.kind === 'rect' && controlIdBelongsOnOpenScreen(hoverRow, resolved)) {
                     drawShowElementMarker(resolved);
                 } else if (resolved && resolved.kind === 'coordinate') {
                     drawCoordinateHoverMarker(resolved.x, resolved.y);
@@ -7354,7 +7374,8 @@
     function onShowElementLeave(e) {
             showElementHover = false;
             lastXPath = "";
-            hoverRequestId++; // MAGIC FIX: Instantly kills any pending Appium drawings!
+            lastHoverRowToken = "";
+            hoverRequestId++;
             clearTimeout(hoverTimer);
             clearOverlay();
         }
