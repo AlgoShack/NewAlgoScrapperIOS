@@ -6555,6 +6555,40 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   box-sizing: border-box !important;
 }
 
+#tab-configuration .vscode-gutter {
+  padding: 8px 4px !important;
+  font-size: 11px !important;
+  line-height: 18px !important;
+  width: 44px !important;
+  min-width: 44px !important;
+  max-width: 44px !important;
+}
+
+#tab-configuration .vscode-gutter .gutter-line {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  font-size: 11px !important;
+}
+
+#tab-configuration .vscode-gutter .gutter-line-num,
+#tab-configuration .vscode-gutter .gutter-glyph {
+  display: inline-flex !important;
+  height: 18px !important;
+  line-height: 18px !important;
+  font-size: 11px !important;
+}
+
+#tab-configuration .vscode-code-area {
+  left: 44px !important;
+  width: calc(100% - 44px) !important;
+  max-width: calc(100% - 44px) !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+
 pre#configJsonPreview.vscode-code {
   position: absolute !important;
   top: 0 !important;
@@ -6660,6 +6694,109 @@ pre#configJsonPreview::-webkit-scrollbar,
   width: 0 !important;
   height: 0 !important;
   background: transparent !important;
+}
+
+/* Configuration JSON editor only: visible drag scrollbar */
+#tab-configuration #configJsonPreview,
+#tab-configuration #configJsonEditor {
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #6b6b6b #252526 !important;
+  -ms-overflow-style: auto !important;
+}
+
+#tab-configuration #configJsonPreview::-webkit-scrollbar,
+#tab-configuration #configJsonEditor::-webkit-scrollbar {
+  display: block !important;
+  width: 10px !important;
+  height: 10px !important;
+  max-width: 10px !important;
+  max-height: 10px !important;
+  background: #252526 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  -webkit-appearance: auto !important;
+}
+
+#tab-configuration #configJsonPreview::-webkit-scrollbar-track,
+#tab-configuration #configJsonEditor::-webkit-scrollbar-track {
+  display: block !important;
+  background: #252526 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#tab-configuration #configJsonPreview::-webkit-scrollbar-thumb,
+#tab-configuration #configJsonEditor::-webkit-scrollbar-thumb {
+  display: block !important;
+  background: #6b6b6b !important;
+  border-radius: 8px !important;
+  border: 2px solid #252526 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#tab-configuration #configJsonPreview::-webkit-scrollbar-thumb:hover,
+#tab-configuration #configJsonEditor::-webkit-scrollbar-thumb:hover {
+  background: #858585 !important;
+}
+
+#tab-configuration #configJsonPreview::-webkit-scrollbar-corner,
+#tab-configuration #configJsonEditor::-webkit-scrollbar-corner {
+  display: block !important;
+  background: #1e1e1e !important;
+}
+
+/* Repository workspace JSON: visible drag scrollbar */
+#tab-repository.is-workspace-open #repoJsonEditorScroll,
+#repoJsonViewerBox #repoJsonEditorScroll {
+  overflow: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #6b6b6b #252526 !important;
+  -ms-overflow-style: auto !important;
+}
+
+#tab-repository.is-workspace-open #repoJsonEditorScroll::-webkit-scrollbar,
+#repoJsonViewerBox #repoJsonEditorScroll::-webkit-scrollbar {
+  display: block !important;
+  width: 10px !important;
+  height: 10px !important;
+  max-width: 10px !important;
+  max-height: 10px !important;
+  background: #252526 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  -webkit-appearance: auto !important;
+}
+
+#tab-repository.is-workspace-open #repoJsonEditorScroll::-webkit-scrollbar-track,
+#repoJsonViewerBox #repoJsonEditorScroll::-webkit-scrollbar-track {
+  display: block !important;
+  background: #252526 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#tab-repository.is-workspace-open #repoJsonEditorScroll::-webkit-scrollbar-thumb,
+#repoJsonViewerBox #repoJsonEditorScroll::-webkit-scrollbar-thumb {
+  display: block !important;
+  background: #6b6b6b !important;
+  border-radius: 8px !important;
+  border: 2px solid #252526 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+#tab-repository.is-workspace-open #repoJsonEditorScroll::-webkit-scrollbar-thumb:hover,
+#repoJsonViewerBox #repoJsonEditorScroll::-webkit-scrollbar-thumb:hover {
+  background: #858585 !important;
+}
+
+#tab-repository.is-workspace-open #repoJsonEditorScroll::-webkit-scrollbar-corner,
+#repoJsonViewerBox #repoJsonEditorScroll::-webkit-scrollbar-corner {
+  display: block !important;
+  background: #1e1e1e !important;
 }
 
 .vscode-json-textarea::selection {
@@ -12046,8 +12183,8 @@ html.os-win .sc-subtitle-win {
   background-color: #1e1e1e !important;
   overflow: auto !important;
   padding: 12px 0 16px 0 !important;
-  scrollbar-width: none !important;
-  /* scrollbar-color removed */
+  scrollbar-width: thin !important;
+  scrollbar-color: #6b6b6b #252526 !important;
   outline: none !important;
   border: none !important;
   box-shadow: none !important;
@@ -12293,7 +12430,6 @@ html.os-win .sc-subtitle-win {
 /* VS Code Gutter with Line Numbers */
 #tab-repository.is-workspace-open .vscode-gutter,
 #tab-repository.is-workspace-open #repoJsonGutter,
-.vscode-gutter,
 #repoJsonGutter {
   display: flex !important;
   flex-direction: column !important;
@@ -12314,7 +12450,6 @@ html.os-win .sc-subtitle-win {
 
 #tab-repository.is-workspace-open .vscode-gutter span,
 #tab-repository.is-workspace-open .vscode-gutter div,
-.vscode-gutter span,
 #repoJsonGutter span {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 12px !important;
@@ -12327,7 +12462,7 @@ html.os-win .sc-subtitle-win {
 
 /* Code Area & Preformatted JSON */
 #tab-repository.is-workspace-open .vscode-code-area,
-.vscode-code-area {
+#tab-repository .vscode-code-area {
   flex: 1 !important;
   padding: 0 20px 0 14px !important;
   overflow: visible !important;
@@ -12344,7 +12479,6 @@ html.os-win .sc-subtitle-win {
 #tab-repository.is-workspace-open pre#repoJsonCodeContent,
 #tab-repository pre.vscode-code,
 #tab-repository pre#repoJsonCodeContent,
-pre.vscode-code,
 pre#repoJsonCodeContent {
   margin: 0 !important;
   padding: 0 !important;
