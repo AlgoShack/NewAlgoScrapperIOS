@@ -5532,7 +5532,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 #tab-configuration.is-active {
   display: flex !important;
   flex-direction: column !important;
-  padding: clamp(8px, 1.2vw, 14px) clamp(10px, 1.5vw, 18px) 12px !important;
+  padding: 8px 12px 8px !important;
   overflow: hidden !important;
   height: 100% !important;
   max-height: 100% !important;
@@ -5559,15 +5559,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   margin: 0 !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  flex: 1 1 auto !important;
-  min-height: 0 !important;
-  height: 100% !important;
-  overflow: hidden !important;
+  gap: 6px !important;
 }
 
 /* TOP CLEAN HEADER */
@@ -5581,8 +5573,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .config-header-title {
-  margin: 0 0 2px;
-  font-size: 15px;
+  margin: 0 0 1px;
+  font-size: 13px;
   font-weight: 700;
   color: #1e293b;
   letter-spacing: -0.2px;
@@ -5590,7 +5582,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 .config-header-desc {
   margin: 0;
-  font-size: 11px;
+  font-size: 10px;
   color: #64748b;
   font-weight: 400;
 }
@@ -5601,9 +5593,9 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   gap: 6px;
   background: #ffffff;
   border: 1px solid var(--as-border);
-  padding: 4px 10px;
+  padding: 3px 8px;
   border-radius: 20px;
-  font-size: 11px;
+  font-size: 10px;
   color: #475569;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -5633,18 +5625,18 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .config-metrics-row {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(8px, 1vw, 12px);
+  gap: 6px;
   flex-shrink: 0;
 }
 
 .config-metric-chip {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   background: #ffffff;
   border: 1px solid var(--as-border);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 8px;
+  padding: 5px 8px;
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.03);
   transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
               box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1), 
@@ -5658,8 +5650,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .metric-chip-icon {
-  width: 28px;
-  height: 28px;
+  width: 22px;
+  height: 22px;
   border-radius: 7px;
   display: flex;
   align-items: center;
@@ -5677,17 +5669,17 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .metric-chip-icon.green { background: #f0fdf4; color: #16a34a; }
 .metric-chip-icon.orange { background: #fff7ed; color: #ea580c; }
 
-.metric-chip-icon svg { width: 15px; height: 15px; }
+.metric-chip-icon svg { width: 12px; height: 12px; }
 
 .metric-chip-content { display: flex; flex-direction: column; }
-.metric-chip-label { font-size: 9.5px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
-.metric-chip-value { font-size: 12px; font-weight: 700; color: #0f172a; margin-top: 1px; }
+.metric-chip-label { font-size: 8.5px; font-weight: 700; text-transform: uppercase; color: #64748b; letter-spacing: 0.04em; }
+.metric-chip-value { font-size: 11px; font-weight: 700; color: #0f172a; margin-top: 0; }
 
 /* 2-COLUMN DASHBOARD GRID */
 .config-dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: clamp(10px, 1.2vw, 16px);
+  gap: 8px;
   align-items: stretch;
   width: 100%;
   box-sizing: border-box;
@@ -5720,7 +5712,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .dash-card-header {
-  padding: 10px 14px;
+  padding: 6px 10px;
   background: #ffffff;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
@@ -5735,8 +5727,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .dash-icon-box {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 6px;
   display: flex;
   align-items: center;
@@ -5751,35 +5743,35 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 .dash-icon-box.blue { background: #eff6ff; color: #2F8BCC; }
 .dash-icon-box.purple { background: #faf5ff; color: #a855f7; }
-.dash-icon-box svg { width: 14px; height: 14px; }
+.dash-icon-box svg { width: 12px; height: 12px; }
 
 .dash-card-title {
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   color: #1e293b;
 }
 
 .dash-card-subtitle {
   margin: 0;
-  font-size: 10px;
+  font-size: 9px;
   color: #64748b;
 }
 
 .dash-card-body {
-  padding: 12px 14px;
+  padding: 6px 10px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 5px;
   flex: 1;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .dash-spec-item {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
 }
 
 .dash-spec-label-row {
@@ -5789,7 +5781,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .dash-spec-label {
-  font-size: 9.5px;
+  font-size: 8.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -5800,11 +5792,11 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 2px 7px;
+  padding: 1px 5px;
   border-radius: 4px;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: #475569;
   cursor: pointer;
@@ -5824,8 +5816,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 .dash-code-pill {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 6px;
-  padding: 4px 10px;
+  border-radius: 5px;
+  padding: 2px 8px;
   display: flex;
   align-items: center;
 }
@@ -5838,7 +5830,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   background: transparent !important;
   border: none !important;
   outline: none !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
   font-weight: 600 !important;
   color: #0f172a !important;
   cursor: default !important;
@@ -5847,12 +5839,17 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 
 .dash-prop-input.mono {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
-  font-size: 11.5px !important;
+  font-size: 10.5px !important;
   color: #1e293b !important;
 }
 
-.dash-spec-hint {
-  font-size: 9.5px;
+.config-dashboard-grid .dash-spec-hint {
+  display: none;
+}
+
+#configProjectHint.dash-spec-hint {
+  display: block;
+  font-size: 9px;
   color: #94a3b8;
 }
 
@@ -5877,7 +5874,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 14px;
+  padding: 5px 10px;
   border-bottom: 1px solid #f1f5f9;
   background: #fafbfc;
   gap: 12px;
@@ -5895,8 +5892,8 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 5px 13px;
-  font-size: 11.5px;
+  padding: 4px 11px;
+  font-size: 10.5px;
   font-weight: 600;
   border-radius: 6px;
   cursor: pointer;
@@ -5941,20 +5938,20 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .config-launch-card-body {
-  padding: 10px 14px 10px;
+  padding: 6px 10px 7px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .config-project-card-box {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
-  padding: 8px 12px;
+  padding: 5px 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   transition: all 0.15s ease;
 }
 
@@ -6014,7 +6011,7 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
 }
 
 .config-project-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
@@ -13774,7 +13771,7 @@ html.os-win #tab-configuration .vscode-window {
   border: 1px solid #2d2d2d !important;
 }
 html.os-win #tab-configuration .vscode-header {
-  height: 34px !important;
+  height: 28px !important;
   padding: 0 10px !important;
 }
 html.os-win #tab-configuration .vscode-mac-dots {
@@ -13782,11 +13779,47 @@ html.os-win #tab-configuration .vscode-mac-dots {
 }
 html.os-win #tab-configuration .vscode-tab {
   border-radius: 4px 4px 0 0 !important;
-  height: 26px !important;
-  padding: 4px 12px !important;
+  height: 24px !important;
+  padding: 2px 10px !important;
   border-top: 1px solid #007acc !important;
   border-right: none !important;
   font-family: inherit !important;
+  font-size: 10.5px !important;
+}
+
+/* Config JSON editor: no inner scroll — fit in the remaining card */
+#tab-configuration .vscode-header {
+  height: 28px !important;
+}
+#tab-configuration .vscode-body {
+  height: calc(100% - 28px) !important;
+  overflow: hidden !important;
+  font-size: 10px !important;
+}
+#tab-configuration .vscode-gutter {
+  font-size: 9.5px !important;
+  line-height: 15px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  max-width: 32px !important;
+  padding: 4px 2px !important;
+}
+#tab-configuration .gutter-line {
+  height: 15px !important;
+  line-height: 15px !important;
+}
+#tab-configuration .vscode-code-area {
+  left: 32px !important;
+  width: calc(100% - 32px) !important;
+  max-width: calc(100% - 32px) !important;
+  overflow: hidden !important;
+}
+#tab-configuration pre#configJsonPreview.vscode-code,
+#tab-configuration .vscode-json-textarea {
+  font-size: 10px !important;
+  line-height: 15px !important;
+  padding: 4px 6px !important;
+  overflow: hidden !important;
 }
 
 /* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */
