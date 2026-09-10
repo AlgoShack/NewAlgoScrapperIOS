@@ -2317,8 +2317,13 @@
                 const text = (selectedOpt.textContent || selectedOpt.value || '').trim();
                 labelEl.textContent = text || 'Select...';
                 if (inTable) {
-                    labelEl.title = text || '';
-                    trigger.title = text || '';
+                    if (selectEl.classList.contains('control-id-dropdown')) {
+                        labelEl.removeAttribute('title');
+                        trigger.removeAttribute('title');
+                    } else {
+                        labelEl.title = text || '';
+                        trigger.title = text || '';
+                    }
                 }
                 const softPlaceholder = !text
                     || /^loading apps/i.test(text)
@@ -16552,7 +16557,7 @@ onDomReady(() => {
                         }
                     })();
 
-                    showCustomAlert("Feature Mode Active", "Hover a control until only that area is outlined, then click to create a feature for that element. The full screen is never saved as a feature.", "success");
+                    showCustomAlert("Feature Mode Active", "Hover over a UI element to highlight its specific area, then click to create a feature for that element.", "success");
                 } else {
                     createFeatureBtn.style.backgroundColor = "#2F8BCC";
                     if (btnSpan) btnSpan.innerText = "Create Feature";
@@ -19324,21 +19329,21 @@ if (platformVersionField) {
         const pageKey = (pName || '').trim().toLowerCase();
         const pageRows = pageKey
             ? tableRows.filter(r => (r['PAGE NAME'] || '').trim().toLowerCase() === pageKey)
-            : tableRows;
-        const liveRows = pageRows.length > 0 ? pageRows : tableRows;
+            : [];
 
         const existingEls = (existingIdx >= 0 && Array.isArray(project.scenarios[existingIdx].elements))
             ? project.scenarios[existingIdx].elements
             : [];
         let scenElements;
         if (Array.isArray(elements) && elements.length > 0) {
-            scenElements = elements;
-        } else if (liveRows.length > 0) {
-            scenElements = liveRows;
-        } else if (existingEls.length > 0 && tableRows.length > 0) {
-            scenElements = existingEls;
-        } else if (Array.isArray(elements) && elements.length === 0 && tableRows.length === 0) {
+            scenElements = elements.filter(r => {
+                if (!pageKey) return true;
+                return String((r && (r['PAGE NAME'] || r.PageName)) || '').trim().toLowerCase() === pageKey;
+            });
+        } else if (Array.isArray(elements) && elements.length === 0) {
             scenElements = [];
+        } else if (pageRows.length > 0) {
+            scenElements = pageRows;
         } else {
             scenElements = existingEls;
         }
@@ -19787,8 +19792,10 @@ if (platformVersionField) {
                 : [];
             if (Array.isArray(liveFeatures)) {
                 liveFeatures.forEach(area => {
-                    if (area && area.name) {
-                        window.saveFeatureToRepo(
+                    if (!area || !area.name) return;
+                    if (typeof isDistinctFeatureName === 'function'
+                        && !isDistinctFeatureName(area.name, area.pageName)) return;
+                    window.saveFeatureToRepo(
                             area.name,
                             area.rect,
                             area.fullPage,
@@ -19803,7 +19810,6 @@ if (platformVersionField) {
                             area.xpaths,
                             area.id
                         );
-                    }
                 });
             }
 
