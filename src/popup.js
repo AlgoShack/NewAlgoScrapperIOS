@@ -1815,6 +1815,70 @@
     }
     window.setPageNameBoxEnabled = setPageNameBoxEnabled;
 
+    function hideHomeChipMenu(el) {
+        if (!el) return;
+        el.classList.remove('is-visible');
+        el.style.setProperty('display', 'none', 'important');
+        if (el.id === 'pageNameDropdown') {
+            document.querySelectorAll('.screen-name-badge').forEach((b) => {
+                b.classList.remove('is-menu-open');
+                const infoTip = b.querySelector('.page-info-tooltip');
+                const infoWrap = b.querySelector('.info-icon-wrapper');
+                if (infoTip) {
+                    infoTip.style.removeProperty('display');
+                    infoTip.style.removeProperty('opacity');
+                }
+                if (infoWrap) infoWrap.style.removeProperty('pointer-events');
+            });
+        }
+        if (el.id === 'scenarioOutlineDropdown') {
+            const bar = document.getElementById('scenarioOutlineBar');
+            if (bar) bar.classList.remove('is-menu-open');
+        }
+    }
+
+    function closeHomeChipDropdowns(exceptMenu) {
+        ['pageNameDropdown', 'scenarioOutlineDropdown'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el || el === exceptMenu) return;
+            hideHomeChipMenu(el);
+        });
+    }
+
+    function positionHomeChipDropdown(anchorEl, menuEl) {
+        if (!anchorEl || !menuEl) return;
+        if (menuEl.parentNode !== document.body) {
+            document.body.appendChild(menuEl);
+        }
+        const chip = anchorEl.closest('.screen-name-badge, .scenario-outline-bar') || anchorEl;
+        const r = chip.getBoundingClientRect();
+        menuEl.style.setProperty('position', 'fixed', 'important');
+        menuEl.style.setProperty('top', `${Math.round(r.bottom + 4)}px`, 'important');
+        menuEl.style.setProperty('left', `${Math.round(r.left)}px`, 'important');
+        menuEl.style.setProperty('right', 'auto', 'important');
+        menuEl.style.setProperty('bottom', 'auto', 'important');
+        menuEl.style.setProperty('min-width', '160px', 'important');
+        menuEl.style.setProperty('width', 'auto', 'important');
+        menuEl.style.setProperty('max-width', '280px', 'important');
+        menuEl.style.setProperty('background', '#ffffff', 'important');
+        menuEl.style.setProperty('z-index', '999999', 'important');
+        menuEl.style.setProperty('display', 'block', 'important');
+        menuEl.classList.add('is-visible', 'custom-select-menu');
+        chip.classList.add('is-menu-open');
+        const infoTip = chip.querySelector('.page-info-tooltip');
+        const infoWrap = chip.querySelector('.info-icon-wrapper');
+        if (infoTip) {
+            infoTip.style.setProperty('display', 'none', 'important');
+            infoTip.style.setProperty('opacity', '0', 'important');
+        }
+        if (infoWrap) {
+            infoWrap.style.setProperty('pointer-events', 'none', 'important');
+        }
+    }
+    window.closeHomeChipDropdowns = closeHomeChipDropdowns;
+    window.positionHomeChipDropdown = positionHomeChipDropdown;
+    window.hideHomeChipMenu = hideHomeChipMenu;
+
     /** Keep configuration fields accessible and editable for user customization. */
     function lockSecondaryLaunchFields() {
         const isIos = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android') === 'IOS';
@@ -2590,6 +2654,21 @@
     }
     window.enhanceTableCustomSelects = enhanceTableCustomSelects;
 
+    document.addEventListener('click', function(e) {
+        const pageMenu = document.getElementById('pageNameDropdown');
+        const soMenu = document.getElementById('scenarioOutlineDropdown');
+        if (e.target && e.target.closest && (
+            e.target.closest('#pageNameDropdown') ||
+            e.target.closest('#scenarioOutlineDropdown') ||
+            e.target.closest('.screen-name-badge .dropdown-icon') ||
+            e.target.closest('#so_dropdown_icon')
+        )) {
+            return;
+        }
+        if (pageMenu) hideHomeChipMenu(pageMenu);
+        if (soMenu) hideHomeChipMenu(soMenu);
+    });
+
     function initAllCustomSelects() {
         document.querySelectorAll('select.js-custom-select, #platformname, #appname, #devicename').forEach((el) => {
             if (el.tagName !== 'SELECT') return;
@@ -2621,7 +2700,11 @@
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
             try { closeAllCustomSelects(); } catch (_) {}
+            try { closeHomeChipDropdowns(); } catch (_) {}
         }
+    });
+    window.addEventListener('resize', () => {
+        try { closeHomeChipDropdowns(); } catch (_) {}
     });
 
     // ===========================================================================
@@ -3763,18 +3846,24 @@
                 } catch (_) {}
             }
 
-            if (platform === 'Android') {
-                // Fill Android Package
+            if (platform === 'Android' || platformKey === 'Android') {
                 const pkgEl = document.getElementById("apppackage");
                 const actEl = document.getElementById("appactivity");
-                if (pkgEl) pkgEl.value = this.value;
-                if (actEl) actEl.value = "Loading Activity...";
-
-                // Ask main.js to use ADB to find the exact MainActivity for this package
-                ipcRenderer.send("get-android-activity", {
-                    udid: (document.getElementById('udid') && document.getElementById('udid').value) || '',
-                    pkg: this.value
-                });
+                const nextPkg = String(this.value || '').trim();
+                const prevPkg = pkgEl ? String(pkgEl.value || '').trim() : '';
+                const prevAct = actEl ? String(actEl.value || '').trim() : '';
+                const actAlreadyResolved = prevAct
+                    && prevAct.toLowerCase() !== 'loading activity...'
+                    && prevAct.toLowerCase() !== 'no activity specified';
+                if (pkgEl) pkgEl.value = nextPkg;
+                // Same package already has a real activity (Launch Project re-syncs App) — do not wipe it
+                if (!(prevPkg && nextPkg && prevPkg === nextPkg && actAlreadyResolved)) {
+                    if (actEl) actEl.value = "Loading Activity...";
+                    ipcRenderer.send("get-android-activity", {
+                        udid: (document.getElementById('udid') && document.getElementById('udid').value) || '',
+                        pkg: nextPkg
+                    });
+                }
             } else {
                 // Fill iOS Bundle ID
                 const bEl = document.getElementById("bundleID");
@@ -3802,8 +3891,14 @@
         // Receive the Android Activity from main.js and populate the field
         ipcRenderer.on("receive-android-activity", (event, activity) => {
             const actEl = document.getElementById("appactivity");
+            const next = String(activity || "").trim();
+            if (!next && actEl && actEl.value
+                && actEl.value.toLowerCase() !== 'loading activity...'
+                && actEl.value.toLowerCase() !== 'no activity specified') {
+                return;
+            }
             if (actEl) {
-                actEl.value = activity || "";
+                actEl.value = next;
             }
             if (typeof updateConfigDashboard === 'function') {
                 updateConfigDashboard();
@@ -4047,6 +4142,62 @@
     }
     window.getAppConfiguredProject = getAppConfiguredProject;
 
+    function isUnresolvedAndroidActivity(val) {
+        const a = String(val || '').trim();
+        if (!a) return true;
+        const lower = a.toLowerCase();
+        return lower === 'loading activity...' || lower === 'no activity specified';
+    }
+
+    function activityFromCapsObject(caps) {
+        if (!caps || typeof caps !== 'object') return '';
+        const a = String(caps['appium:appActivity'] || caps.appActivity || '').trim();
+        return isUnresolvedAndroidActivity(a) ? '' : a;
+    }
+
+    function resolveAndroidActivityForLaunch(project) {
+        const fromInput = (document.getElementById('appactivity')?.value || '').trim();
+        if (!isUnresolvedAndroidActivity(fromInput)) return fromInput;
+        const fromProject = activityFromCapsObject(project && project.capabilities);
+        if (fromProject) return fromProject;
+        try {
+            const editor = document.getElementById('configJsonEditor');
+            if (editor && editor.value) {
+                const parsed = JSON.parse(editor.value);
+                const fromEditor = activityFromCapsObject(parsed);
+                if (fromEditor) return fromEditor;
+            }
+        } catch (_) {}
+        return '';
+    }
+
+    function waitForAndroidActivityResolve(timeoutMs) {
+        return new Promise((resolve) => {
+            const current = (document.getElementById('appactivity')?.value || '').trim();
+            if (!isUnresolvedAndroidActivity(current)) {
+                resolve(current);
+                return;
+            }
+            let settled = false;
+            const finish = (val) => {
+                if (settled) return;
+                settled = true;
+                try { ipcRenderer.removeListener('receive-android-activity', onAct); } catch (_) {}
+                resolve(String(val || '').trim());
+            };
+            const timer = setTimeout(() => {
+                finish(document.getElementById('appactivity')?.value || '');
+            }, timeoutMs || 8000);
+            const onAct = (_event, activity) => {
+                const a = String(activity || '').trim();
+                if (isUnresolvedAndroidActivity(a)) return;
+                clearTimeout(timer);
+                finish(a);
+            };
+            ipcRenderer.on('receive-android-activity', onAct);
+        });
+    }
+
     window.openActiveProjectInRepo = function() {
         const key = window.activeConfiguredProjectKey || window.activeResumedProjectKey;
         if (typeof switchAppTab === 'function') switchAppTab('repository');
@@ -4118,6 +4269,7 @@
         }
 
         // 2. Synchronize Platform & App in Home page if a project is configured
+        let didReselectApp = false;
         if (project) {
             window.activeResumedProjectKey = key;
             window.activeConfiguredProjectKey = key;
@@ -4130,16 +4282,27 @@
                 if (typeof updatePlatformUI === 'function') updatePlatformUI();
             }
 
-            // Sync app in dropdown if present
+            // Sync app in dropdown if present — do not re-fire change when already selected
             const appSelect = document.getElementById('appname');
             if (appSelect && appSelect.options) {
                 const targetAppName = (project.appName || '').toLowerCase();
+                const targetPkg = String(
+                    (project.capabilities && (project.capabilities['appium:appPackage'] || project.capabilities.appPackage))
+                    || ''
+                ).trim().toLowerCase();
                 for (let i = 0; i < appSelect.options.length; i++) {
                     const opt = appSelect.options[i];
                     const optText = (opt.text || opt.innerText || '').toLowerCase();
-                    if (optText === targetAppName || opt.value === targetAppName) {
-                        appSelect.selectedIndex = i;
-                        appSelect.dispatchEvent(new Event('change'));
+                    const optVal = String(opt.value || '').toLowerCase();
+                    if (optText === targetAppName || optVal === targetAppName || (targetPkg && optVal === targetPkg)) {
+                        if (appSelect.selectedIndex !== i) {
+                            appSelect.selectedIndex = i;
+                            didReselectApp = true;
+                            appSelect.dispatchEvent(new Event('change'));
+                            if (typeof appSelect._rebuildCustomSelect === 'function') {
+                                appSelect._rebuildCustomSelect();
+                            }
+                        }
                         break;
                     }
                 }
@@ -4151,7 +4314,7 @@
         const appName = (document.getElementById('appname')?.value || '').trim();
         const bundleID = (document.getElementById('bundleID')?.value || '').trim();
         const appPackage = (document.getElementById('apppackage')?.value || '').trim();
-        const appActivity = (document.getElementById('appactivity')?.value || '').trim();
+        let appActivity = resolveAndroidActivityForLaunch(project);
         const appiumURL = (document.getElementById('appiumurl')?.value || '').trim();
 
         // 3. Device connectivity validation
@@ -4232,18 +4395,30 @@
                 }
                 return;
             }
-            if (!appActivity || appActivity.toLowerCase() === 'loading activity...') {
-                if (typeof showStructuredAlert === 'function') {
-                    showStructuredAlert(
-                        "App Activity Required",
-                        {
-                            lead: "Android Activity is still resolving.",
-                            hint: "Wait a moment, or enter MainActivity manually before launching."
-                        },
-                        "warning"
-                    );
+            if (isUnresolvedAndroidActivity(appActivity)) {
+                const waited = await waitForAndroidActivityResolve(didReselectApp ? 8000 : 2000);
+                if (!isUnresolvedAndroidActivity(waited)) {
+                    appActivity = waited;
+                } else {
+                    appActivity = resolveAndroidActivityForLaunch(project);
                 }
-                return;
+                if (isUnresolvedAndroidActivity(appActivity)) {
+                    if (typeof showStructuredAlert === 'function') {
+                        showStructuredAlert(
+                            "App Activity Required",
+                            {
+                                lead: "Android Activity is still resolving.",
+                                hint: "Wait a moment, or enter MainActivity manually before launching."
+                            },
+                            "warning"
+                        );
+                    }
+                    return;
+                }
+            }
+            const actInput = document.getElementById('appactivity');
+            if (actInput && actInput.value !== appActivity) {
+                actInput.value = appActivity;
             }
         }
 
@@ -14954,13 +15129,9 @@ function initPageNameLogic() {
         if (!window._restoringProject && !window._applyingRepoToHome && typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
     };
 
-    // --- MODERN DROPDOWN HOVER LOGIC ---
+    // --- Page Name dropdown (click, same as App dropdown — one box, no hover menu) ---
         if (dropdownIcon && dropdownMenu) {
-            let pageDropdownTimer; // Timer to hold the delay
-
-            // 1. Show on Hover (Icon)
-            dropdownIcon.addEventListener('mouseenter', function(e) {
-                clearTimeout(pageDropdownTimer); // Stop it from closing if returning
+            function openPageNameMenu() {
                 if (isEditMode) return;
 
                 if (!window.registeredPageNames) window.registeredPageNames = new Set();
@@ -14980,7 +15151,7 @@ function initPageNameLogic() {
                 }
 
                 if (uniquePages.size === 0) {
-                    dropdownMenu.style.display = 'none';
+                    hideHomeChipMenu(dropdownMenu);
                     return;
                 }
 
@@ -15018,7 +15189,7 @@ function initPageNameLogic() {
                     allItem.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         window.setGlobalPageName("All");
-                        dropdownMenu.style.display = 'none';
+                        hideHomeChipMenu(dropdownMenu);
 
                         pageNameInput.readOnly = true;
                         pageNameInput.style.cursor = 'default';
@@ -15071,7 +15242,7 @@ function initPageNameLogic() {
                     item.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         window.setGlobalPageName(page);
-                        dropdownMenu.style.display = 'none';
+                        hideHomeChipMenu(dropdownMenu);
 
                         pageNameInput.readOnly = true;
                         pageNameInput.style.cursor = 'default';
@@ -15114,7 +15285,7 @@ function initPageNameLogic() {
                             theme: "confirm"
                         });
 
-                        dropdownMenu.style.display = 'none';
+                        hideHomeChipMenu(dropdownMenu);
                     });
 
                     item.appendChild(textSpan);
@@ -15123,25 +15294,26 @@ function initPageNameLogic() {
                 });
 
                 dropdownMenu.style.display = 'block';
-            });
+                dropdownMenu.classList.add('is-visible');
+                if (typeof closeAllCustomSelects === 'function') closeAllCustomSelects();
+                if (typeof closeHomeChipDropdowns === 'function') closeHomeChipDropdowns(dropdownMenu);
+                if (typeof positionHomeChipDropdown === 'function') {
+                    positionHomeChipDropdown(badgeWrapper || dropdownIcon, dropdownMenu);
+                }
+            }
 
-            // 2. Start timer when leaving the icon
-            dropdownIcon.addEventListener('mouseleave', function() {
-                pageDropdownTimer = setTimeout(() => {
-                    dropdownMenu.style.display = 'none';
-                }, 200); // 500ms gap allowance
-            });
-
-            // 3. Keep menu open if mouse enters the dropdown itself
-            dropdownMenu.addEventListener('mouseenter', function() {
-                clearTimeout(pageDropdownTimer);
-            });
-
-            // 4. Hide menu when mouse finally leaves the dropdown
-            dropdownMenu.addEventListener('mouseleave', function() {
-                pageDropdownTimer = setTimeout(() => {
-                    dropdownMenu.style.display = 'none';
-                }, 300);
+            dropdownIcon.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (isEditMode) return;
+                const isOpen = dropdownMenu.classList.contains('is-visible')
+                    && dropdownMenu.style.display === 'block';
+                if (isOpen) {
+                    hideHomeChipMenu(dropdownMenu);
+                    dropdownMenu.classList.remove('is-visible');
+                    return;
+                }
+                openPageNameMenu();
             });
         }
 
@@ -15546,15 +15718,12 @@ function initScenarioOutlineLogic() {
 
     if (!soInput) return;
 
-    // --- MODERN DROPDOWN HOVER LOGIC ---
+    // --- SCENARIO DROPDOWN (click, same as App) ---
     if (soDropdownIcon && soDropdownMenu) {
-        let soDropdownTimer;
-
-        soDropdownIcon.addEventListener('mouseenter', function(e) {
-            clearTimeout(soDropdownTimer);
-
+        function openScenarioMenu() {
             if (!window.pageScenarioData || Object.keys(window.pageScenarioData).length === 0) {
-                soDropdownMenu.style.display = 'none';
+                hideHomeChipMenu(soDropdownMenu);
+                soDropdownMenu.classList.remove('is-visible');
                 return;
             }
 
@@ -15565,7 +15734,8 @@ function initScenarioOutlineLogic() {
             const validPages = Object.keys(window.pageScenarioData).filter(p => window.pageScenarioData[p] && window.pageScenarioData[p].scenarioOutline);
 
             if (validPages.length === 0) {
-                soDropdownMenu.style.display = 'none';
+                hideHomeChipMenu(soDropdownMenu);
+                soDropdownMenu.classList.remove('is-visible');
                 return;
             }
 
@@ -15601,7 +15771,7 @@ function initScenarioOutlineLogic() {
                 allItem.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     window.setGlobalPageName("All");
-                    soDropdownMenu.style.display = 'none';
+                    hideHomeChipMenu(soDropdownMenu);
                 });
 
                 soDropdownMenu.appendChild(allItem);
@@ -15650,7 +15820,7 @@ function initScenarioOutlineLogic() {
                 item.addEventListener('click', (ev) => {
                     ev.stopPropagation();
                     window.setGlobalPageName(page);
-                    soDropdownMenu.style.display = 'none';
+                    hideHomeChipMenu(soDropdownMenu);
                 });
 
                 // Trash Icon
@@ -15682,7 +15852,7 @@ function initScenarioOutlineLogic() {
                         theme: "confirm"
                     });
 
-                    soDropdownMenu.style.display = 'none';
+                    hideHomeChipMenu(soDropdownMenu);
                 });
 
                 item.appendChild(textSpan);
@@ -15691,27 +15861,31 @@ function initScenarioOutlineLogic() {
             });
 
             if (!hasItems) {
-                soDropdownMenu.style.display = 'none';
+                hideHomeChipMenu(soDropdownMenu);
+                soDropdownMenu.classList.remove('is-visible');
                 return;
             }
 
             soDropdownMenu.style.display = 'block';
-        });
+            soDropdownMenu.classList.add('is-visible');
+            if (typeof closeAllCustomSelects === 'function') closeAllCustomSelects();
+            if (typeof closeHomeChipDropdowns === 'function') closeHomeChipDropdowns(soDropdownMenu);
+            if (typeof positionHomeChipDropdown === 'function') {
+                positionHomeChipDropdown(document.getElementById('scenarioOutlineBar') || soDropdownIcon, soDropdownMenu);
+            }
+        }
 
-        soDropdownIcon.addEventListener('mouseleave', function() {
-            soDropdownTimer = setTimeout(() => {
-                soDropdownMenu.style.display = 'none';
-            }, 500);
-        });
-
-        soDropdownMenu.addEventListener('mouseenter', function() {
-            clearTimeout(soDropdownTimer);
-        });
-
-        soDropdownMenu.addEventListener('mouseleave', function() {
-            soDropdownTimer = setTimeout(() => {
-                soDropdownMenu.style.display = 'none';
-            }, 200);
+        soDropdownIcon.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            const isOpen = soDropdownMenu.classList.contains('is-visible')
+                && soDropdownMenu.style.display === 'block';
+            if (isOpen) {
+                hideHomeChipMenu(soDropdownMenu);
+                soDropdownMenu.classList.remove('is-visible');
+                return;
+            }
+            openScenarioMenu();
         });
     }
 
