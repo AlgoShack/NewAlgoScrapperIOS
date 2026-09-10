@@ -13774,28 +13774,7 @@ html.platform-win #tab-about .app-kbd:hover {
 }
 
 
-/* Configuration on Windows uses the same layout as Mac */
-html.os-win #tab-configuration .vscode-window {
-  border-radius: 8px !important;
-  border: 1px solid #2d2d2d !important;
-}
-html.os-win #tab-configuration .vscode-header {
-  height: 34px !important;
-  padding: 0 10px !important;
-}
-html.os-win #tab-configuration .vscode-mac-dots {
-  display: flex !important;
-}
-html.os-win #tab-configuration .vscode-tab {
-  border-radius: 4px 4px 0 0 !important;
-  height: 26px !important;
-  padding: 4px 12px !important;
-  border-top: 1px solid #007acc !important;
-  border-right: none !important;
-  font-family: inherit !important;
-}
-
-/* Windows only: Configuration fits one screen — nothing clipped, no page scroll */
+/* Windows only: Configuration cards hug content — no empty inner space, one screen */
 html.os-win #tab-configuration.is-active {
   display: flex !important;
   flex-direction: column !important;
@@ -13812,26 +13791,12 @@ html.os-win #tab-configuration .config-page-wrapper {
   min-height: 0 !important;
   height: 100% !important;
   overflow: hidden !important;
-  gap: 6px !important;
+  gap: 8px !important;
 }
 
 html.os-win #tab-configuration .config-page-header {
   flex-shrink: 0 !important;
   padding: 0 2px 0 !important;
-}
-
-html.os-win #tab-configuration .config-header-title {
-  font-size: 14px !important;
-  margin: 0 0 1px !important;
-}
-
-html.os-win #tab-configuration .config-header-desc {
-  font-size: 10.5px !important;
-}
-
-html.os-win #tab-configuration .config-header-status {
-  padding: 3px 8px !important;
-  font-size: 10.5px !important;
 }
 
 html.os-win #tab-configuration .config-metrics-row {
@@ -13842,20 +13807,25 @@ html.os-win #tab-configuration .config-metrics-row {
 
 html.os-win #tab-configuration .config-metric-chip {
   padding: 6px 10px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
 }
 
-html.os-win #tab-configuration .metric-chip-icon {
-  width: 24px !important;
-  height: 24px !important;
+html.os-win #tab-configuration .config-dash-card,
+html.os-win #tab-configuration .config-project-launch-card {
+  height: auto !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: none !important;
 }
 
-html.os-win #tab-configuration .metric-chip-icon svg {
-  width: 13px !important;
-  height: 13px !important;
+html.os-win #tab-configuration .config-dash-card:hover,
+html.os-win #tab-configuration .config-metric-chip:hover,
+html.os-win #tab-configuration .config-project-card-box:hover {
+  transform: none !important;
 }
 
 html.os-win #tab-configuration .config-dashboard-grid {
-  flex: 1 1 0 !important;
+  flex: 0 0 auto !important;
   min-height: 0 !important;
   grid-template-columns: 1fr 1fr !important;
   gap: 8px !important;
@@ -13863,25 +13833,18 @@ html.os-win #tab-configuration .config-dashboard-grid {
 }
 
 html.os-win #tab-configuration .config-dashboard-grid .config-dash-card {
-  height: 100% !important;
+  height: auto !important;
   min-height: 0 !important;
 }
 
-html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child {
-  overflow: visible !important;
-}
-
-html.os-win #tab-configuration .config-dash-card:hover {
-  transform: none !important;
-}
-
 html.os-win #tab-configuration .dash-card-header {
-  padding: 7px 12px !important;
+  padding: 8px 12px !important;
   flex-shrink: 0 !important;
 }
 
 html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:first-child .dash-card-body {
-  padding: 8px 12px !important;
+  flex: 0 0 auto !important;
+  padding: 8px 12px 10px !important;
   gap: 6px !important;
   min-height: 0 !important;
   overflow: visible !important;
@@ -13903,14 +13866,20 @@ html.os-win #tab-configuration .dash-code-pill {
 }
 
 html.os-win #tab-configuration .config-dashboard-grid .config-dash-card:last-child .dash-card-body {
+  flex: 1 1 auto !important;
   min-height: 0 !important;
   overflow: hidden !important;
+  padding: 0 !important;
 }
 
 html.os-win #tab-configuration .vscode-window {
   flex: 1 1 auto !important;
-  min-height: 0 !important;
+  min-height: 220px !important;
   height: 100% !important;
+  border: none !important;
+  border-top: 1px solid #2d2d2d !important;
+  border-radius: 0 0 10px 10px !important;
+  box-shadow: none !important;
 }
 
 html.os-win #tab-configuration .vscode-body {
@@ -13919,7 +13888,13 @@ html.os-win #tab-configuration .vscode-body {
 
 html.os-win #tab-configuration .config-project-launch-section {
   margin-top: 0 !important;
+  flex: 0 0 auto !important;
   flex-shrink: 0 !important;
+}
+
+html.os-win #tab-configuration .config-project-launch-card {
+  height: auto !important;
+  overflow: hidden !important;
 }
 
 html.os-win #tab-configuration .config-launch-card-header {
@@ -13927,11 +13902,25 @@ html.os-win #tab-configuration .config-launch-card-header {
 }
 
 html.os-win #tab-configuration .config-launch-card-body {
+  flex: 0 0 auto !important;
   padding: 6px 12px 8px !important;
+  gap: 4px !important;
 }
 
 html.os-win #tab-configuration .config-project-card-box {
+  flex: 0 0 auto !important;
+  height: auto !important;
   padding: 6px 10px !important;
+  gap: 4px !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+html.os-win #tab-configuration .config-project-stats-row {
+  margin-top: 2px !important;
+}
+
+html.os-win #tab-configuration #configProjectHint {
+  margin: 0 !important;
 }
 
 /* Windows: keep only our CSS tooltips — no help cursor, no native title box on hover */
