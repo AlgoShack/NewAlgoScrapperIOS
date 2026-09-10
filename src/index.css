@@ -12868,15 +12868,39 @@ html.platform-win .repo-page-wrapper,
   display: flex !important;
   flex-direction: column !important;
   width: 100% !important;
+}
+
+html.platform-win #tab-repository:not(.is-workspace-open) .repo-page-wrapper,
+.platform-win #tab-repository:not(.is-workspace-open) .repo-page-wrapper {
   min-height: min-content !important;
 }
 
-html.platform-win #repoProjectsView,
-.platform-win #repoProjectsView {
+html.platform-win #tab-repository.is-workspace-open .repo-page-wrapper,
+.platform-win #tab-repository.is-workspace-open .repo-page-wrapper {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+html.platform-win #tab-repository:not(.is-workspace-open) #repoProjectsView,
+.platform-win #tab-repository:not(.is-workspace-open) #repoProjectsView {
   display: flex !important;
   flex-direction: column !important;
   flex: 1 1 auto !important;
   min-height: 0 !important;
+}
+
+html.platform-win #tab-repository.is-workspace-open #repoProjectsView,
+.platform-win #tab-repository.is-workspace-open #repoProjectsView {
+  display: none !important;
+}
+
+html.platform-win #tab-repository.is-workspace-open #repoDetailsView,
+.platform-win #tab-repository.is-workspace-open #repoDetailsView {
+  display: flex !important;
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 html.platform-win .repo-projects-grid:has(.repo-empty-state),

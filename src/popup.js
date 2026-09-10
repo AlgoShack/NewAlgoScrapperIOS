@@ -380,7 +380,7 @@
     window._resumedProjectSnapshot = null;
 
     function isFeatureAreaApplicableToPage(area, targetPageName) {
-        if (!area || !area.rect) return false;
+        if (!area) return false;
         const target = (targetPageName || '').trim().toLowerCase();
         const areaPage = (area.pageName || '').trim().toLowerCase();
         if (!target || target === 'all') return false;
@@ -388,6 +388,16 @@
         return areaPage === target;
     }
     window.isFeatureAreaApplicableToPage = isFeatureAreaApplicableToPage;
+
+    function featureAppliesToPageAndLiveScreen(area, pageName, doc) {
+        if (!area || !area.name) return false;
+        if (!isFeatureAreaApplicableToPage(area, pageName)) return false;
+        if (typeof isFeatureOnCurrentDeviceScreen === 'function') {
+            return isFeatureOnCurrentDeviceScreen(area, doc || window.xmlDoc);
+        }
+        return true;
+    }
+    window.featureAppliesToPageAndLiveScreen = featureAppliesToPageAndLiveScreen;
 
     function computeAndroidScreenSignature(doc) {
         if (!doc) return "";
@@ -460,14 +470,29 @@
         const s = String(sig || '');
         if (!s) return { keys: [], bands: [], count: 0 };
         if (s.includes('##')) {
-            const parts = s.split('##');
+            const segs = s.split('##');
+            const head = segs[0] || '';
+            const rest = segs.slice(1).join('##');
+            const androidCount = parseInt(head, 10);
+            const isAndroidLayout = Number.isFinite(androidCount)
+                && String(androidCount) === head.trim()
+                && rest.includes('|')
+                && rest.includes(':')
+                && !head.includes('||');
+            if (isAndroidLayout) {
+                const tokens = rest.split('|').map(x => x.trim()).filter(Boolean);
+                return {
+                    keys: tokens,
+                    bands: tokens,
+                    count: androidCount || tokens.length
+                };
+            }
             return {
-                keys: (parts[0] || '').split('||').map(x => x.trim()).filter(Boolean),
-                count: parseInt(parts[1], 10) || 0,
-                bands: (parts[2] || '').split(',').map(x => x.trim()).filter(Boolean)
+                keys: head.split('||').map(x => x.trim()).filter(Boolean),
+                count: parseInt(segs[1], 10) || 0,
+                bands: (segs[2] || '').split(',').map(x => x.trim()).filter(Boolean)
             };
         }
-        // Legacy signatures were plain key||key||key
         const keys = s.split('||').map(x => x.trim()).filter(Boolean);
         return { keys, bands: [], count: keys.length };
     }
@@ -663,6 +688,12 @@
 
         (registeredFeatureAreas || []).forEach((area) => {
             if (!area || !area.name) return;
+            const currentPage = (typeof getActiveHomePageName === 'function')
+                ? getActiveHomePageName()
+                : (document.getElementById('pagename_searchbox')?.value || '');
+            if (currentPage && String(currentPage).trim().toLowerCase() !== 'all') {
+                if (!isFeatureAreaApplicableToPage(area, currentPage)) return;
+            }
             if (!isFeatureOnCurrentDeviceScreen(area, doc)) return;
             area.screenSignature = liveSig;
         });
@@ -797,6 +828,13 @@
 
     function isFeatureAreaApplicableToCurrentScreen(area, currentScreenDoc, x, y, pageNameOverride) {
         if (!area || !area.rect) return false;
+
+        const pageHint = pageNameOverride
+            || ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : '')
+            || (document.getElementById('pagename_searchbox')?.value || '');
+        if (pageHint && String(pageHint).trim().toLowerCase() !== 'all') {
+            if (!isFeatureAreaApplicableToPage(area, pageHint)) return false;
+        }
 
         const doc = currentScreenDoc || window.xmlDoc;
         if (!doc) return true;
@@ -10024,10 +10062,16 @@ function createAndAppendTable(dtControls) {
                 const nodeCenterY = nodeRect.y + nodeRect.height / 2;
                 for (const area of registeredFeatureAreas) {
                     if (!area || !area.rect || !area.name) continue;
-                    if (typeof isSameFeatureScreen === 'function') {
-                        if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
-                    } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, nodeCenterX, nodeCenterY)) {
-                        continue;
+                    if (typeof featureAppliesToPageAndLiveScreen === 'function') {
+                        if (!featureAppliesToPageAndLiveScreen(area, pageName, window.xmlDoc)) continue;
+                    } else {
+                        if (typeof isFeatureAreaApplicableToPage === 'function'
+                            && !isFeatureAreaApplicableToPage(area, pageName)) continue;
+                        if (typeof isSameFeatureScreen === 'function') {
+                            if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
+                        } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, nodeCenterX, nodeCenterY, pageName)) {
+                            continue;
+                        }
                     }
                     const { x, y, width, height } = area.rect;
                     if (nodeCenterX >= x && nodeCenterX <= (x + width) && nodeCenterY >= y && nodeCenterY <= (y + height)) {
@@ -12483,10 +12527,16 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
 
             for (const area of registeredFeatureAreas) {
                 if (!area || !area.rect || !area.name) continue;
-                if (typeof isSameFeatureScreen === 'function') {
-                    if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
-                } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, clickX, clickY)) {
-                    continue;
+                if (typeof featureAppliesToPageAndLiveScreen === 'function') {
+                    if (!featureAppliesToPageAndLiveScreen(area, pageName, window.xmlDoc)) continue;
+                } else {
+                    if (typeof isFeatureAreaApplicableToPage === 'function'
+                        && !isFeatureAreaApplicableToPage(area, pageName)) continue;
+                    if (typeof isSameFeatureScreen === 'function') {
+                        if (!isSameFeatureScreen(area, window.xmlDoc)) continue;
+                    } else if (!isFeatureAreaApplicableToCurrentScreen(area, window.xmlDoc, clickX, clickY, pageName)) {
+                        continue;
+                    }
                 }
                 const { x, y, width, height } = area.rect;
                 if (clickX >= x && clickX <= (x + width) && clickY >= y && clickY <= (y + height)) {
