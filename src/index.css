@@ -226,8 +226,7 @@ div[style*="font-size: 11px;"],
     z-index: 10;
 }
 
-/* Circular download button matching 28px height */
-#download,
+/* Circular icon buttons in the table toolbar (Customize Columns) */
 .download-circle-btn {
     margin: 0 !important;
     width: 28px !important;
@@ -248,7 +247,6 @@ div[style*="font-size: 11px;"],
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
 }
 
-#download svg,
 .download-circle-btn svg {
     width: 13px !important;
     height: 13px !important;
@@ -257,14 +255,12 @@ div[style*="font-size: 11px;"],
     margin: 0 !important;
 }
 
-#download:hover:not(:disabled),
 .download-circle-btn:hover:not(:disabled) {
     background-color: #2478b3 !important;
     transform: translateY(-1px) scale(1.04) !important;
     box-shadow: 0 2px 8px rgba(47, 139, 204, 0.35) !important;
 }
 
-#download:disabled,
 .download-circle-btn:disabled {
     background-color: #B6B6B4 !important;
     opacity: 0.7 !important;
@@ -744,9 +740,10 @@ html.platform-win .custom-select-menu.is-visible {
 /* Compact custom dropdowns inside Control ID / Control Type table cells (Win + Mac) */
 .custom-select-wrap--table {
   width: 100% !important;
+  min-width: 100% !important;
   margin: 2px 0 !important;
   z-index: 5;
-  display: block;
+  display: block !important;
   box-sizing: border-box;
 }
 
@@ -756,9 +753,14 @@ html.platform-win .custom-select-menu.is-visible {
 
 .custom-select-trigger--table {
   width: 100% !important;
-  min-height: 22px !important;
-  height: 22px !important;
-  padding: 0 22px 0 6px !important;
+  min-width: 0 !important;
+  min-height: 26px !important;
+  height: 26px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  position: relative !important;
+  padding: 0 28px 0 8px !important;
   border: 1px solid #d0d4dc !important;
   border-radius: 4px !important;
   background: #ffffff !important;
@@ -766,12 +768,15 @@ html.platform-win .custom-select-menu.is-visible {
   font-size: 11px !important;
   font-weight: 600 !important;
   color: #1f2937 !important;
-  line-height: 20px !important;
+  line-height: 24px !important;
   text-align: left !important;
+  box-sizing: border-box !important;
 }
 
 .custom-select-trigger--table .custom-select-label {
   display: block;
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -782,9 +787,19 @@ html.platform-win .custom-select-menu.is-visible {
 }
 
 .custom-select-trigger--table .custom-select-caret {
-  width: 12px;
-  height: 12px;
-  right: 5px;
+  position: absolute !important;
+  right: 8px !important;
+  top: 50% !important;
+  width: 14px !important;
+  height: 14px !important;
+  margin: 0 !important;
+  flex-shrink: 0;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.custom-select-wrap--table.is-open .custom-select-trigger--table .custom-select-caret {
+  transform: translateY(-50%) rotate(180deg);
 }
 
 .custom-select-wrap--table.is-open .custom-select-trigger--table,
@@ -822,6 +837,19 @@ html.platform-win .custom-select-menu.is-visible {
 #repoTableElement td.xpath .custom-select-wrap--table,
 #repoTableElement td.ct .custom-select-wrap--table {
   width: 100% !important;
+  min-width: 100% !important;
+}
+
+#mainTable td.ct,
+#repoTableElement td.ct {
+    padding: 3px 6px !important;
+    min-width: 148px;
+}
+
+#mainTable td.xpath,
+#repoTableElement td.xpath {
+    padding: 3px 6px !important;
+    min-width: 220px;
 }
 
 #mainTable td.xpath select.native-select-hidden,
@@ -1170,9 +1198,17 @@ th .resizer:hover {
 /* Centered Excel-Style Dropdown Styling with Bottom Breathing Room */
 #mainTable td.xpath,
 #repoTableElement td.xpath {
-    padding: 4px 6px !important;
+    padding: 3px 6px !important;
     margin-bottom: 2px;
     vertical-align: middle !important;
+    min-width: 220px;
+}
+
+#mainTable td.ct,
+#repoTableElement td.ct {
+    padding: 3px 6px !important;
+    vertical-align: middle !important;
+    min-width: 148px;
 }
 
 /* Centered Excel-Style Dropdown Styling with Top and Bottom Margin */
@@ -1225,6 +1261,32 @@ th .resizer:hover {
     height: 28px !important;
     line-height: 22px !important;
     padding: 4px 6px !important;
+}
+
+#mainTable tr:not(.empty-excel-row):not(.no-results-row) td.row-index {
+    cursor: grab;
+}
+
+#mainTable tr.is-row-dragging td.row-index,
+body.home-row-reordering {
+    cursor: grabbing !important;
+}
+
+body.home-row-reordering {
+    user-select: none !important;
+}
+
+#mainTable tr.is-row-dragging {
+    opacity: 0.55;
+    background-color: #dbeafe !important;
+}
+
+#mainTable tr.is-row-drop-before td {
+    box-shadow: inset 0 2px 0 #2F8BCC;
+}
+
+#mainTable tr.is-row-drop-after td {
+    box-shadow: inset 0 -2px 0 #2F8BCC;
 }
 
 /* Corner Header Cell */
@@ -1304,16 +1366,120 @@ th .resizer:hover {
     padding-right: 0 !important;
 }
 
+#mainTable td.delete-cell .delete-cell-actions {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 5px !important;
+    width: 100%;
+}
+
 #mainTable td.delete-cell .deleteBtn {
     margin-left: 0 !important;
     margin-right: 0 !important;
     max-width: 17px;
     vertical-align: middle;
+    flex-shrink: 0;
 }
 
 #mainTable td.delete-cell .bulk-delete-cb {
-    margin: 0 auto !important;
+    display: none;
+    margin: 0 !important;
+    width: 13px;
+    height: 13px;
+    cursor: pointer;
+    accent-color: #2F8BCC;
+    flex-shrink: 0;
     vertical-align: middle;
+}
+
+#mainTable.is-multi-delete td.delete-cell .deleteBtn {
+    display: none !important;
+}
+
+#mainTable.is-multi-delete td.delete-cell .bulk-delete-cb {
+    display: inline-block !important;
+}
+
+#mainTable.is-multi-delete #headerDeleteIcon {
+    display: none !important;
+}
+
+#mainTable.is-multi-delete #selectAllCheckbox {
+    display: inline-block !important;
+}
+
+#headerSelectAllBtn.select-all-icon-btn {
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    background-color: #2F8BCC !important;
+    color: #ffffff !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer;
+    box-shadow: none !important;
+}
+
+#headerSelectAllBtn.select-all-icon-btn svg {
+    width: 14px;
+    height: 14px;
+    stroke: #ffffff;
+}
+
+#headerSelectAllBtn.select-all-icon-btn:hover:not(:disabled) {
+    background-color: #2478b3 !important;
+}
+
+#bulk_delete_btn.bulk-delete-icon-btn {
+    position: relative;
+    width: 26px !important;
+    height: 26px !important;
+    min-width: 26px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 6px !important;
+    background-color: #d9534f !important;
+    color: #ffffff !important;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: none !important;
+}
+
+#bulk_delete_btn.bulk-delete-icon-btn svg {
+    width: 13px;
+    height: 13px;
+    fill: #ffffff;
+}
+
+#bulk_delete_btn.bulk-delete-icon-btn:hover:not(:disabled) {
+    background-color: #c9302c !important;
+}
+
+.bulk-delete-count {
+    position: absolute;
+    top: -6px;
+    right: -7px;
+    min-width: 14px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #d9534f;
+    border: 1px solid #d9534f;
+    font-size: 9px;
+    font-weight: 800;
+    line-height: 12px;
+    text-align: center;
+    box-sizing: border-box;
 }
 
 
@@ -2263,6 +2429,7 @@ th .resizer:hover {
                 }
 /* Shared blue hover (same as Record Scenario / .pill-btn) */
 #add_row_btn:hover:not(:disabled),
+#headerSelectAllBtn:hover:not(:disabled),
 #Scrape:hover:not(:disabled),
 #reset:hover:not(:disabled),
 #download:hover:not(:disabled),
@@ -4516,6 +4683,60 @@ html, body {
   box-sizing: border-box;
 }
 
+.bottom-action-bar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-right: 10px;
+}
+
+.table-hint-box {
+  flex: 1 1 auto;
+  width: auto;
+  max-width: none;
+  min-width: 160px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px 0 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  background: #f8fbff;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.table-hint-icon {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  color: #2F8BCC;
+}
+
+.table-hint-viewport {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  height: 28px;
+}
+
+.table-hint-type {
+  display: inline-block;
+  color: #1e4b75;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  line-height: 28px;
+}
+
+#pagination_controls {
+  flex: 0 0 auto;
+}
+
 @media (max-width: 1100px) {
   .split-div1 .badge-content input[type="text"]#pagename_searchbox {
     width: 90px !important;
@@ -5005,6 +5226,46 @@ html.platform-win #zoomFrame #overlayContainer .feature-area-highlight {
   border-color: #38bdf8 !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 2px 8px rgba(47, 139, 204, 0.4) !important;
+}
+
+.app-topnav #download.nav-ghost-btn {
+  height: 30px !important;
+  width: auto !important;
+  min-width: unset !important;
+  max-width: none !important;
+  padding: 0 12px !important;
+  border-radius: 7px !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  gap: 6px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+.app-topnav #download.nav-ghost-btn svg {
+  width: 13px !important;
+  height: 13px !important;
+  margin: 0 !important;
+  stroke: currentColor !important;
+}
+
+.app-topnav #download.nav-ghost-btn:hover:not(:disabled) {
+  background: rgba(47, 139, 204, 0.9) !important;
+  border-color: #38bdf8 !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 8px rgba(47, 139, 204, 0.4) !important;
+}
+
+.app-topnav #download.nav-ghost-btn:disabled {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  opacity: 1 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+  box-shadow: none !important;
 }
 
 .app-topnav #algoQA.algoqa-styled-btn {
@@ -7727,33 +7988,34 @@ pre#configJsonPreview::-webkit-scrollbar,
   padding-left: 8px !important;
 }
 
-#tab-home #scrapeUI:not(:disabled) {
+#tab-home #scrapeUI:not(:disabled),
+#tab-home #recordScenarioBtn:not(:disabled),
+#tab-home #addScenarioBtn:not(:disabled),
+#tab-home #createFeatureBtn:not(:disabled) {
   background: linear-gradient(135deg, #0ea5e9 0%, #2F8BCC 50%, #2563eb 100%) !important;
   color: #ffffff !important;
   border: 1px solid rgba(255, 255, 255, 0.3) !important;
   box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
 }
 
-#tab-home #scrapeUI:hover:not(:disabled) {
+#tab-home #scrapeUI:hover:not(:disabled),
+#tab-home #recordScenarioBtn:hover:not(:disabled),
+#tab-home #addScenarioBtn:hover:not(:disabled),
+#tab-home #createFeatureBtn:hover:not(:disabled) {
   background: linear-gradient(135deg, #38bdf8 0%, #0284c7 50%, #1d4ed8 100%) !important;
   box-shadow: 0 3px 10px rgba(14, 165, 233, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.4) !important;
   transform: none !important;
 }
 
-#tab-home #recordScenarioBtn:not(:disabled),
-#tab-home #createFeatureBtn:not(:disabled) {
-  background: linear-gradient(135deg, #2F8BCC 0%, #1e75b2 100%) !important;
-  color: #ffffff !important;
-  border: 1px solid rgba(255, 255, 255, 0.25) !important;
-  box-shadow: 0 2px 6px rgba(47, 139, 204, 0.25) !important;
+#tab-home #createFeatureBtn.is-feature-active:not(:disabled) {
+  background: #34A853 !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  box-shadow: 0 2px 8px rgba(52, 168, 83, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
 }
 
-#tab-home #recordScenarioBtn:hover:not(:disabled),
-#tab-home #createFeatureBtn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #0284c7 0%, #1c6fa8 100%) !important;
-  border-color: #38bdf8 !important;
-  box-shadow: 0 3px 10px rgba(47, 139, 204, 0.32) !important;
-  transform: none !important;
+#tab-home #createFeatureBtn.is-feature-active:hover:not(:disabled) {
+  background: #2d9348 !important;
+  box-shadow: 0 3px 10px rgba(52, 168, 83, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35) !important;
 }
 
 .home-layout {
@@ -9731,7 +9993,12 @@ html.platform-win #tab-home .home-preview #dummyDevice {
 .about-vscode-window pre.vscode-code {
   margin: 0 !important;
   padding: 0 !important;
-  background: transparent !important;
+  background: #1e1e1e !important;
+  background-color: #1e1e1e !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
   color: #d4d4d4 !important;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 11.5px !important;
@@ -9747,6 +10014,16 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   font-size: 11.5px !important;
   line-height: 20px !important;
+}
+
+#aboutMultiLocatorVscode pre,
+#aboutMultiLocatorVscode .vscode-code-area,
+#aboutMultiLocatorVscode .vscode-body {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: #1e1e1e !important;
+  background-color: #1e1e1e !important;
 }
 
 /* =============================================================================
@@ -13709,7 +13986,8 @@ html.platform-win .app-topnav .topnav-tab:hover:not(.is-active) {
   transform: translateY(-1px) !important;
 }
 
-html.platform-win .app-topnav .nav-ghost-btn:hover:not(:disabled) {
+html.platform-win .app-topnav .nav-ghost-btn:hover:not(:disabled),
+html.platform-win .app-topnav #download.nav-ghost-btn:hover:not(:disabled) {
   background: rgba(47, 139, 204, 0.9) !important;
   border-color: #38bdf8 !important;
   transform: translateY(-1px) !important;
@@ -13760,7 +14038,8 @@ html.platform-win .split-div1 #reset:hover:not(:disabled) svg {
 }
 
 /* 4. Table Action Buttons & Icons Hover */
-html.platform-win #add_row_btn:hover:not(:disabled) {
+html.platform-win #add_row_btn:hover:not(:disabled),
+html.platform-win #headerSelectAllBtn:hover:not(:disabled) {
   background-color: #2478b3 !important;
   transform: translateY(-1px) !important;
   box-shadow: 0 4px 10px rgba(47, 139, 204, 0.3) !important;

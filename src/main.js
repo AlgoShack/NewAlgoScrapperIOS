@@ -34,7 +34,7 @@
      *   often contain spaces and unquoted paths break UiAutomator2 registration.
      * =============================================================================
      */
-    const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+    const { app, BrowserWindow, ipcMain, dialog, screen, Menu } = require('electron');
     const url = require('url');
     const path = require('path');
     const { pathToFileURL } = url;
@@ -43,7 +43,6 @@
     // Product name historically includes "IOS"; app scrapes both Android and iOS.
     app.name = "AlgoScraper";
     app.setName("AlgoScraper");
-    const { Menu } = require('electron');
     var appPackage
     var deviceId;
     let mainWindow;
@@ -142,7 +141,9 @@
                 console.error('Failed to send deep-link IPC:', err);
             }
             try {
+                if (mainWindow.isMinimized()) mainWindow.restore();
                 mainWindow.show();
+                if (!mainWindow.isMaximized()) mainWindow.maximize();
                 mainWindow.focus();
             } catch (_) {}
         };
@@ -1878,10 +1879,48 @@
       }
     }
 
+    function fillMainWindowToScreen() {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      try {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+      } catch (_) {}
+
+      try {
+        const display = (typeof screen.getPrimaryDisplay === 'function')
+          ? screen.getPrimaryDisplay()
+          : null;
+        const area = display && display.bounds;
+        if (area && area.width && area.height) {
+          mainWindow.setBounds({
+            x: Math.round(area.x),
+            y: Math.round(area.y),
+            width: Math.round(area.width),
+            height: Math.round(area.height)
+          }, false);
+        }
+      } catch (err) {
+        console.warn('fillMainWindowToScreen bounds failed:', err && err.message ? err.message : err);
+      }
+
+      try {
+        if (process.platform === 'darwin' && typeof mainWindow.setSimpleFullScreen === 'function') {
+          if (!mainWindow.isSimpleFullScreen()) mainWindow.setSimpleFullScreen(true);
+        } else if (typeof mainWindow.setFullScreen === 'function') {
+          if (!mainWindow.isFullScreen()) mainWindow.setFullScreen(true);
+        } else if (!mainWindow.isMaximized()) {
+          mainWindow.maximize();
+        }
+      } catch (_) {
+        try { mainWindow.maximize(); } catch (__) {}
+      }
+    }
+
     const createWindow = () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         try {
+          if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
+          fillMainWindowToScreen();
           mainWindow.focus();
         } catch (_) {}
         return;
@@ -1898,14 +1937,15 @@
       }
 
       mainWindow = new BrowserWindow({
-        show: false, // Keep hidden initially to prevent flashing
-//        fullscreen: true, // enable this if need scraper to open in full page
+        show: false,
         title: "AlgoScraper",
         width: 1280,
         height: 800,
         minWidth: 960,
         minHeight: 680,
-        useContentSize: true,
+        maximizable: true,
+        fullscreenable: true,
+        useContentSize: false,
         backgroundColor: "#e8edf3",
         icon: getAppWindowIcon(),
         webPreferences: {
@@ -1956,7 +1996,7 @@
 
       let shown = false;
       const enforceMinBounds = () => {
-        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized() || mainWindow.isMinimized() || mainWindow.isFullScreen()) return;
+        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMaximized() || mainWindow.isMinimized() || mainWindow.isFullScreen() || (typeof mainWindow.isSimpleFullScreen === 'function' && mainWindow.isSimpleFullScreen())) return;
         try {
           const [currentWidth, currentHeight] = mainWindow.getContentSize();
           if (currentWidth < 960 || currentHeight < 680) {
@@ -1966,6 +2006,7 @@
       };
 
       mainWindow.on('will-resize', (e, newBounds) => {
+        if (mainWindow.isFullScreen() || (typeof mainWindow.isSimpleFullScreen === 'function' && mainWindow.isSimpleFullScreen())) return;
         if (newBounds.width < 960 || newBounds.height < 680) {
           e.preventDefault();
           try {
@@ -1998,9 +2039,11 @@
         shown = true;
         try {
           mainWindow.setMinimumSize(960, 680);
-          mainWindow.maximize();
           mainWindow.show();
+          fillMainWindowToScreen();
           mainWindow.focus();
+          setTimeout(fillMainWindowToScreen, 100);
+          setTimeout(fillMainWindowToScreen, 400);
           enforceMinBounds();
           mainWindow.webContents.send("launch-mode", launchedFromProtocol);
           flushPendingDeepLink();
@@ -2646,6 +2689,7 @@
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
+        fillMainWindowToScreen();
         mainWindow.focus();
       }
     });

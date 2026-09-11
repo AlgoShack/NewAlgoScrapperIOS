@@ -271,6 +271,7 @@
             const changeTokenBtn = document.getElementById("changeTokenBtn");
             if (changeTokenBtn) changeTokenBtn.style.setProperty("display", "inline-block", "important");
             try { localStorage.setItem("algoQAUser", JSON.stringify(parsedData)); } catch (_) {}
+            if (typeof window.updateTableHintMarquee === 'function') window.updateTableHintMarquee();
             if (typeof setLaunchEnabled === 'function') {
                 if (typeof driver !== 'undefined' && driver) setLaunchEnabled(false);
                 else setLaunchEnabled(true);
@@ -1867,6 +1868,7 @@
                 if (id === 'createFeatureBtn') {
                     const btnSpan = btn.querySelector('span');
                     if (btnSpan) btnSpan.innerText = "Create Feature";
+                    btn.classList.remove('is-feature-active');
                 }
             }
         });
@@ -1889,7 +1891,35 @@
             recordScenarioBtn.disabled = true;
             recordScenarioBtn.style.backgroundColor = '#B6B6B4';
         }
+
+        window.scrapeUILockedByScenario = false;
+        if (typeof window.updateTableHintMarquee === 'function') window.updateTableHintMarquee();
     }
+
+    function setScrapeUIButtonEnabled(enabled) {
+        const scrapeUIBtn = document.getElementById('scrapeUI');
+        if (!scrapeUIBtn) return;
+        const allowEnable = enabled && !window.scrapeUILockedByScenario && !createFeatureMode;
+        scrapeUIBtn.disabled = !allowEnable;
+        scrapeUIBtn.style.backgroundColor = allowEnable ? '#2F8BCC' : '#B6B6B4';
+        if (typeof window.updateTableHintMarquee === 'function') window.updateTableHintMarquee();
+    }
+
+    function lockScrapeUIForScenarioRecording() {
+        window.scrapeUILockedByScenario = true;
+        setScrapeUIButtonEnabled(false);
+    }
+
+    function unlockScrapeUIForScenarioRecording() {
+        window.scrapeUILockedByScenario = false;
+        if (!createFeatureMode) {
+            setScrapeUIButtonEnabled(true);
+        }
+    }
+
+    window.setScrapeUIButtonEnabled = setScrapeUIButtonEnabled;
+    window.lockScrapeUIForScenarioRecording = lockScrapeUIForScenarioRecording;
+    window.unlockScrapeUIForScenarioRecording = unlockScrapeUIForScenarioRecording;
 
     // selenium-webdriver wraps each arg into args[] — pass the params OBJECT, not [{...}]
     async function mobileExecute(script, params) {
@@ -3801,15 +3831,15 @@
                 updateConfigDashboard();
             }
 
-            if (cleanApp && cleanApp !== 'Select App' && cleanApp !== 'Active App' && cleanApp !== 'Loading Apps...') {
-                const currentVal = document.getElementById('pagename_searchbox')?.value.trim();
-                if (!currentVal || currentVal === 'DefaultPage' || currentVal === 'home' || currentVal === 'Page' || currentVal === '') {
-                    if (typeof window.setGlobalPageName === 'function') {
-                        window.setGlobalPageName(cleanApp);
-                    } else {
-                        const pageInput = document.getElementById('pagename_searchbox');
-                        if (pageInput) pageInput.value = cleanApp;
-                    }
+            if (cleanApp && cleanApp !== 'Select App' && cleanApp !== 'Active App' && cleanApp !== 'Loading Apps...' && cleanApp !== 'No apps found' && cleanApp !== 'No device connected') {
+                if (typeof window.setGlobalPageName === 'function') {
+                    window.setGlobalPageName(cleanApp);
+                } else {
+                    const pageInput = document.getElementById('pagename_searchbox');
+                    if (pageInput) pageInput.value = cleanApp;
+                }
+                if (typeof window.updateTableHintMarquee === 'function') {
+                    window.updateTableHintMarquee(cleanApp);
                 }
             }
         });
@@ -4687,10 +4717,9 @@
                     } else if (th.id === 'appUrl' || thText.includes('APP URL')) {
                         rowHtml += `<td class="appUrl" style="display:none;">${rowDataMap["APP URL"] || ""}</td>`;
                     } else if (thText.includes('DELETE')) {
-                        rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
-                            <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
-                            <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
-                        </td>`;
+                        rowHtml += (typeof getScrapedRowDeleteCellHtml === 'function')
+                            ? getScrapedRowDeleteCellHtml(displayStyle)
+                            : `<td class="delete-cell" style="border-color:black; ${displayStyle}"></td>`;
                     } else {
                         rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
                     }
@@ -5890,8 +5919,7 @@
             document.getElementById('download').style.backgroundColor = '#2F8BCC';
             document.getElementById('reset').disabled = false;
             document.getElementById('reset').style.backgroundColor = '#2F8BCC';
-            document.getElementById('scrapeUI').disabled = false;
-            document.getElementById('scrapeUI').style.backgroundColor = '#2F8BCC';
+            setScrapeUIButtonEnabled(true);
             document.getElementById('algoQA').disabled = false;
             document.getElementById('algoQA').style.backgroundColor = '#2F8BCC';
             document.getElementById('AppRunningPopup').style.display = 'none';
@@ -6453,8 +6481,7 @@
             document.getElementById('reset').disabled = false;
             document.getElementById('download').style.backgroundColor = '#2F8BCC';
             document.getElementById('download').disabled = false;
-            document.getElementById('scrapeUI').disabled = false;
-            document.getElementById('scrapeUI').style.backgroundColor = '#2F8BCC';
+            setScrapeUIButtonEnabled(true);
             document.getElementById('algoQA').disabled = false;
             document.getElementById('algoQA').style.backgroundColor = '#2F8BCC';
             if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
@@ -6610,24 +6637,43 @@
             return unique;
         }
 
+        function isUiPlaceholderToken(val) {
+            const t = String(val || "").replace(/\u00a0/g, " ").trim();
+            if (!t) return true;
+            return /^(select(\.{3}|…)?|select an option|choose(\.{3}|…)?|n\/?a)$/i.test(t);
+        }
+
+        function getEnteredFieldValue(el) {
+            if (!el) return "";
+            const raw = (el.value != null ? String(el.value) : "").replace(/\u00a0/g, " ").trim();
+            if (!raw) return "";
+            const ph = (el.getAttribute && el.getAttribute("placeholder") || "").replace(/\u00a0/g, " ").trim();
+            if (ph && raw === ph) return "";
+            if (el.classList && el.classList.contains("is-placeholder")) return "";
+            if (isUiPlaceholderToken(raw)) return "";
+            return raw;
+        }
+
         function getCellValue(cell) {
             if (!cell) return "";
             const selectEl = cell.querySelector('select');
             if (selectEl) {
-                if (selectEl.value !== undefined && selectEl.value !== null && selectEl.value !== "") {
-                    return String(selectEl.value).trim();
-                }
+                const labelEl = cell.querySelector('.custom-select-label');
+                if (labelEl && labelEl.classList.contains('is-placeholder')) return "";
+                const entered = getEnteredFieldValue(selectEl);
+                if (entered) return entered;
                 if (selectEl.selectedIndex >= 0 && selectEl.options[selectEl.selectedIndex]) {
-                    return String(selectEl.options[selectEl.selectedIndex].text).trim();
+                    const optText = String(selectEl.options[selectEl.selectedIndex].text || "").replace(/\u00a0/g, " ").trim();
+                    if (!isUiPlaceholderToken(optText) && selectEl.value) return optText;
                 }
                 return "";
             }
             const inputEl = cell.querySelector('input[type="text"], textarea');
             if (inputEl) {
-                return (inputEl.value || "").trim();
+                return getEnteredFieldValue(inputEl);
             }
             // textContent correctly retrieves text even when display: none !important is active on hidden columns
-            return (cell.textContent || "").trim();
+            return (cell.textContent || "").replace(/\u00a0/g, " ").trim();
         }
 
         rows.forEach((row) => {
@@ -6768,7 +6814,11 @@
         const pageName = String(row["PAGE NAME"] || row.PageName || "DefaultPage").trim() || "DefaultPage";
         const controlName = String(row["CONTROL NAME"] || row.ControlName || "").trim();
         const controlType = String(row["CONTROL TYPE"] || row.ControlType || "").trim();
-        const controlValue = String(row["CONTROL VALUE"] || row.ControlValue || "").trim();
+        let controlValue = String(row["CONTROL VALUE"] || row.ControlValue || "").trim();
+        if (typeof isScrapedPlaceholderControlValue === "function"
+            && isScrapedPlaceholderControlValue(controlValue, controlName)) {
+            controlValue = "";
+        }
         const featureName = String(row["FEATURE NAME"] || row.FeatureName || pageName).trim() || pageName;
         const nodeName = String(row["NODE NAME"] || row.NodeName || pageName).trim() || pageName;
 
@@ -7006,7 +7056,7 @@
 
         const jsonContent = isScenarioMode
             ? buildScenarioPayload(dashboardControls)
-            : dashboardControls;
+            : { "isRecordscenario": false, "dashboardControls": dashboardControls };
 
         let appName = "App";
         try {
@@ -8958,10 +9008,9 @@ async function performSwipe(startX, startY, endX, endY) {
                    } else if (th.id === 'appUrl' || thText.includes('APP URL')) {
                        rowHtml += `<td class="appUrl" style="display:none;"></td>`;
                    } else if (thText.includes('DELETE')) {
-                       rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
-                           <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
-                           <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
-                       </td>`;
+                       rowHtml += (typeof getScrapedRowDeleteCellHtml === 'function')
+                           ? getScrapedRowDeleteCellHtml(displayStyle)
+                           : `<td class="delete-cell" style="border-color:black; ${displayStyle}"></td>`;
                    }else {
                        rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
                    }
@@ -9220,10 +9269,9 @@ function createAndAppendTable(dtControls) {
             } else if (th.id === 'appUrl' || thText.includes('APP URL')) {
                 rowHtml += `<td class="appUrl" style="display:none;">${rowDataMap["APP URL"] || ""}</td>`;
             } else if (thText.includes('DELETE')) {
-                rowHtml += `<td class="delete-cell" style="border-color:black; ${displayStyle}">
-                    <input type="checkbox" class="bulk-delete-cb" style="display:none; cursor:pointer; margin:0 auto;">
-                    <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none; display:inline-block;">
-                </td>`;
+                rowHtml += (typeof getScrapedRowDeleteCellHtml === 'function')
+                    ? getScrapedRowDeleteCellHtml(displayStyle)
+                    : `<td class="delete-cell" style="border-color:black; ${displayStyle}"></td>`;
             }else {
                 rowHtml += `<td contenteditable="true" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; font-weight: 600; border-color: black; text-align: center; ${displayStyle}">&nbsp;</td>`;
             }
@@ -10178,6 +10226,7 @@ function createAndAppendTable(dtControls) {
     // ===========================================================================
     safeOn("scrapeUI", "click", async () => {
             if (createFeatureMode) return;
+            if (window.scrapeUILockedByScenario) return;
 
             // Strict Page Name Saved Check BEFORE scraping
             if (!verifyPageNameSavedBeforeScraping()) {
@@ -10571,8 +10620,7 @@ function createAndAppendTable(dtControls) {
                 clearOverlay();
                 currentFeatureArea = null;
 
-                document.getElementById('scrapeUI').disabled = false;
-                document.getElementById('scrapeUI').style.backgroundColor = '#2F8BCC';
+                setScrapeUIButtonEnabled(true);
 
                 document.getElementById('reset').disabled = false;
                 document.getElementById('reset').style.backgroundColor = '#2F8BCC';
@@ -10681,13 +10729,13 @@ function createAndAppendTable(dtControls) {
             const createFeatureBtn = document.getElementById("createFeatureBtn");
             if (createFeatureBtn) {
                 createFeatureBtn.style.backgroundColor = "#2F8BCC";
+                createFeatureBtn.classList.remove('is-feature-active');
                 const btnSpan = createFeatureBtn.querySelector("span");
                 if (btnSpan) btnSpan.innerText = "Create Feature";
             }
             const scrapeBtn = document.getElementById("Scrape");
-            const scrapeUIBtn = document.getElementById("scrapeUI");
             if (scrapeBtn) { scrapeBtn.disabled = false; scrapeBtn.style.backgroundColor = "#2F8BCC"; }
-            if (scrapeUIBtn) { scrapeUIBtn.disabled = false; scrapeUIBtn.style.backgroundColor = "#2F8BCC"; }
+            setScrapeUIButtonEnabled(true);
         }
 
         document.getElementById("touchBtn").style.background = "#2F8BCC";
@@ -11475,6 +11523,26 @@ function isCurrentlyOpenRepoProject(storeKey, project) {
 }
 window.isCurrentlyOpenRepoProject = isCurrentlyOpenRepoProject;
 
+function resolveOpenProjectInStore(store) {
+    if (!store || typeof store !== 'object') return { key: null, project: null };
+    const liveKey = window.activeResumedProjectKey;
+    const liveMode = window.activeProjectSessionMode;
+    if (!liveKey || window._resettingHome) return { key: null, project: null };
+    if (liveMode !== 'new' && liveMode !== 'resumed') return { key: null, project: null };
+    if (store[liveKey]) return { key: liveKey, project: store[liveKey] };
+    const found = (typeof findProjectKeyInStore === 'function')
+        ? findProjectKeyInStore(store, liveKey)
+        : { key: liveKey, project: null };
+    if (found && found.project && found.key === liveKey) {
+        return found;
+    }
+    if (found && found.project && found.key && isCurrentlyOpenRepoProject(found.key, found.project)) {
+        return found;
+    }
+    return { key: liveKey, project: null };
+}
+window.resolveOpenProjectInStore = resolveOpenProjectInStore;
+
 function getProjectCardTitle(project, key) {
     if (project && project.appName) return project.appName;
     return String(key || '').split('::')[0].replace(/\s*\(.*?\)\s*$/, '').trim() || 'App';
@@ -11683,11 +11751,24 @@ function projectHasCreatedPagesOrScenarios(project) {
     return (project.pages || []).some(pg => pg && !isEmptyDefaultPage(pg, project));
 }
 
+function isPlaceholderRepoPage(project, page) {
+    if (!page) return true;
+    const hasElements = Array.isArray(page.elements) && page.elements.length > 0;
+    const hasFeatures = Array.isArray(page.features) && page.features.length > 0;
+    if (hasElements || hasFeatures) return false;
+    if (page.isInitialPage) return true;
+    if (isEmptyDefaultPage(page, project)) return true;
+    const def = repoNameKey(getProjectDefaultPageName(project));
+    return !!(def && repoNameKey(page.pageName) === def);
+}
+
 function isKeptInitialPage(project, page) {
     if (!page) return false;
-    if (isEmptyDefaultPage(page, project) && !projectHasCreatedPagesOrScenarios(project)) return true;
-    if (page.isInitialPage) return true;
-    return repoNameKey(page.pageName) === repoNameKey(project && project.appName);
+    if (typeof isRepoNameOwnedByScenario === 'function' && isRepoNameOwnedByScenario(project, page.pageName)) {
+        return false;
+    }
+    if (projectHasCreatedPagesOrScenarios(project)) return false;
+    return isPlaceholderRepoPage(project, page);
 }
 
 function isRepoDefaultPage(project, page) {
@@ -11703,9 +11784,10 @@ function ensureRepoDefaultPage(project) {
 
     if (projectHasCreatedPagesOrScenarios(project)) {
         project.pages = (project.pages || []).filter((pg) => {
-            const n = repoNameKey(pg && pg.pageName);
-            const empty = !(pg && Array.isArray(pg.elements) && pg.elements.length > 0);
-            return !(empty && (n === 'defaultpage' || n === 'default'));
+            if (typeof isRepoNameOwnedByScenario === 'function' && isRepoNameOwnedByScenario(project, pg && pg.pageName)) {
+                return false;
+            }
+            return !isPlaceholderRepoPage(project, pg);
         });
         return null;
     }
@@ -12126,10 +12208,10 @@ function pruneProjectAssetOwnership(project) {
     const keptPages = project.pages.filter(pg => {
         const pKey = repoNameKey(pg.pageName);
         if (!pKey) return false;
+        if (scenarioKeys.has(pKey)) return false;
         const hasElements = Array.isArray(pg.elements) && pg.elements.length > 0;
         const hasFeatures = Array.isArray(pg.features) && pg.features.length > 0;
-        if (scenarioKeys.has(pKey) && !hasElements && !hasFeatures && !isKeptInitialPage(project, pg)) return false;
-        if (featureNameKeys.has(pKey) && !hasElements && !hasFeatures && !isKeptInitialPage(project, pg)) return false;
+        if (featureNameKeys.has(pKey) && !hasElements && !hasFeatures) return false;
         if (hasElements || hasFeatures) return true;
         return isKeptInitialPage(project, pg);
     });
@@ -13059,6 +13141,146 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                 });
             }
         }
+        window.updateRowNumbers = updateRowNumbers;
+
+        function initHomeTableRowReorder() {
+            const tbody = document.getElementById('myTable');
+            if (!tbody || tbody.dataset.rowReorderBound === '1') return;
+            tbody.dataset.rowReorderBound = '1';
+
+            let dragRow = null;
+            let dragOrigin = null;
+            let started = false;
+            let startY = 0;
+            let lastDropHint = null;
+
+            function isReorderableRow(row) {
+                if (!row || row.parentElement !== tbody) return false;
+                if (row.classList.contains('empty-excel-row') || row.classList.contains('no-results-row')) return false;
+                if (row.classList.contains('page-hidden') || row.classList.contains('search-hidden')) return false;
+                if (row.style.display === 'none') return false;
+                return true;
+            }
+
+            function snapshotDataOrder() {
+                return Array.from(tbody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)'));
+            }
+
+            function clearDropHints() {
+                if (!lastDropHint) return;
+                lastDropHint.classList.remove('is-row-drop-before', 'is-row-drop-after');
+                lastDropHint = null;
+            }
+
+            function setDropHint(row, placeBefore) {
+                if (lastDropHint && lastDropHint !== row) {
+                    lastDropHint.classList.remove('is-row-drop-before', 'is-row-drop-after');
+                }
+                if (!row || row === dragRow) {
+                    clearDropHints();
+                    return;
+                }
+                row.classList.toggle('is-row-drop-before', !!placeBefore);
+                row.classList.toggle('is-row-drop-after', !placeBefore);
+                lastDropHint = row;
+            }
+
+            function moveDraggedToPointer(clientY) {
+                if (!dragRow) return;
+                const rows = Array.from(tbody.children).filter(isReorderableRow);
+                let target = null;
+                let placeBefore = false;
+                for (let i = 0; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (row === dragRow) continue;
+                    const rect = row.getBoundingClientRect();
+                    const mid = rect.top + (rect.height / 2);
+                    if (clientY < mid) {
+                        target = row;
+                        placeBefore = true;
+                        break;
+                    }
+                    target = row;
+                    placeBefore = false;
+                }
+
+                if (!target) {
+                    const empty = tbody.querySelector('tr.empty-excel-row');
+                    if (empty) tbody.insertBefore(dragRow, empty);
+                    else tbody.appendChild(dragRow);
+                    clearDropHints();
+                    return;
+                }
+
+                setDropHint(target, placeBefore);
+                if (placeBefore) {
+                    if (dragRow.nextElementSibling !== target) tbody.insertBefore(dragRow, target);
+                } else if (target.nextElementSibling !== dragRow) {
+                    tbody.insertBefore(dragRow, target.nextSibling);
+                }
+            }
+
+            function finishDrag(saveIfMoved) {
+                if (!dragRow) return;
+                const movedRow = dragRow;
+                movedRow.classList.remove('is-row-dragging');
+                clearDropHints();
+                document.body.classList.remove('home-row-reordering');
+                const didStart = started;
+                const origin = dragOrigin;
+                dragRow = null;
+                dragOrigin = null;
+                started = false;
+
+                if (!didStart || !saveIfMoved) return;
+
+                const nowOrder = snapshotDataOrder();
+                const changed = !origin || origin.length !== nowOrder.length
+                    || origin.some((row, idx) => row !== nowOrder[idx]);
+                if (!changed) return;
+
+                if (typeof updateRowNumbers === 'function') updateRowNumbers();
+                if (typeof applyPagination === 'function') applyPagination();
+                else if (typeof updateRowNumbers === 'function') updateRowNumbers();
+                if (typeof window.syncActiveProjectToRepo === 'function') {
+                    window.syncActiveProjectToRepo();
+                }
+            }
+
+            tbody.addEventListener('mousedown', (e) => {
+                if (e.button !== 0) return;
+                const handle = e.target && e.target.closest ? e.target.closest('td.row-index') : null;
+                if (!handle || !tbody.contains(handle)) return;
+                const row = handle.closest('tr');
+                if (!isReorderableRow(row)) return;
+                e.preventDefault();
+                dragRow = row;
+                dragOrigin = snapshotDataOrder();
+                started = false;
+                startY = e.clientY;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (!dragRow) return;
+                if (!started) {
+                    if (Math.abs(e.clientY - startY) < 4) return;
+                    started = true;
+                    dragRow.classList.add('is-row-dragging');
+                    document.body.classList.add('home-row-reordering');
+                }
+                e.preventDefault();
+                moveDraggedToPointer(e.clientY);
+                if (typeof updateRowNumbers === 'function') updateRowNumbers();
+            });
+
+            document.addEventListener('mouseup', () => {
+                finishDrag(true);
+            });
+
+            window.addEventListener('blur', () => {
+                finishDrag(true);
+            });
+        }
 
     // Helper to count custom columns added by user
     function getCustomColsCount() {
@@ -13204,6 +13426,7 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
             document.getElementById('table-container').style.display = "block";
             renderDefaultExcelGrid();
             initResizableTable();
+            initHomeTableRowReorder();
             applyPagination();
             initCustomizeColumnsDropdown();
             applyColumnVisibility();
@@ -14020,9 +14243,8 @@ function updateRowEyeButtonState() {
                    const tbody = document.getElementById('myTable');
                    if (tbody && tbody.querySelectorAll('tr').length < 5) adjustEmptyRows();
 
-                   const toggleMultiDeleteOpt = document.getElementById('toggleMultiDeleteOpt');
-                   if (toggleMultiDeleteOpt && isMultiDeleteMode) {
-                       toggleMultiDeleteOpt.click();
+                   if (typeof setMultiDeleteMode === 'function' && isMultiDeleteMode) {
+                       setMultiDeleteMode(false);
                    }
                    if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
                }
@@ -14339,6 +14561,11 @@ function updateRowEyeButtonState() {
 
         const action = pendingExportAction || window.pendingExportAction;
         const modalTitle = (document.getElementById('popup_title')?.innerText || '').trim().toLowerCase();
+        if (action === "confirmRecordScenarioClear") {
+            if (typeof window.unlockScrapeUIForScenarioRecording === 'function') {
+                window.unlockScrapeUIForScenarioRecording();
+            }
+        }
         if (action === "confirmExistingProjectLaunch" || modalTitle.includes("existing project")) {
             pendingLaunchProjectData = null;
             window.pendingLaunchProjectData = null;
@@ -14933,6 +15160,170 @@ function flashPageNameError() {
     }
 }
 
+function resolveHintPageName(explicit) {
+    const raw = String(
+        explicit != null && String(explicit).trim() !== ''
+            ? explicit
+            : (document.getElementById('pagename_searchbox')?.value || '')
+    ).trim();
+    return raw;
+}
+
+function resolveHintAppName() {
+    let app = '';
+    if (typeof resolveActiveAppName === 'function') {
+        app = String(resolveActiveAppName() || '').trim();
+    }
+    if (!app) {
+        const sel = document.getElementById('appname');
+        const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+        const rawLabel = opt ? String(opt.text || opt.innerText || sel.value || '').trim() : '';
+        app = (typeof getCleanAppName === 'function' ? getCleanAppName(rawLabel) : rawLabel) || '';
+    }
+    const lower = app.toLowerCase();
+    if (!app || lower === 'select app' || lower === 'loading apps...' || lower === 'no device connected' || lower === 'active app') {
+        return '';
+    }
+    return app;
+}
+
+function collectHintPageStats(pageName) {
+    const page = resolveHintPageName(pageName);
+    const app = resolveHintAppName();
+    const tbody = document.getElementById('myTable');
+    const rows = tbody
+        ? Array.from(tbody.querySelectorAll('tr:not(.empty-excel-row):not(.no-results-row)'))
+        : [];
+    const isAll = !page || page.toLowerCase() === 'all';
+    const pageRows = rows.filter((row) => {
+        if (isAll) return true;
+        const cell = row.querySelector('.page');
+        return cell && cell.innerText.trim().toLowerCase() === page.toLowerCase();
+    });
+    const typeCounts = {};
+    pageRows.forEach((row) => {
+        const selectEl = row.querySelector('td.ct select');
+        const labelEl = row.querySelector('td.ct .custom-select-label');
+        const typeName = String(
+            (selectEl && selectEl.value) || (labelEl && labelEl.textContent) || ''
+        ).trim();
+        if (typeName) typeCounts[typeName] = (typeCounts[typeName] || 0) + 1;
+    });
+    const typeSummary = Object.keys(typeCounts)
+        .sort((a, b) => typeCounts[b] - typeCounts[a])
+        .slice(0, 3)
+        .map((t) => `${t} ${typeCounts[t]}`)
+        .join(', ');
+    const scen = (!isAll && window.pageScenarioData && window.pageScenarioData[page]) || null;
+    const features = (window.registeredFeatureAreas || []).filter((area) => {
+        if (!area || !area.name) return false;
+        if (isAll) return true;
+        return String(area.pageName || '').trim().toLowerCase() === page.toLowerCase();
+    });
+    return {
+        page,
+        app,
+        isAll,
+        rowCount: pageRows.length,
+        typeSummary,
+        scenarioName: (scen && scen.scenarioName) ? String(scen.scenarioName).trim() : '',
+        scenarioOutline: (scen && scen.scenarioOutline) ? String(scen.scenarioOutline).trim() : '',
+        featureCount: features.length
+    };
+}
+
+function buildTableHintPhrases(pageName) {
+    const stats = collectHintPageStats(pageName);
+    const label = stats.isAll ? 'All pages' : (stats.page || stats.app || 'this page');
+    const phrases = [];
+
+    phrases.push('Enter your algoQA token to start scraping, then launch the app and capture controls.');
+
+    if (!stats.page && !stats.app) {
+        phrases.push('Save a page name first, then tap the preview or use Scrape UI to add controls.');
+        phrases.push('Hold the # column and drag any row up or down. The new order is saved to the repository.');
+        phrases.push('Tap a control on the device preview to scrape one element, or use Scrape UI to capture the full screen.');
+        return phrases;
+    }
+
+    phrases.push(`${label} currently has ${stats.rowCount} captured control${stats.rowCount === 1 ? '' : 's'} in this table.`);
+    if (stats.app && stats.page && !stats.isAll && stats.page.toLowerCase() !== stats.app.toLowerCase()) {
+        phrases.push(`${label} belongs to app ${stats.app}. Switch the app or page name to update this table.`);
+    }
+    if (stats.typeSummary) {
+        phrases.push(`On ${label}, control types are ${stats.typeSummary}.`);
+    }
+    if (stats.scenarioName) {
+        phrases.push(`${label} is recording scenario “${stats.scenarioName}”.`);
+    }
+    if (stats.scenarioOutline) {
+        phrases.push(`${label} scenario outline: ${stats.scenarioOutline}`);
+    }
+    if (stats.featureCount > 0) {
+        phrases.push(`${label} has ${stats.featureCount} linked feature${stats.featureCount === 1 ? '' : 's'} from Create Feature.`);
+    }
+    phrases.push(`Hold the # column on ${label} and drag to reorder rows. The order is saved to the repository.`);
+    phrases.push(`On ${label}, tap the device preview to scrape one element, or use Scrape UI to capture every on-screen control.`);
+    return phrases;
+}
+
+window.updateTableHintMarquee = function(pageName) {
+    window._tableHintPhrases = buildTableHintPhrases(pageName);
+};
+
+(function initTableHintTypewriter() {
+    let phraseIndex = 0;
+    let charIndex = 0;
+    let isDeleting = false;
+    let started = false;
+
+    function typeLoop() {
+        const el = document.getElementById('tableHintTypeText');
+        if (!el) {
+            window.setTimeout(typeLoop, 600);
+            return;
+        }
+
+        const phrases = (window._tableHintPhrases && window._tableHintPhrases.length)
+            ? window._tableHintPhrases
+            : buildTableHintPhrases();
+        if (!phrases.length) {
+            window.setTimeout(typeLoop, 800);
+            return;
+        }
+        if (phraseIndex >= phrases.length) phraseIndex = 0;
+
+        const current = String(phrases[phraseIndex] || '');
+        if (isDeleting) {
+            charIndex = Math.max(0, charIndex - 1);
+        } else {
+            charIndex = Math.min(current.length, charIndex + 1);
+        }
+        el.textContent = current.slice(0, charIndex);
+
+        let delay = isDeleting ? 18 : (current.length > 70 ? 32 : 42);
+        if (!isDeleting && charIndex === current.length) {
+            delay = 2600;
+            isDeleting = true;
+        } else if (isDeleting && charIndex === 0) {
+            isDeleting = false;
+            window._tableHintPhrases = buildTableHintPhrases();
+            phraseIndex = (phraseIndex + 1) % Math.max((window._tableHintPhrases || phrases).length, 1);
+            delay = 280;
+        }
+        window.setTimeout(typeLoop, delay);
+    }
+
+    onDomReady(() => {
+        window.updateTableHintMarquee(document.getElementById('pagename_searchbox')?.value || '');
+        if (!started) {
+            started = true;
+            typeLoop();
+        }
+    });
+})();
+
+
 //Page Name lock/unlock logic drop down of page
 function initPageNameLogic() {
     const pageNameInput = document.getElementById('pagename_searchbox');
@@ -15071,6 +15462,9 @@ function initPageNameLogic() {
         pageNameInput.value = name;
         lastConfirmedPageName = name;
         applyPageNameFilter(name);
+        if (typeof window.updateTableHintMarquee === 'function') {
+            window.updateTableHintMarquee(name);
+        }
 
         const scenarioOutlineBar = document.getElementById("scenarioOutlineBar");
         const scenarioOutlineText = document.getElementById("scenarioOutlineText");
@@ -17013,6 +17407,10 @@ onDomReady(() => {
 
             const pageCount = getUniquePageCount();
 
+            if (typeof window.lockScrapeUIForScenarioRecording === 'function') {
+                window.lockScrapeUIForScenarioRecording();
+            }
+
             // Only remove/clear pages if multiple pages have been created
             if (pageCount > 1) {
                 if (hasScrapedTableData()) {
@@ -17089,6 +17487,7 @@ onDomReady(() => {
 
                 if (createFeatureMode) {
                     createFeatureBtn.style.backgroundColor = "#34A853";
+                    createFeatureBtn.classList.add('is-feature-active');
                     if (btnSpan) btnSpan.innerText = "Exit Feature";
                     if (scrapeBtn) { scrapeBtn.disabled = true; scrapeBtn.style.backgroundColor = '#B6B6B4'; }
                     if (scrapeUIBtn) { scrapeUIBtn.disabled = true; scrapeUIBtn.style.backgroundColor = '#B6B6B4'; }
@@ -17113,9 +17512,15 @@ onDomReady(() => {
                     showCustomAlert("Feature Mode Active", "Hover over a UI element to highlight its specific area, then click to create a feature for that element.", "success");
                 } else {
                     createFeatureBtn.style.backgroundColor = "#2F8BCC";
+                    createFeatureBtn.classList.remove('is-feature-active');
                     if (btnSpan) btnSpan.innerText = "Create Feature";
                     if (scrapeBtn) { scrapeBtn.disabled = false; scrapeBtn.style.backgroundColor = '#2F8BCC'; }
-                    if (scrapeUIBtn) { scrapeUIBtn.disabled = false; scrapeUIBtn.style.backgroundColor = '#2F8BCC'; }
+                    if (typeof window.setScrapeUIButtonEnabled === 'function') {
+                        window.setScrapeUIButtonEnabled(true);
+                    } else if (scrapeUIBtn) {
+                        scrapeUIBtn.disabled = false;
+                        scrapeUIBtn.style.backgroundColor = '#2F8BCC';
+                    }
                 }
             });
         }
@@ -17302,6 +17707,13 @@ onDomReady(() => {
                 if (addScenarioBtn.style.display === "none" && scenarioOutlineBar) {
                     scenarioOutlineBar.style.display = "none";
                 }
+
+                // Closed Record Scenario without starting — restore Scrape UI
+                if (currentScenarioMode === "RECORD" && addScenarioBtn.style.display === "none") {
+                    if (typeof window.unlockScrapeUIForScenarioRecording === 'function') {
+                        window.unlockScrapeUIForScenarioRecording();
+                    }
+                }
             });
         }
 
@@ -17326,6 +17738,10 @@ onDomReady(() => {
                clearError(recScenarioOutlineInput, "rec_outline_error_icon");
 
                if (!isValid) return;
+
+               if (typeof window.lockScrapeUIForScenarioRecording === 'function') {
+                   window.lockScrapeUIForScenarioRecording();
+               }
 
                const newPageName = recPageNameInput.value.trim();
                const newScenarioName = recScenarioNameInput.value.trim(); // NEW: Grab Scenario Name
@@ -17414,90 +17830,119 @@ onDomReady(() => {
     }
 });
 
+function getScrapedRowDeleteCellHtml(displayStyle) {
+    const style = displayStyle || '';
+    return `<td class="delete-cell" style="border-color:black; ${style}">
+        <div class="delete-cell-actions">
+            <img src="icon/icons8-delete_red.svg" alt="delete" class="deleteBtn" title="Delete row" style="margin: 0 auto; max-width:17px; cursor: pointer; -webkit-user-drag: none;">
+            <input type="checkbox" class="bulk-delete-cb" title="Select row" style="display:none; cursor:pointer; margin:0 auto;">
+        </div>
+    </td>`;
+}
+
+function applyMultiDeleteRowChecks(checked) {
+    const visibleRows = document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row):not(.page-hidden):not(.search-hidden)');
+    visibleRows.forEach((row) => {
+        const cb = row.querySelector('.bulk-delete-cb');
+        if (cb) cb.checked = !!checked;
+    });
+}
+
+function getCheckedBulkDeleteCount() {
+    return document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row) .bulk-delete-cb:checked').length;
+}
+
+function syncBulkDeleteButton() {
+    const bulkDeleteBtn = document.getElementById('bulk_delete_btn');
+    const countEl = document.getElementById('bulkDeleteCount');
+    const count = getCheckedBulkDeleteCount();
+    if (countEl) countEl.textContent = count > 99 ? '99+' : String(count);
+    if (!bulkDeleteBtn) return;
+    if (isMultiDeleteMode && count > 0) {
+        bulkDeleteBtn.style.setProperty('display', 'inline-flex', 'important');
+        bulkDeleteBtn.setAttribute('aria-label', `Delete ${count} selected`);
+        bulkDeleteBtn.title = `Delete ${count} selected`;
+    } else {
+        bulkDeleteBtn.style.setProperty('display', 'none', 'important');
+    }
+}
+
+function setMultiDeleteMode(enabled) {
+    const table = document.getElementById('mainTable');
+    const headerCheckbox = document.getElementById('selectAllCheckbox');
+    const headerTrashIcon = document.getElementById('headerDeleteIcon');
+
+    if (enabled) {
+        if (typeof hasValidTableData === 'function' && !hasValidTableData('myTable')) {
+            showCustomAlert("No Data Found", "There is no data available in the table to perform multi-delete.", "warning");
+            isMultiDeleteMode = false;
+            if (table) table.classList.remove('is-multi-delete');
+            syncBulkDeleteButton();
+            return false;
+        }
+        isMultiDeleteMode = true;
+        if (table) table.classList.add('is-multi-delete');
+        if (headerCheckbox) headerCheckbox.style.display = "inline-block";
+        if (headerTrashIcon) headerTrashIcon.style.display = "none";
+        syncBulkDeleteButton();
+    } else {
+        isMultiDeleteMode = false;
+        if (table) table.classList.remove('is-multi-delete');
+        if (headerCheckbox) {
+            headerCheckbox.style.display = "none";
+            headerCheckbox.checked = false;
+        }
+        if (headerTrashIcon) headerTrashIcon.style.display = "inline-block";
+        document.querySelectorAll('#myTable .bulk-delete-cb').forEach((cb) => {
+            cb.checked = false;
+        });
+        syncBulkDeleteButton();
+    }
+    return isMultiDeleteMode;
+}
+
 // ==========================================
 // MULTI-DELETE (BULK DELETE) LOGIC ENGINE
 // ==========================================
 let isMultiDeleteMode = false;
 
-// 1. Right-Click Context Menu Logic for the Delete Header
 const deleteHeader = document.getElementById('delete_header');
-const deleteContextMenu = document.getElementById('deleteContextMenu');
-const toggleMultiDeleteOpt = document.getElementById('toggleMultiDeleteOpt');
-
 if (deleteHeader) {
     deleteHeader.addEventListener('contextmenu', (e) => {
         e.preventDefault();
-        if (deleteContextMenu) {
-            const menuWidth = 140;
-            const posX = (e.clientX + menuWidth > window.innerWidth) ? e.clientX - menuWidth : e.clientX;
-            deleteContextMenu.style.left = `${posX}px`;
-            deleteContextMenu.style.top = `${e.clientY}px`;
-            deleteContextMenu.style.display = "block";
-        }
     });
 }
 
-// Hide context menu on outside click
-document.addEventListener('click', (e) => {
-    if (deleteContextMenu && !deleteContextMenu.contains(e.target)) {
-        deleteContextMenu.style.display = "none";
-    }
-});
-
-// 2. Toggle Multi-Delete Mode
-if (toggleMultiDeleteOpt) {
-    toggleMultiDeleteOpt.addEventListener('click', () => {
-        // If we are about to ENABLE multi-delete, check if the table actually contains data first
-        if (!isMultiDeleteMode) {
-            if (typeof hasValidTableData === 'function' && !hasValidTableData('myTable')) {
-                showCustomAlert("No Data Found", "There is no data available in the table to perform multi-delete.", "warning");
-                if (deleteContextMenu) deleteContextMenu.style.display = "none";
-                return; // Halt execution, do not enable mode
-            }
-        }
-
-        isMultiDeleteMode = !isMultiDeleteMode;
-
-        const bulkDeleteBtn = document.getElementById('bulk_delete_btn');
-        const headerCheckbox = document.getElementById('selectAllCheckbox');
-        const headerTrashIcon = document.getElementById('headerDeleteIcon');
-        const dataDeleteCells = document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row) .delete-cell');
-
+const headerSelectAllBtn = document.getElementById('headerSelectAllBtn');
+if (headerSelectAllBtn) {
+    headerSelectAllBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         if (isMultiDeleteMode) {
-            // Enable Mode
-            toggleMultiDeleteOpt.innerText = "Disable Multi-Delete";
-            if(bulkDeleteBtn) bulkDeleteBtn.style.setProperty("display", "inline-flex", "important");
-            if(headerCheckbox) headerCheckbox.style.display = "inline-block";
-            if(headerTrashIcon) headerTrashIcon.style.display = "none";
-
-            // Swap icons in rows
-            dataDeleteCells.forEach(cell => {
-                const cb = cell.querySelector('.bulk-delete-cb');
-                const trash = cell.querySelector('.deleteBtn');
-                if (cb) { cb.style.display = "inline-block"; cb.checked = false; }
-                if (trash) trash.style.display = "none";
-            });
-            if (headerCheckbox) headerCheckbox.checked = false;
-
-        } else {
-            // Disable Mode
-            toggleMultiDeleteOpt.innerText = "Enable Multi-Delete";
-            if(bulkDeleteBtn) bulkDeleteBtn.style.setProperty("display", "none", "important");
-            if(headerCheckbox) headerCheckbox.style.display = "none";
-            if(headerTrashIcon) headerTrashIcon.style.display = "inline-block";
-
-            // Swap icons in rows back to normal
-            dataDeleteCells.forEach(cell => {
-                const cb = cell.querySelector('.bulk-delete-cb');
-                const trash = cell.querySelector('.deleteBtn');
-                if (cb) cb.style.display = "none";
-                if (trash) trash.style.display = "inline-block";
-            });
+            setMultiDeleteMode(false);
+            return;
         }
-
-        if (deleteContextMenu) deleteContextMenu.style.display = "none";
+        setMultiDeleteMode(true);
     });
 }
+
+document.addEventListener('change', (e) => {
+    const cb = e.target && e.target.classList && e.target.classList.contains('bulk-delete-cb')
+        ? e.target
+        : null;
+    if (!cb || !cb.closest || !cb.closest('#myTable')) return;
+    if (!isMultiDeleteMode) {
+        cb.checked = false;
+        return;
+    }
+    const headerCheckbox = document.getElementById('selectAllCheckbox');
+    if (headerCheckbox) {
+        const visible = document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row):not(.page-hidden):not(.search-hidden) .bulk-delete-cb');
+        const checked = document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row):not(.page-hidden):not(.search-hidden) .bulk-delete-cb:checked');
+        headerCheckbox.checked = visible.length > 0 && checked.length === visible.length;
+    }
+    syncBulkDeleteButton();
+});
 
 // 3. Header "Select All" Logic
 const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -17510,6 +17955,7 @@ if (selectAllCheckbox) {
             const cb = row.querySelector('.bulk-delete-cb');
             if (cb) cb.checked = isChecked;
         });
+        if (typeof syncBulkDeleteButton === 'function') syncBulkDeleteButton();
     });
 }
 
@@ -17980,6 +18426,75 @@ function generateNodeFingerprint(node) {
     }
 }
 
+function readUiNodeAttr(node, names) {
+    if (!node) return '';
+    const keys = Array.isArray(names) ? names : [names];
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (!key || !node.getAttribute) continue;
+        const direct = node.getAttribute(key);
+        if (direct != null && String(direct).trim()) return String(direct).trim();
+    }
+    const attrs = node.attributes;
+    if (!attrs || !attrs.length) return '';
+    const wanted = keys.map((k) => String(k || '').toLowerCase()).filter(Boolean);
+    for (let i = 0; i < attrs.length; i++) {
+        const attr = attrs[i];
+        if (!attr || !attr.name) continue;
+        if (wanted.includes(String(attr.name).toLowerCase()) && String(attr.value || '').trim()) {
+            return String(attr.value).trim();
+        }
+    }
+    return '';
+}
+
+function readUiNodeFlag(node, names) {
+    const raw = readUiNodeAttr(node, names).toLowerCase();
+    return raw === 'true' || raw === '1' || raw === 'yes';
+}
+
+function normalizeControlCompareValue(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function isScrapedPlaceholderControlValue(val, controlName, extraPlaceholders) {
+    const raw = String(val || '').replace(/\u00a0/g, ' ').trim();
+    if (!raw) return true;
+    if (/^[•●∙·⚫⬤*]+$/.test(raw)) return true;
+    const normalizedVal = normalizeControlCompareValue(raw);
+    if (!normalizedVal) return true;
+    const pool = Array.isArray(extraPlaceholders) ? extraPlaceholders.slice() : [];
+    if (controlName) {
+        pool.push(controlName);
+        pool.push(String(controlName).replace(/_\d+$/, ''));
+    }
+    for (let i = 0; i < pool.length; i++) {
+        const candidate = String(pool[i] || '').replace(/\u00a0/g, ' ').trim();
+        if (!candidate) continue;
+        if (normalizeControlCompareValue(candidate) === normalizedVal) return true;
+    }
+    return false;
+}
+
+function collectNodePlaceholderTexts(node) {
+    const texts = [];
+    const add = (v) => {
+        const t = String(v || '').replace(/\u00a0/g, ' ').trim();
+        if (t) texts.push(t);
+    };
+    let current = node;
+    let depth = 0;
+    while (current && depth < 5) {
+        add(readUiNodeAttr(current, [
+            'hint', 'hint-text', 'hintText', 'shownHint', 'placeholder',
+            'placeholderValue', 'placeholder-value', 'placeholderText', 'placeholder-text'
+        ]));
+        current = current.parentNode;
+        depth += 1;
+    }
+    return texts;
+}
+
 function getInputControlValue(node, controlName) {
     if (!node) return '';
     const tag = (typeof getUiNodeName === 'function' ? getUiNodeName(node) : node.nodeName) || '';
@@ -17992,40 +18507,29 @@ function getInputControlValue(node, controlName) {
         tag === 'android.widget.AutoCompleteTextView' ||
         tag === 'android.widget.MultiAutoCompleteTextView' ||
         /EditText$|TextInputEditText$|SearchAutoComplete$/i.test(tag) ||
-        (node.getAttribute && (node.getAttribute('editable') === 'true' || node.getAttribute('password') === 'true'));
+        readUiNodeFlag(node, ['editable']) ||
+        readUiNodeFlag(node, ['password']);
 
     if (!isTextBox) return '';
 
-    const text = (node.getAttribute('text') || '').trim();
-    const hint = (node.getAttribute('hint') || '').trim();
-    const value = (node.getAttribute('value') || '').trim();
-    const label = (node.getAttribute('label') || '').trim();
-    const name = (node.getAttribute('name') || '').trim();
-    const contentDesc = (node.getAttribute('content-desc') || '').trim();
-    const placeholder = (node.getAttribute('placeholderValue') || '').trim();
-    const resId = ((node.getAttribute('resource-id') || '').split('/').pop() || '').trim();
+    // Android: when showing-hint is true the `text` attribute is the hint, not typed input.
+    if (readUiNodeFlag(node, ['showing-hint', 'showingHint', 'isShowingHintText'])) {
+        return '';
+    }
 
-    let val = value || text;
+    const text = readUiNodeAttr(node, ['text']);
+    const value = readUiNodeAttr(node, ['value']);
+    const label = readUiNodeAttr(node, ['label']);
+    const name = readUiNodeAttr(node, ['name']);
+    const contentDesc = readUiNodeAttr(node, ['content-desc', 'contentDesc', 'contentDescription']);
+    const resId = (readUiNodeAttr(node, ['resource-id', 'resourceId', 'id']).split('/').pop() || '').trim();
+    const isIOS = /^XCUIElementType/i.test(tag) || (typeof isIOSPlatform === 'function' && isIOSPlatform());
+    const val = (isIOS ? (value || text) : (text || value)).replace(/\u00a0/g, ' ').trim();
+    if (!val) return '';
 
-    // Normalize strings to compare and avoid copying Control Name / placeholder / hint into Control Value
-    const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    const normalizedVal = norm(val);
-    const normalizedName = norm(controlName);
-    const normalizedHint = norm(hint);
-    const normalizedLabel = norm(label);
-    const normalizedDesc = norm(contentDesc);
-    const normalizedPlaceholder = norm(placeholder);
-    const normalizedResId = norm(resId);
-
-    if (
-        !val ||
-        (normalizedHint && normalizedVal === normalizedHint) ||
-        (normalizedLabel && normalizedVal === normalizedLabel) ||
-        (normalizedDesc && normalizedVal === normalizedDesc) ||
-        (normalizedPlaceholder && normalizedVal === normalizedPlaceholder) ||
-        (normalizedResId && normalizedVal === normalizedResId) ||
-        (normalizedName && (normalizedVal === normalizedName || normalizedVal.includes(normalizedName) || normalizedName.includes(normalizedVal)))
-    ) {
+    const placeholderPool = collectNodePlaceholderTexts(node);
+    placeholderPool.push(label, name, contentDesc, resId);
+    if (isScrapedPlaceholderControlValue(val, controlName, placeholderPool)) {
         return '';
     }
 
@@ -19816,27 +20320,29 @@ if (platformVersionField) {
     window.bindOrPreserveProjectDevice = bindOrPreserveProjectDevice;
 
     function getOrCreateProject(store, key, fallbackAppName, fallbackPlatform, fallbackDevice) {
-        const preferredKey = window.activeResumedProjectKey || key;
-        const found = (typeof findProjectKeyInStore === 'function')
-            ? findProjectKeyInStore(store, preferredKey)
-            : { key: preferredKey, project: store[preferredKey] };
-        if (found && found.project) {
-            if (found.key && (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed')) {
-                window.activeResumedProjectKey = found.key;
+        const liveKey = window.activeResumedProjectKey;
+        const inLiveSession = !!(liveKey && (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed'));
+
+        if (inLiveSession) {
+            const opened = (typeof resolveOpenProjectInStore === 'function')
+                ? resolveOpenProjectInStore(store)
+                : { key: liveKey, project: store[liveKey] };
+            if (opened && opened.project) {
+                if (opened.key && opened.key !== liveKey) {
+                    window.activeResumedProjectKey = opened.key;
+                }
+                return opened.project;
             }
-            if (!found.project.projectId) {
-                found.project.projectId = (found.key && String(found.key).includes('::'))
-                    ? String(found.key).split('::').pop()
-                    : createProjectId(store, found.project.appName, found.project.platform);
-            }
-            const devInfo = fallbackDevice || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(found.project.platform) : null);
-            if (devInfo) {
-                bindOrPreserveProjectDevice(found.project, devInfo);
-            }
-            return found.project;
+            key = liveKey;
+        }
+
+        const preferredKey = key || liveKey;
+        if (preferredKey && store[preferredKey]) {
+            return store[preferredKey];
         }
 
         const targetKey = preferredKey;
+        if (!targetKey) return null;
         const platform = fallbackPlatform || (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android'));
         const appName = window.activeResumedAppName || fallbackAppName || resolveActiveAppName();
         const devInfo = fallbackDevice || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(platform) : null);
@@ -19870,8 +20376,8 @@ if (platformVersionField) {
         const store = beginRepoWrite();
         try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
-
-        const pName = pageName || '';
+        if (!project) return;
+        const pName = pageName;
         const sName = scenarioName || (pName ? `${pName} Scenario` : 'Scenario');
 
         // Upsert / deduplicate by scenario name / pageName
@@ -19929,6 +20435,9 @@ if (platformVersionField) {
         if (pName && Array.isArray(project.pages)) {
             project.pages = project.pages.filter(pg => (pg.pageName || '').trim().toLowerCase() !== pName.trim().toLowerCase());
         }
+        if (typeof isPlaceholderRepoPage === 'function') {
+            project.pages = (project.pages || []).filter(pg => !isPlaceholderRepoPage(project, pg));
+        }
         if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
 
         project.lastUpdated = Date.now();
@@ -19946,6 +20455,7 @@ if (platformVersionField) {
         const store = beginRepoWrite();
         try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
+        if (!project) return;
         const currentPage = featurePageName || ((typeof window.resolveHomePageNameForScrape === 'function')
             ? window.resolveHomePageNameForScrape()
             : ((typeof getActiveHomePageName === 'function') ? getActiveHomePageName() : ''));
@@ -20164,7 +20674,19 @@ if (platformVersionField) {
 
         // 4. In Repository Store: remove from features array and update all page elements
         const store = (typeof getProjectStore === 'function') ? getProjectStore() : ((typeof window.getRepoProjectsStore === 'function') ? window.getRepoProjectsStore() : {});
-        const pKeys = targetProjectKey && store[targetProjectKey] ? [targetProjectKey] : Object.keys(store);
+        let writeKey = targetProjectKey || window.activeResumedProjectKey;
+        if (writeKey && store && !store[writeKey] && typeof findProjectKeyInStore === 'function') {
+            const found = findProjectKeyInStore(store, writeKey);
+            if (found && found.key && found.project && (
+                found.key === writeKey
+                || found.key === window.activeResumedProjectKey
+                || (typeof isCurrentlyOpenRepoProject === 'function' && isCurrentlyOpenRepoProject(found.key, found.project))
+            )) {
+                writeKey = found.key;
+            }
+        }
+        const pKeys = (writeKey && store && store[writeKey]) ? [writeKey] : [];
+        if (!pKeys.length) return;
 
         pKeys.forEach(k => {
             const proj = store[k];
@@ -20247,17 +20769,27 @@ if (platformVersionField) {
         const store = beginRepoWrite();
         try {
         const project = getOrCreateProject(store, projectKey, currentApp, currentPlatform);
+        if (!project) return;
 
         const pName = pageName.trim();
+        if (typeof isRepoNameOwnedByScenario === 'function' && isRepoNameOwnedByScenario(project, pName)) {
+            return;
+        }
         const existingIdx = (project.pages || []).findIndex(p => p.pageName && p.pageName.trim().toLowerCase() === pName.toLowerCase());
         const cleanElements = Array.isArray(elements) ? JSON.parse(JSON.stringify(elements)) : [];
 
-        // Empty extract (e.g. all rows deleted from table)
+        // Empty extract (e.g. all rows deleted from table) — repo must match Home
         if (!cleanElements.length) {
             if (existingIdx >= 0) {
                 const existing = project.pages[existingIdx];
-                existing.elements = [];
-                existing.count = 0;
+                const hasFeatures = Array.isArray(existing.features) && existing.features.length > 0;
+                if (hasFeatures) {
+                    existing.elements = [];
+                    existing.count = 0;
+                    existing.timestamp = Date.now();
+                } else {
+                    project.pages.splice(existingIdx, 1);
+                }
                 project.lastUpdated = Date.now();
             }
             return;
@@ -20316,6 +20848,9 @@ if (platformVersionField) {
             const devInfo = (typeof resolveActiveDeviceInfo === 'function') ? resolveActiveDeviceInfo(platform) : null;
 
             const project = getOrCreateProject(store, projectKey, appName, platform, devInfo);
+            if (!project || (window.activeResumedProjectKey && store[window.activeResumedProjectKey] && project !== store[window.activeResumedProjectKey])) {
+                return;
+            }
             if (devInfo && typeof bindOrPreserveProjectDevice === 'function') {
                 bindOrPreserveProjectDevice(project, devInfo);
             }
@@ -20324,20 +20859,14 @@ if (platformVersionField) {
             const extractFn = (typeof window.extractAllTableData === 'function') ? window.extractAllTableData : null;
             const allElements = extractFn ? (extractFn('myTable') || []) : [];
 
-            // 1. Sync Scenarios from the live Home table
+            // 1. Sync Scenarios from the live Home table (remaining rows, including none)
             if (window.pageScenarioData) {
                 Object.keys(window.pageScenarioData).forEach(pName => {
                     const sData = window.pageScenarioData[pName];
                     if (sData && (sData.scenarioName || sData.scenarioOutline)) {
                         scenarioPageSet.add(pName.trim().toLowerCase());
                         const pageEls = allElements.filter(r => (r['PAGE NAME'] || '').trim().toLowerCase() === pName.trim().toLowerCase());
-                        if (pageEls.length > 0) {
-                            window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName, pageEls);
-                        } else if (allElements.length === 0) {
-                            window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName, []);
-                        } else {
-                            window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName);
-                        }
+                        window.saveScenarioToRepo(pName, sData.scenarioName, sData.scenarioOutline, platform, appName, pageEls);
                     }
                 });
             }
@@ -20369,28 +20898,32 @@ if (platformVersionField) {
                 });
             }
 
-            // 3. Sync Standalone Pages & Scraped Elements
+            // 3. Sync Standalone Pages & Scraped Elements from the live table
             const pageGroups = {};
+            const ensurePageGroup = (name) => {
+                const n = String(name || '').trim();
+                if (!n || n.toLowerCase() === 'all') return '';
+                const existing = Object.keys(pageGroups).find(k => k.toLowerCase() === n.toLowerCase());
+                if (existing) return existing;
+                pageGroups[n] = [];
+                return n;
+            };
 
-            if (allElements.length > 0) {
-                allElements.forEach(el => {
-                    const p = (el['PAGE NAME'] || document.getElementById('pagename_searchbox')?.value || '').trim();
-                    if (p && p.toLowerCase() !== 'all') {
-                        if (!pageGroups[p]) pageGroups[p] = [];
-                        pageGroups[p].push(el);
-                    }
-                });
+            allElements.forEach(el => {
+                const p = (el['PAGE NAME'] || document.getElementById('pagename_searchbox')?.value || '').trim();
+                const key = ensurePageGroup(p);
+                if (key) pageGroups[key].push(el);
+            });
+
+            if (window.registeredPageNames) {
+                window.registeredPageNames.forEach((p) => ensurePageGroup(p));
             }
+            (project.pages || []).forEach((pg) => ensurePageGroup(pg && pg.pageName));
 
-            // Always track active page even if 0 elements remain in myTable after deletion
             const activePage = (typeof window.resolveHomePageNameForScrape === 'function')
                 ? window.resolveHomePageNameForScrape()
                 : (document.getElementById('pagename_searchbox')?.value || '').trim();
-            if (activePage && activePage.toLowerCase() !== 'all' && allElements.length === 0) {
-                if (!pageGroups[activePage]) {
-                    pageGroups[activePage] = [];
-                }
-            }
+            ensurePageGroup(activePage);
 
             Object.keys(pageGroups).forEach(p => {
                 const key = p.trim().toLowerCase();
@@ -20410,8 +20943,8 @@ if (platformVersionField) {
             }
 
             const repoTab = document.getElementById('tab-repository');
-            const repoIsOpen = repoTab && repoTab.classList.contains('is-active');
-            if (repoIsOpen && typeof window.renderRepositoryView === 'function') {
+            const repoIsOpen = repoTab && (repoTab.classList.contains('is-active') || repoTab.classList.contains('is-workspace-open'));
+            if (typeof window.renderRepositoryView === 'function' && (repoIsOpen || currentSelectedProjectKey)) {
                 window.renderRepositoryView();
             }
         } catch (e) {
@@ -20752,7 +21285,10 @@ if (platformVersionField) {
                 badgeClass: 'repo-badge-page',
                 title: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
                 subtitle: `${cleanElList.length} UI ${cleanElList.length === 1 ? 'control' : 'controls'} • ${item.appName || project.appName || 'Application'} (${platform})`,
-                data: cleanElList
+                data: {
+                    "isRecordscenario": false,
+                    "dashboardControls": cleanElList
+                }
             };
         } else if (item.type === 'scenario') {
             // Find scraped steps for this scenario (from item.elements or fallback to project.pages)
@@ -20764,6 +21300,16 @@ if (platformVersionField) {
                 );
                 if (matchedPage && Array.isArray(matchedPage.elements)) {
                     rawSteps = matchedPage.elements;
+                }
+            }
+            if (rawSteps.length === 0 && typeof window.extractAllTableData === 'function') {
+                const tableRows = window.extractAllTableData('myTable') || [];
+                const pageKey = repoNameKey(item.pageName || item.name);
+                const matchingRows = pageKey
+                    ? tableRows.filter(r => repoNameKey(r['PAGE NAME']) === pageKey)
+                    : tableRows;
+                if (matchingRows.length > 0) {
+                    rawSteps = matchingRows;
                 }
             }
 
