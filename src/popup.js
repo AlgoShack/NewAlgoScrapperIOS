@@ -1,6 +1,6 @@
     /**
      * =============================================================================
-     * AlgoScraper — Electron RENDERER (src/popup.js)
+     * AlgoScraper — Electron RENDERER (src/popup.js) new test
      * =============================================================================
      * Runs inside the BrowserWindow (index.html). Owns UI events, Appium WebDriver
      * session usage, scraping, gestures, scenarios, and Download / AlgoQA export.
