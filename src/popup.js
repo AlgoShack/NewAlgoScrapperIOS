@@ -240,6 +240,118 @@
     }
     window.decryptData = decryptData;
 
+    const SENSITIVE_KEYWORD_REGEX = /(password|passwd|pwd|passcode|mpin|upipin|\bpin\b|secret|token|auth_?token|cvv|cvc|security_?code|aadhaar|aadhar|uidai|\botp\b|totp|one_?time_?password|vcode|verification_?code|auth_?code|\bpan\b|pancard|pan_?number|credit_?card|debit_?card|card_?number|card_?no|cc_?num|bank_?account|account_?no|account_?number|acc_?no|\bssn\b|social_?security|passport|driving_?licen[sc]e|dl_?number)/i;
+
+    const AADHAAR_REGEX = /\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b/;
+    const PAN_REGEX = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/i;
+    const CARD_REGEX = /\b(?:\d{4}[\s-]?){3}\d{4}\b/;
+    const SSN_REGEX = /\b\d{3}[-\s]\d{2}[-\s]\d{4}\b/;
+
+    function isAlreadyEncrypted(val) {
+        if (!val || typeof val !== "string") return false;
+        const cleaned = val.trim();
+        if (!cleaned.startsWith("U2FsdGVkX1")) return false;
+        if (!CryptoJS) return false;
+        try {
+            const bytes = CryptoJS.AES.decrypt(cleaned, secretKey);
+            const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+            return !!decrypted && decrypted.length > 0;
+        } catch (_) {
+            return false;
+        }
+    }
+    window.isAlreadyEncrypted = isAlreadyEncrypted;
+
+    function encryptSensitiveValue(val) {
+        if (val == null) return "";
+        const str = String(val).trim();
+        if (!str) return "";
+        if (!CryptoJS) return str;
+        if (isAlreadyEncrypted(str)) return str;
+        try {
+            return CryptoJS.AES.encrypt(str, secretKey).toString();
+        } catch (err) {
+            console.error("Encryption error:", err);
+            return str;
+        }
+    }
+    window.encryptSensitiveValue = encryptSensitiveValue;
+
+    function decryptSensitiveValue(cipherText) {
+        if (!cipherText || typeof cipherText !== "string") return cipherText;
+        const cleaned = cipherText.trim();
+        if (!isAlreadyEncrypted(cleaned) || !CryptoJS) return cipherText;
+        try {
+            const bytes = CryptoJS.AES.decrypt(cleaned, secretKey);
+            const dec = bytes.toString(CryptoJS.enc.Utf8);
+            return (dec && dec.trim()) ? dec : cipherText;
+        } catch (err) {
+            return cipherText;
+        }
+    }
+    window.decryptSensitiveValue = decryptSensitiveValue;
+
+    function isSensitiveFieldOrValue(controlName, controlType, value, node) {
+        const valStr = String(value || "").trim();
+        if (valStr && isAlreadyEncrypted(valStr)) return true;
+
+        let nodeTag = "";
+        let nodeAttrsStr = "";
+        let isNodeSecure = false;
+
+        if (node) {
+            nodeTag = (typeof getUiNodeName === "function" ? getUiNodeName(node) : node.nodeName) || "";
+            const resId = (typeof readUiNodeAttr === "function" ? readUiNodeAttr(node, ['resource-id', 'resourceId', 'id']) : (node.getAttribute ? (node.getAttribute("resource-id") || node.getAttribute("id") || "") : "")) || "";
+            const name = (typeof readUiNodeAttr === "function" ? readUiNodeAttr(node, ['name']) : (node.getAttribute ? node.getAttribute("name") || "" : "")) || "";
+            const label = (typeof readUiNodeAttr === "function" ? readUiNodeAttr(node, ['label']) : (node.getAttribute ? node.getAttribute("label") || "" : "")) || "";
+            const text = (typeof readUiNodeAttr === "function" ? readUiNodeAttr(node, ['text']) : (node.getAttribute ? node.getAttribute("text") || "" : "")) || "";
+            const desc = (typeof readUiNodeAttr === "function" ? readUiNodeAttr(node, ['content-desc', 'contentDesc', 'contentDescription']) : (node.getAttribute ? node.getAttribute("content-desc") || "" : "")) || "";
+            const hint = (typeof readUiNodeAttr === "function" ? readUiNodeAttr(node, ['hint', 'placeholder']) : (node.getAttribute ? node.getAttribute("hint") || node.getAttribute("placeholder") || "" : "")) || "";
+
+            nodeAttrsStr = [resId, name, label, text, desc, hint, nodeTag].join(" ");
+
+            if (nodeTag === "XCUIElementTypeSecureTextField" || /SecureTextField/i.test(nodeTag)) {
+                isNodeSecure = true;
+            }
+            if (typeof readUiNodeFlag === "function") {
+                if (readUiNodeFlag(node, ['password', 'isPassword', 'secure', 'isSecure'])) {
+                    isNodeSecure = true;
+                }
+            } else if (node.getAttribute) {
+                const p = node.getAttribute("password") || node.getAttribute("isPassword") || node.getAttribute("secure");
+                if (p === "true" || p === true) isNodeSecure = true;
+            }
+        }
+
+        if (isNodeSecure) return true;
+
+        const combinedMetadata = [
+            controlName || "",
+            controlType || "",
+            nodeTag || "",
+            nodeAttrsStr || ""
+        ].join(" ");
+
+        if (SENSITIVE_KEYWORD_REGEX.test(combinedMetadata)) {
+            return true;
+        }
+
+        if (!valStr) return false;
+
+        if (AADHAAR_REGEX.test(valStr)) return true;
+        if (PAN_REGEX.test(valStr)) return true;
+        if (CARD_REGEX.test(valStr)) return true;
+        if (SSN_REGEX.test(valStr)) return true;
+
+        // OTP / Passcode (4 to 8 digits when name or metadata mentions code, pin, otp, auth, pass)
+        if (/^\d{4,8}$/.test(valStr) && /(otp|code|pin|pass|auth|verify|vcode)/i.test(combinedMetadata)) {
+            return true;
+        }
+
+        return false;
+    }
+    window.isSensitiveFieldOrValue = isSensitiveFieldOrValue;
+
     /** Shared token connect — bound EARLY so mid-file throws cannot kill auth on Windows. */
     function connectAlgoTokenFromInput() {
         const tokenInput = document.getElementById("tokenInput");
@@ -6818,6 +6930,9 @@
         if (typeof isScrapedPlaceholderControlValue === "function"
             && isScrapedPlaceholderControlValue(controlValue, controlName)) {
             controlValue = "";
+        }
+        if (controlValue && typeof isSensitiveFieldOrValue === "function" && isSensitiveFieldOrValue(controlName, controlType, controlValue, null)) {
+            controlValue = (typeof encryptSensitiveValue === "function") ? encryptSensitiveValue(controlValue) : controlValue;
         }
         const featureName = String(row["FEATURE NAME"] || row.FeatureName || pageName).trim() || pageName;
         const nodeName = String(row["NODE NAME"] || row.NodeName || pageName).trim() || pageName;
@@ -18531,6 +18646,10 @@ function getInputControlValue(node, controlName) {
     placeholderPool.push(label, name, contentDesc, resId);
     if (isScrapedPlaceholderControlValue(val, controlName, placeholderPool)) {
         return '';
+    }
+
+    if (typeof isSensitiveFieldOrValue === 'function' && isSensitiveFieldOrValue(controlName, '', val, node)) {
+        return (typeof encryptSensitiveValue === 'function') ? encryptSensitiveValue(val) : val;
     }
 
     return val;
