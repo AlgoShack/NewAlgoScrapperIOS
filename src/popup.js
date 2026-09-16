@@ -240,7 +240,7 @@
     }
     window.decryptData = decryptData;
 
-    const SENSITIVE_KEYWORD_REGEX = /(password|passwd|pwd|passcode|mpin|upipin|\bpin\b|secret|token|auth_?token|cvv|cvc|security_?code|aadhaar|aadhar|uidai|\botp\b|totp|one_?time_?password|vcode|verification_?code|auth_?code|\bpan\b|pancard|pan_?number|credit_?card|debit_?card|card_?number|card_?no|cc_?num|bank_?account|account_?no|account_?number|acc_?no|\bssn\b|social_?security|passport|driving_?licen[sc]e|dl_?number)/i;
+    const SENSITIVE_KEYWORD_REGEX = /(password|passwd|pwd|passcode|mpin|upipin|\bpin\b|secret|token|auth_?token|cvv|cvc|security_?code|aadhaar|aadhar|uidai|\botp\b|totp|one_?time_?password|vcode|verification_?code|auth_?code|\bpan\b|pancard|pan_?number|credit_?card|debit_?card|card_?number|card_?no|cc_?num|bank_?account|account_?no|account_?number|acc_?no|\bssn\b|social_?security|passport|driving_?licen[sc]e|dl_?number|phone|mobile|contact_?no|cell_?phone)/i;
 
     const AADHAAR_REGEX = /\b[2-9]\d{3}[\s-]?\d{4}[\s-]?\d{4}\b/;
     const PAN_REGEX = /\b[A-Z]{5}[0-9]{4}[A-Z]\b/i;
@@ -18572,22 +18572,35 @@ function normalizeControlCompareValue(s) {
     return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function isScrapedPlaceholderControlValue(val, controlName, extraPlaceholders) {
+function isScrapedPlaceholderControlValue(val, controlName, explicitPlaceholders) {
     const raw = String(val || '').replace(/\u00a0/g, ' ').trim();
     if (!raw) return true;
-    if (/^[•●∙·⚫⬤*]+$/.test(raw)) return true;
+    if (typeof isAlreadyEncrypted === 'function' && isAlreadyEncrypted(raw)) return false;
+    // Masked password characters represent typed password characters, not a placeholder
+    if (/^[•●∙·⚫⬤*]+$/.test(raw)) return false;
+
     const normalizedVal = normalizeControlCompareValue(raw);
     if (!normalizedVal) return true;
-    const pool = Array.isArray(extraPlaceholders) ? extraPlaceholders.slice() : [];
-    if (controlName) {
-        pool.push(controlName);
-        pool.push(String(controlName).replace(/_\d+$/, ''));
+
+    // Check only explicit placeholder attributes (hint, placeholderValue, placeholder)
+    if (Array.isArray(explicitPlaceholders)) {
+        for (let i = 0; i < explicitPlaceholders.length; i++) {
+            const candidate = String(explicitPlaceholders[i] || '').replace(/\u00a0/g, ' ').trim();
+            if (!candidate) continue;
+            if (normalizeControlCompareValue(candidate) === normalizedVal) return true;
+        }
     }
-    for (let i = 0; i < pool.length; i++) {
-        const candidate = String(pool[i] || '').replace(/\u00a0/g, ' ').trim();
-        if (!candidate) continue;
-        if (normalizeControlCompareValue(candidate) === normalizedVal) return true;
+
+    // Generic placeholder text heuristics (e.g. "Enter your email", "Search products...")
+    const isGenericPlaceholderText = /^(enter|type|input|select|choose|please\s+enter|your|write)\s+/i.test(raw) ||
+        /^(search|type|enter|find|write|filter|placeholder)\b.*(\.\.\.|…)$/i.test(raw);
+
+    if (isGenericPlaceholderText) {
+        if (!/@/.test(raw) && !/^\d{10,16}$/.test(raw.replace(/[\s-]/g, ''))) {
+            return true;
+        }
     }
+
     return false;
 }
 
@@ -18595,11 +18608,11 @@ function collectNodePlaceholderTexts(node) {
     const texts = [];
     const add = (v) => {
         const t = String(v || '').replace(/\u00a0/g, ' ').trim();
-        if (t) texts.push(t);
+        if (t && !texts.includes(t)) texts.push(t);
     };
     let current = node;
     let depth = 0;
-    while (current && depth < 5) {
+    while (current && depth < 3) {
         add(readUiNodeAttr(current, [
             'hint', 'hint-text', 'hintText', 'shownHint', 'placeholder',
             'placeholderValue', 'placeholder-value', 'placeholderText', 'placeholder-text'
@@ -18613,6 +18626,7 @@ function collectNodePlaceholderTexts(node) {
 function getInputControlValue(node, controlName) {
     if (!node) return '';
     const tag = (typeof getUiNodeName === 'function' ? getUiNodeName(node) : node.nodeName) || '';
+    const nodeClass = (node.getAttribute && node.getAttribute('class')) || '';
     const isTextBox =
         tag === 'XCUIElementTypeTextField' ||
         tag === 'XCUIElementTypeSecureTextField' ||
@@ -18621,29 +18635,25 @@ function getInputControlValue(node, controlName) {
         tag === 'android.widget.EditText' ||
         tag === 'android.widget.AutoCompleteTextView' ||
         tag === 'android.widget.MultiAutoCompleteTextView' ||
-        /EditText$|TextInputEditText$|SearchAutoComplete$/i.test(tag) ||
-        readUiNodeFlag(node, ['editable']) ||
-        readUiNodeFlag(node, ['password']);
+        /EditText$|TextInputEditText$|SearchAutoComplete$|SearchEditText$/i.test(tag) ||
+        /EditText$|TextInputEditText$|SearchAutoComplete$|SearchEditText$/i.test(nodeClass) ||
+        readUiNodeFlag(node, ['editable', 'isEditable', 'is-editable']) ||
+        readUiNodeFlag(node, ['password', 'isPassword']);
 
     if (!isTextBox) return '';
 
     // Android: when showing-hint is true the `text` attribute is the hint, not typed input.
-    if (readUiNodeFlag(node, ['showing-hint', 'showingHint', 'isShowingHintText'])) {
+    if (readUiNodeFlag(node, ['showing-hint', 'showingHint', 'isShowingHintText', 'shownHint'])) {
         return '';
     }
 
     const text = readUiNodeAttr(node, ['text']);
     const value = readUiNodeAttr(node, ['value']);
-    const label = readUiNodeAttr(node, ['label']);
-    const name = readUiNodeAttr(node, ['name']);
-    const contentDesc = readUiNodeAttr(node, ['content-desc', 'contentDesc', 'contentDescription']);
-    const resId = (readUiNodeAttr(node, ['resource-id', 'resourceId', 'id']).split('/').pop() || '').trim();
     const isIOS = /^XCUIElementType/i.test(tag) || (typeof isIOSPlatform === 'function' && isIOSPlatform());
     const val = (isIOS ? (value || text) : (text || value)).replace(/\u00a0/g, ' ').trim();
     if (!val) return '';
 
     const placeholderPool = collectNodePlaceholderTexts(node);
-    placeholderPool.push(label, name, contentDesc, resId);
     if (isScrapedPlaceholderControlValue(val, controlName, placeholderPool)) {
         return '';
     }
