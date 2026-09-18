@@ -143,7 +143,7 @@
             try {
                 if (mainWindow.isMinimized()) mainWindow.restore();
                 mainWindow.show();
-                if (!mainWindow.isMaximized()) mainWindow.maximize();
+                // if (!mainWindow.isMaximized()) mainWindow.maximize();
                 mainWindow.focus();
             } catch (_) {}
         };
@@ -1880,6 +1880,8 @@
     }
 
     function fillMainWindowToScreen() {
+      // Full-page / fullscreen auto-expansion commented out
+      /*
       if (!mainWindow || mainWindow.isDestroyed()) return;
       try {
         if (mainWindow.isMinimized()) mainWindow.restore();
@@ -1913,6 +1915,7 @@
       } catch (_) {
         try { mainWindow.maximize(); } catch (__) {}
       }
+      */
     }
 
     const createWindow = () => {
@@ -1920,7 +1923,7 @@
         try {
           if (mainWindow.isMinimized()) mainWindow.restore();
           mainWindow.show();
-          fillMainWindowToScreen();
+          // fillMainWindowToScreen();
           mainWindow.focus();
         } catch (_) {}
         return;
@@ -2040,10 +2043,10 @@
         try {
           mainWindow.setMinimumSize(960, 680);
           mainWindow.show();
-          fillMainWindowToScreen();
+          // fillMainWindowToScreen();
           mainWindow.focus();
-          setTimeout(fillMainWindowToScreen, 100);
-          setTimeout(fillMainWindowToScreen, 400);
+          // setTimeout(fillMainWindowToScreen, 100);
+          // setTimeout(fillMainWindowToScreen, 400);
           enforceMinBounds();
           mainWindow.webContents.send("launch-mode", launchedFromProtocol);
           flushPendingDeepLink();
@@ -2689,7 +2692,7 @@
       if (mainWindow && !mainWindow.isDestroyed()) {
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
-        fillMainWindowToScreen();
+        // fillMainWindowToScreen();
         mainWindow.focus();
       }
     });

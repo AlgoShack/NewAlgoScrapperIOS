@@ -394,6 +394,25 @@
                     runBtn.style.backgroundColor = "#2F8BCC";
                 }
             }
+
+            // Auto-enable AlgoQA and Download buttons if project is opened or scraped data is already available
+            const hasScrapedData = (typeof hasValidTableData === 'function' && hasValidTableData('myTable')) ||
+                (typeof tableCreated !== 'undefined' && tableCreated) ||
+                (document.querySelectorAll('#myTable tr:not(.empty-excel-row):not(.no-results-row)').length > 0) ||
+                Boolean(window.activeResumedProjectKey);
+
+            const algoQABtn = document.getElementById("algoQA");
+            if (algoQABtn && hasScrapedData) {
+                algoQABtn.disabled = false;
+                algoQABtn.style.backgroundColor = "#2F8BCC";
+            }
+
+            const downloadBtn = document.getElementById("download");
+            if (downloadBtn && hasScrapedData) {
+                downloadBtn.disabled = false;
+                downloadBtn.style.backgroundColor = "#2F8BCC";
+            }
+
             return true;
         }
 
@@ -425,6 +444,14 @@
             if (e.key !== "Enter") return;
             e.preventDefault();
             connectAlgoTokenFromInput();
+        });
+        tokenInput.addEventListener("paste", function () {
+            setTimeout(() => {
+                const val = (tokenInput.value || '').trim();
+                if (val && val.length > 20) {
+                    connectAlgoTokenFromInput();
+                }
+            }, 50);
         });
         window.__algoTokenBound = true;
     }
@@ -4872,11 +4899,16 @@
 
         tableCreated = rowCount > 0;
         const downloadBtn = document.getElementById('download');
+        const algoQABtn = document.getElementById('algoQA');
         const tableContainer = document.getElementById('table-container');
         if (tableContainer) tableContainer.style.display = "block";
         if (tableCreated && downloadBtn) {
             downloadBtn.disabled = false;
             downloadBtn.style.backgroundColor = '#2F8BCC';
+        }
+        if (tableCreated && algoQABtn && (typeof hasConnectedToken === 'function' ? hasConnectedToken() : !!localStorage.getItem('algoQAUser'))) {
+            algoQABtn.disabled = false;
+            algoQABtn.style.backgroundColor = '#2F8BCC';
         }
 
         if (typeof adjustEmptyRows === 'function') adjustEmptyRows();
