@@ -4795,16 +4795,19 @@
                     ? buildControlIdSelectHtml(xpaths, xpaths[0])
                     : `<select class="xpath-dropdown control-id-dropdown js-table-custom-select"><option value="">${String(xpaths[0] || '')}</option></select>`;
 
-                let currentControlType = el['CONTROL TYPE'] || el.ControlType || "";
-                let optionsList = [...new Set([currentControlType, ...allControlTypes])].filter(Boolean);
-                let ctSelectOptionsHtml = optionsList.map(type =>
-                    `<option value="${type}" ${type === currentControlType ? 'selected' : ''}>${type}</option>`
-                ).join('');
-                let controlTypeCellHtml = `<select class="xpath-dropdown js-table-custom-select" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
+                let currentControlType = (typeof normalizeScrapedControlType === "function")
+                    ? (normalizeScrapedControlType(el['CONTROL TYPE'] || el.ControlType || "") || (el['CONTROL TYPE'] || el.ControlType || ""))
+                    : (el['CONTROL TYPE'] || el.ControlType || "");
+                let controlTypeCellHtml = (typeof buildControlTypeSelectHtml === "function")
+                    ? buildControlTypeSelectHtml(currentControlType)
+                    : `<select class="xpath-dropdown js-table-custom-select control-type-dropdown" onchange="onControlTypeChange(this)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;"></select>`;
+                tr.dataset.controlAction = (typeof getDefaultControlAction === "function")
+                    ? getDefaultControlAction(currentControlType)
+                    : (el['CONTROL ACTION'] || el.ControlAction || "");
 
                 const primaryLocator = (xpaths[0] || "").trim();
-                const identificationType = (el['IDENTIFICATION TYPE'] || el.IdentificationType || "").trim()
-                    || (typeof inferIdentificationType === "function" ? inferIdentificationType(primaryLocator) : "");
+                const rawIdType = (el['IDENTIFICATION TYPE'] || el.IdentificationType || "").trim();
+                const identificationType = (typeof inferIdentificationType === "function" ? inferIdentificationType(rawIdType || primaryLocator) : "") || "XPATH";
 
                 let rowDataMap = {
                     "#": "",
@@ -6500,6 +6503,9 @@
 
                     var controlName = "";
                     var controlType = mapControlType(node.nodeName, node);
+                    if (typeof normalizeScrapedControlType === 'function') {
+                        controlType = normalizeScrapedControlType(controlType) || controlType;
+                    }
                     var controlIdentificationType = "";
                     var controlId = "";
                     var xpath = "";
@@ -6601,6 +6607,7 @@
                         dtControls.push({
                             ControlName: controlName,
                             ControlType: controlType,
+                            ControlAction: (typeof getDefaultControlAction === 'function') ? getDefaultControlAction(controlType) : 'selected',
                             ControlId: multiXPathsForRow,
                             ControlValue: controlValue,
                             IdentificationType: controlIdentificationType || inferIdentificationType(multiXPathsForRow[0]),
@@ -6829,6 +6836,7 @@
             const rowObj = {
                 "CONTROL NAME": "",
                 "CONTROL TYPE": "",
+                "CONTROL ACTION": "",
                 "XPATH": "",
                 "PAGE NAME": "",
                 "IDENTIFICATION TYPE": "",
@@ -6852,7 +6860,12 @@
             const appUrlCell = row.querySelector('td.appUrl, .appUrl');
 
             if (cnCell) rowObj["CONTROL NAME"] = getCellValue(cnCell);
-            if (ctCell) rowObj["CONTROL TYPE"] = getCellValue(ctCell);
+            if (ctCell) {
+                const rawType = getCellValue(ctCell);
+                rowObj["CONTROL TYPE"] = (typeof normalizeScrapedControlType === "function")
+                    ? (normalizeScrapedControlType(rawType) || rawType)
+                    : rawType;
+            }
             // Persist ALL Control ID options (not only the selected one)
             if (xpathCell) {
                 const locatorList = getControlIdLocatorList(xpathCell, row);
@@ -6902,16 +6915,26 @@
                 rowObj["NODE NAME"] = rowObj["PAGE NAME"];
             }
 
-            // Identification Type: ensure it's always populated even if column was hidden
+            // Identification Type: keep existing value (e.g. Name); only infer from locator if empty
             if (!rowObj["IDENTIFICATION TYPE"]) {
                 const locRaw = rowObj["XPATH"] || "";
                 const loc = Array.isArray(locRaw) ? String(locRaw[0] || "") : String(locRaw || "");
                 if (typeof inferIdentificationType === 'function') {
-                    rowObj["IDENTIFICATION TYPE"] = inferIdentificationType(loc);
+                    rowObj["IDENTIFICATION TYPE"] = inferIdentificationType(loc) || "XPATH";
                 } else {
-                    rowObj["IDENTIFICATION TYPE"] = (loc.startsWith("//") || loc.startsWith("(")) ? "XPath" : (loc ? "AccessibilityId" : "Name");
+                    rowObj["IDENTIFICATION TYPE"] = (loc.includes("resource-id") || loc.includes(":id/")) ? "ID" : "XPATH";
                 }
+            } else if (typeof inferIdentificationType === 'function') {
+                const locRaw = rowObj["XPATH"] || "";
+                const loc = Array.isArray(locRaw) ? String(locRaw[0] || "") : String(locRaw || "");
+                rowObj["IDENTIFICATION TYPE"] = inferIdentificationType(loc || rowObj["IDENTIFICATION TYPE"]) || "XPATH";
             }
+
+            if (row.dataset.controlAction && !rowObj["CONTROL ACTION"]) {
+                rowObj["CONTROL ACTION"] = row.dataset.controlAction;
+            }
+            rowObj.ControlAction = rowObj["CONTROL ACTION"] || "";
+            rowObj.ControlType = rowObj["CONTROL TYPE"];
 
             rowObj["APP URL"] = "";
 
@@ -6969,22 +6992,18 @@
         const featureName = String(row["FEATURE NAME"] || row.FeatureName || pageName).trim() || pageName;
         const nodeName = String(row["NODE NAME"] || row.NodeName || pageName).trim() || pageName;
 
-        let controlAction = String(row["CONTROL ACTION"] || row.ControlAction || row.action || row.Action || "").trim();
-        if (!controlAction && controlValue) {
-            controlAction = "entered";
-        }
+        const controlAction = String(row["CONTROL ACTION"] || row.ControlAction || row.action || row.Action || "").trim();
 
-        let identificationType = String(row["IDENTIFICATION TYPE"] || row.IdentificationType || "").trim();
-        if (!identificationType) {
-            if (typeof inferIdentificationType === "function") {
-                identificationType = inferIdentificationType(loc);
-            } else {
-                identificationType = (loc.startsWith("//") || loc.startsWith("(")) ? "XPATH" : (loc ? "AccessibilityId" : "Name");
-            }
+        let identificationType = "";
+        if (typeof inferIdentificationType === "function") {
+            identificationType = inferIdentificationType(loc) || inferIdentificationType(row["IDENTIFICATION TYPE"] || row.IdentificationType || "") || "XPATH";
+        } else {
+            identificationType = String(row["IDENTIFICATION TYPE"] || row.IdentificationType || "").trim();
         }
-        if (identificationType.toLowerCase() === 'xpath') {
-            identificationType = 'XPATH';
+        if (!identificationType || !/^(ID|XPATH)$/i.test(identificationType)) {
+            identificationType = (String(loc).includes("resource-id") || String(loc).includes(":id/")) ? "ID" : "XPATH";
         }
+        identificationType = identificationType.toUpperCase() === "ID" ? "ID" : "XPATH";
 
         // Platform metadata extraction
         const platform = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : '')
@@ -6992,14 +7011,15 @@
         const isAndroid = String(platform).toLowerCase().includes('android');
         const isIOS = String(platform).toLowerCase().includes('ios');
 
-        let devName = "";
+        let devName = (typeof getExportDeviceName === "function") ? getExportDeviceName() : "";
         try {
-            const devSelect = document.getElementById('devicename');
-            if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
-                devName = devSelect.selectedOptions[0].text.trim() || devSelect.value || "";
-            }
             if (!devName) {
-                devName = (document.getElementById('devicename')?.value || '').trim();
+                const devSelect = document.getElementById('devicename');
+                if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
+                    devName = (typeof getExportDeviceName === "function")
+                        ? getExportDeviceName(devSelect.selectedOptions[0].text)
+                        : String(devSelect.selectedOptions[0].text || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
+                }
             }
         } catch (_) {}
 
@@ -7011,7 +7031,9 @@
         const appActivity = isAndroid ? (row["APP ACTIVITY"] !== undefined ? row["APP ACTIVITY"] : (row.AppActivity !== undefined ? row.AppActivity : (row.appActivity !== undefined ? row.appActivity : appActVal))) : "";
         const appPackage = isAndroid ? (row["APP PACKAGE"] !== undefined ? row["APP PACKAGE"] : (row.AppPackage !== undefined ? row.AppPackage : (row.appPackage !== undefined ? row.appPackage : appPkgVal))) : "";
         const bundleId = isIOS ? (row["BUNDLE ID"] !== undefined ? row["BUNDLE ID"] : (row.BundleId !== undefined ? row.BundleId : (row.bundleId !== undefined ? row.bundleId : bundleIdVal))) : "";
-        const deviceName = row["DEVICE NAME"] !== undefined ? row["DEVICE NAME"] : (row.DeviceName !== undefined ? row.DeviceName : (row.deviceName !== undefined ? row.deviceName : devName));
+        const deviceName = (typeof getExportDeviceName === "function")
+            ? getExportDeviceName(row["DEVICE NAME"] !== undefined ? row["DEVICE NAME"] : (row.DeviceName !== undefined ? row.DeviceName : (row.deviceName !== undefined ? row.deviceName : devName)))
+            : String(row["DEVICE NAME"] || row.DeviceName || row.deviceName || devName || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
         const udid = row["UDID"] !== undefined ? row["UDID"] : (row.UDID !== undefined ? row.UDID : (row.udid !== undefined ? row.udid : udidVal));
         const appUrl = (row["APP URL"] !== undefined && typeof row["APP URL"] === 'string')
             ? row["APP URL"]
@@ -7057,14 +7079,15 @@
         const isAndroid = String(platform).toLowerCase().includes('android');
         const isIOS = String(platform).toLowerCase().includes('ios');
 
-        let devName = "";
+        let devName = (typeof getExportDeviceName === "function") ? getExportDeviceName() : "";
         try {
-            const devSelect = document.getElementById('devicename');
-            if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
-                devName = devSelect.selectedOptions[0].text.trim() || devSelect.value || "";
-            }
             if (!devName) {
-                devName = (document.getElementById('devicename')?.value || '').trim();
+                const devSelect = document.getElementById('devicename');
+                if (devSelect && devSelect.selectedOptions && devSelect.selectedOptions[0]) {
+                    devName = (typeof getExportDeviceName === "function")
+                        ? getExportDeviceName(devSelect.selectedOptions[0].text)
+                        : String(devSelect.selectedOptions[0].text || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
+                }
             }
         } catch (_) {}
 
@@ -7082,18 +7105,26 @@
         } catch (_) {}
 
         const formatScenarioStep = (step) => {
-            const sanitized = sanitizeExportRow(step);
+            const sanitized = (typeof sanitizeExportRow === "function") ? sanitizeExportRow(step) : (step || {});
+            const xpRaw = sanitized["XPATH"];
+            const xpath = Array.isArray(xpRaw)
+                ? String(xpRaw[0] || "").trim()
+                : String(xpRaw == null ? "" : xpRaw).trim();
+            let fingerprint = sanitized["FINGERPRINT"];
+            if (!fingerprint || typeof fingerprint !== "object" || Array.isArray(fingerprint)) {
+                fingerprint = {};
+            }
             return {
                 "CONTROL NAME": sanitized["CONTROL NAME"] || "",
                 "CONTROL TYPE": sanitized["CONTROL TYPE"] || "",
                 "CONTROL ACTION": sanitized["CONTROL ACTION"] || "",
-                "XPATH": sanitized["XPATH"] || "",
+                "XPATH": xpath,
                 "IDENTIFICATION TYPE": sanitized["IDENTIFICATION TYPE"] || "XPATH",
                 "CONTROL VALUE": sanitized["CONTROL VALUE"] || "",
                 "FEATURE NAME": sanitized["FEATURE NAME"] || "",
                 "NODE NAME": sanitized["NODE NAME"] || "",
                 "PAGE NAME": sanitized["PAGE NAME"] || "",
-                "FINGERPRINT": sanitized["FINGERPRINT"] || {}
+                "FINGERPRINT": fingerprint
             };
         };
 
@@ -7120,19 +7151,23 @@
             const scenarioEntries = Object.entries(window.pageScenarioData);
             for (const [pageName, scenarioInfo] of scenarioEntries) {
                 if (scenarioInfo && (scenarioInfo.scenarioName || scenarioInfo.scenarioOutline)) {
-                    const pageKey = pageName.trim().toLowerCase();
+                    const pageKey = String(pageName || "").trim().toLowerCase();
                     let matchedSteps = stepsByPage[pageKey] ? stepsByPage[pageKey].steps : [];
+                    if (matchedSteps.length === 0 && stepsByPage[String(pageName || "").trim()]) {
+                        matchedSteps = stepsByPage[String(pageName || "").trim()].steps;
+                    }
                     if (matchedSteps.length === 0 && cleanControls.length > 0 && scenarioEntries.length === 1) {
                         matchedSteps = cleanControls;
                     }
-                    if (matchedSteps.length > 0) {
-                        usedPages.add(pageKey);
-                        scenariosList.push({
-                            "SCENARIO_NAME": scenarioInfo.scenarioName || pageName || "Scenario",
-                            "SCENARIO_OUTLINE": scenarioInfo.scenarioOutline || "",
-                            "STEPS": matchedSteps
-                        });
+                    if (matchedSteps.length === 0 && cleanControls.length > 0) {
+                        matchedSteps = cleanControls;
                     }
+                    usedPages.add(pageKey);
+                    scenariosList.push({
+                        "SCENARIO_NAME": String(scenarioInfo.scenarioName || pageName || "Scenario"),
+                        "SCENARIO_OUTLINE": String(scenarioInfo.scenarioOutline || ""),
+                        "STEPS": matchedSteps
+                    });
                 }
             }
         }
@@ -7167,7 +7202,7 @@
                 "APP ACTIVITY": isAndroid ? appAct : "",
                 "APP PACKAGE": isAndroid ? appPkg : "",
                 "BUNDLE ID": isIOS ? bundleId : "",
-                "DEVICE NAME": devName,
+                "DEVICE NAME": (typeof getExportDeviceName === "function") ? getExportDeviceName(devName) : String(devName || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim(),
                 "UDID": udid,
                 "SCENARIOS": scenariosList
             }
@@ -8860,12 +8895,13 @@ async function performSwipe(startX, startY, endX, endY) {
             {
                 ControlName: `act_Scroll_${Math.round(startX)}_${Math.round(startY)}`,
                 ControlType: "Scroll",
+                ControlAction: (typeof getDefaultControlAction === "function") ? getDefaultControlAction("Scroll") : "scroll vertical",
                 ControlId: [
                     `SWIPE(${Math.round(startX)},${Math.round(startY)},${Math.round(endX)},${Math.round(endY)})`,
                     rootXPath
                 ],
                 ControlValue: "",
-                IdentificationType: "Scroll",
+                IdentificationType: "SCROLL",
                 FeatureName: activeFeatureForScroll,
                 NodeName: activePageForScroll,
                 Fingerprint: "<Action Type=\"Scroll\" />"
@@ -9134,8 +9170,9 @@ async function performSwipe(startX, startY, endX, endY) {
                                            "Page", "AnchorTag", "Mouse", "Scroll", "Window",
                                            "NewTab", "Parent"
                                        ];
-                       let ctSelectOptionsHtml = allControlTypes.map(type => `<option value="${type}">${type}</option>`).join('');
-                       let controlTypeCellHtml = `<select class="xpath-dropdown js-table-custom-select" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;"><option value="" disabled selected hidden>Controls</option>${ctSelectOptionsHtml}</select>`;
+                       let controlTypeCellHtml = (typeof buildControlTypeSelectHtml === "function")
+                           ? buildControlTypeSelectHtml("")
+                           : `<select class="xpath-dropdown js-table-custom-select control-type-dropdown" onchange="onControlTypeChange(this)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;"><option value="" disabled selected hidden>Controls</option></select>`;
 
                        rowHtml += `<td class="ct pt-3-half" style="overflow: hidden; white-space: nowrap; text-overflow: ellipsis; border-color: black; text-align: center; ${displayStyle}">${controlTypeCellHtml}</td>`;
                    } else if (thText.includes('CONTROL ID')) {
@@ -9349,20 +9386,20 @@ function createAndAppendTable(dtControls) {
                                                       ];
 
 
-                let currentControlType = dtControls[i].ControlType || "";
+                let currentControlType = (typeof normalizeScrapedControlType === "function")
+                    ? (normalizeScrapedControlType(dtControls[i].ControlType || "") || (dtControls[i].ControlType || ""))
+                    : (dtControls[i].ControlType || "");
+                tr.dataset.controlAction = (typeof getDefaultControlAction === "function")
+                    ? getDefaultControlAction(currentControlType)
+                    : (dtControls[i].ControlAction || "");
 
-                // 2. Ensure current type is in the list, then build options
-                let optionsList = [...new Set([currentControlType, ...allControlTypes])].filter(Boolean);
-                let ctSelectOptionsHtml = optionsList.map(type =>
-                    `<option value="${type}" ${type === currentControlType ? 'selected' : ''}>${type}</option>`
-                ).join('');
-
-                // 3. Create the Dropdown HTML
-                let controlTypeCellHtml = `<select class="xpath-dropdown js-table-custom-select" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${ctSelectOptionsHtml}</select>`;
+                let controlTypeCellHtml = (typeof buildControlTypeSelectHtml === "function")
+                    ? buildControlTypeSelectHtml(currentControlType)
+                    : `<select class="xpath-dropdown js-table-custom-select control-type-dropdown" onchange="onControlTypeChange(this)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;"></select>`;
 
                 const primaryLocator = (xpaths[0] || "").trim();
-                const identificationType = (dtControls[i].IdentificationType || "").trim()
-                    || (typeof inferIdentificationType === "function" ? inferIdentificationType(primaryLocator) : "");
+                const rawIdType = (dtControls[i].IdentificationType || dtControls[i]['IDENTIFICATION TYPE'] || "").trim();
+                const identificationType = (typeof inferIdentificationType === "function" ? inferIdentificationType(rawIdType || primaryLocator) : "") || "XPATH";
 
                 let rowDataMap = {
                                     "#": "",
@@ -10430,8 +10467,15 @@ function createAndAppendTable(dtControls) {
                 continue;
             }
 
+            if (typeof isRedundantGenericContainer === 'function' && isRedundantGenericContainer(node)) {
+                continue;
+            }
+
             // 5. Generate clean, professional variable name (e.g., btn_Login)
             let controlName = generateProfessionalControlName(node);
+            if (typeof uniquifyScrapedControlName === 'function') {
+                controlName = uniquifyScrapedControlName(controlName);
+            }
 
             // 6. Fetch XPaths using updated getAllPossibleXPaths
             let allXPaths = getAllPossibleXPaths(node);
@@ -10471,9 +10515,14 @@ function createAndAppendTable(dtControls) {
                 }
             }
 
+            const mappedType = mapControlType(uiName, node);
+            const ct = (typeof normalizeScrapedControlType === 'function')
+                ? (normalizeScrapedControlType(mappedType) || mappedType)
+                : mappedType;
             dtControls.push({
                 ControlName: controlName,
-                ControlType: mapControlType(uiName, node),
+                ControlType: ct,
+                ControlAction: (typeof getDefaultControlAction === 'function') ? getDefaultControlAction(ct) : 'selected',
                 ControlId: allXPaths,
                 ControlValue: controlValue,
                 IdentificationType: inferIdentificationType(allXPaths[0]),
@@ -10519,7 +10568,8 @@ function createAndAppendTable(dtControls) {
     });
 
     async function sendTableDataToAPI(tableId) {
-        const userData = JSON.parse(localStorage.getItem("algoQAUser"));
+        let userData = null;
+        try { userData = JSON.parse(localStorage.getItem("algoQAUser")); } catch (_) {}
         if (!userData) {
             showAppPopup('auth_error', { message: 'Token data not found. Please paste your token and press Enter.' });
             return;
@@ -10533,32 +10583,34 @@ function createAndAppendTable(dtControls) {
             return;
         }
 
-        // Differentiate between Normal Scraping vs Record Scenario for algoQA send
         const isScenarioMode = Boolean(
             window.pageScenarioData &&
             Object.keys(window.pageScenarioData).length > 0 &&
             Object.values(window.pageScenarioData).some(s => s && (s.scenarioName || s.scenarioOutline))
         );
 
+        // Record scenario send/download share the same JSON shape:
+        // { isRecordscenario: true, dashboardControls: { APP URL, SCENARIOS: [...] } }
         let dataToSend;
         if (isScenarioMode) {
-            const scenarioPayload = (typeof buildScenarioPayload === 'function')
+            dataToSend = (typeof buildScenarioPayload === "function")
                 ? buildScenarioPayload(tableData)
                 : {
                     "isRecordscenario": true,
                     "dashboardControls": {
                         "APP URL": "",
-                        "SCENARIOS": [
-                            {
-                                "SCENARIO_NAME": "Scenario",
-                                "SCENARIO_OUTLINE": "",
-                                "STEPS": tableData
-                            }
-                        ]
+                        "APP ACTIVITY": "",
+                        "APP PACKAGE": "",
+                        "BUNDLE ID": "",
+                        "DEVICE NAME": "",
+                        "UDID": "",
+                        "SCENARIOS": [{
+                            "SCENARIO_NAME": "Scenario",
+                            "SCENARIO_OUTLINE": "",
+                            "STEPS": tableData
+                        }]
                     }
                 };
-            const scenarioObj = Array.isArray(scenarioPayload) ? scenarioPayload[0] : scenarioPayload;
-            dataToSend = (scenarioObj && scenarioObj.dashboardControls) ? scenarioObj.dashboardControls : scenarioObj;
         } else {
             dataToSend = tableData;
         }
@@ -10566,14 +10618,29 @@ function createAndAppendTable(dtControls) {
         const payload = {
             data: dataToSend,
             isRecordscenario: isScenarioMode,
-            userID: Number(userData.userID),
-            baseUrl: userData.baseUrl,
-            projectId: userData.project_id,
-            launchUrl: userData.launchUrl,
-            projectName: userData.project_name,
-            applicationTypeId: Number(userData.application_type_id),
+            userID: Number(userData.userID) || 0,
+            baseUrl: userData.baseUrl || "",
+            projectId: userData.project_id || "",
+            launchUrl: userData.launchUrl || "",
+            projectName: userData.project_name || "",
+            applicationTypeId: Number(userData.application_type_id) || 0,
             applicationType: "Mobile"
         };
+
+        let bodyText = "";
+        try {
+            bodyText = JSON.stringify(payload, (_key, value) => {
+                if (typeof value === "number" && !Number.isFinite(value)) return null;
+                if (typeof value === "undefined") return "";
+                if (typeof value === "function") return undefined;
+                return value;
+            });
+            JSON.parse(bodyText);
+        } catch (serErr) {
+            console.error("AlgoQA payload JSON error:", serErr, payload);
+            showErrorPopup("Failed to share data to AlgoQA", "Payload is not valid JSON. Please scrape again and retry.");
+            return;
+        }
 
         console.log("Payload:", payload);
 
@@ -10582,11 +10649,24 @@ function createAndAppendTable(dtControls) {
             const response = await fetch(`${userData.baseUrl}/project/${endpoint}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(payload)
+                body: bodyText
             });
 
-            const result = await response.json();
-            if (!response.ok) throw new Error("API request failed");
+            const rawText = await response.text();
+            let result = null;
+            try {
+                result = rawText ? JSON.parse(rawText) : null;
+            } catch (_) {
+                if (!response.ok) {
+                    throw new Error(rawText && rawText.slice(0, 180) ? rawText.slice(0, 180) : "API request failed");
+                }
+                throw new Error("Server returned a non-JSON response.");
+            }
+
+            if (!response.ok) {
+                const apiMsg = (result && (result.message || result.error || result.Message || result.title)) || "API request failed";
+                throw new Error(apiMsg);
+            }
 
             showAppPopup('export_success');
 
@@ -10999,105 +11079,16 @@ function createAndAppendTable(dtControls) {
 
    //Xpath Generation
    function generateUniqueXPath(node) {
-           if (!node || node.nodeType !== 1) return "";
-
-           const stopNodes = ["AppiumAUT", "XCUIElementTypeApplication", "hierarchy", "XCUIElementTypeWindow"];
-           if (stopNodes.includes(node.nodeName)) {
-               return `//${node.nodeName}`;
+           if (typeof window.buildUniqueXPathForNode === "function") {
+               return window.buildUniqueXPathForNode(node);
            }
-
-           // --- STRATEGY 1: Global Unique Attribute Match ---
-           // CHANGED: Removed "name" from this array to match the logic above
-           const attributes = ["label", "resource-id", "content-desc", "text", "value"];
-
-           for (let attr of attributes) {
-               let val = node.getAttribute(attr);
-               if (val && val.trim() !== "") {
-                   val = val.trim().replace(/"/g, '\\"'); // Escape quotes safely
-                   let baseXpath = `//${node.nodeName}[@${attr}="${val}"]`;
-
-                   if (isXPathUnique(baseXpath)) {
-                       return baseXpath;
-                   }
-               }
-           }
-
-           // --- STRATEGY 2: Find the Closest Unique Ancestor ---
-           // Instead of using global indices like (//Tag)[35], find a unique parent and build a relative path
-           let ancestor = node.parentNode;
-           let ancestorPath = "";
-
-           while (ancestor && ancestor.nodeType === 1 && !stopNodes.includes(ancestor.nodeName)) {
-               for (let attr of attributes) {
-                   let val = ancestor.getAttribute(attr);
-                   if (val && val.trim() !== "") {
-                       val = val.trim().replace(/"/g, '\\"');
-                       let testAncestorXpath = `//${ancestor.nodeName}[@${attr}="${val}"]`;
-
-                       if (isXPathUnique(testAncestorXpath)) {
-                           ancestorPath = testAncestorXpath;
-                           break;
-                       }
-                   }
-               }
-               if (ancestorPath) break;
-               ancestor = ancestor.parentNode;
-           }
-
-           // If we found a unique container parent, pinpoint our element inside it
-           if (ancestorPath) {
-               let relativeXpath = `${ancestorPath}//${node.nodeName}`;
-
-               // Check if it's unique inside that container
-               if (isXPathUnique(relativeXpath)) {
-                   return relativeXpath;
-               }
-
-               // If duplicates exist inside the unique container, index just within this scope
-               let results = window.xmlDoc.evaluate(relativeXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-               for (let i = 0; i < results.snapshotLength; i++) {
-                   if (results.snapshotItem(i) === node) {
-                       return `(${relativeXpath})[${i + 1}]`;
-                   }
-               }
-           }
-
-           // --- STRATEGY 3: Local Index Relative to Immediate Parent ---
-           // If no unique text or container is found, fall back to structural tag placement: Parent/Child[Index]
-           let parent = node.parentNode;
-           if (parent && parent.nodeType === 1 && !stopNodes.includes(parent.nodeName)) {
-               let siblings = parent.childNodes;
-               let sameTagIndex = 0;
-               let matchIndex = 1;
-
-               for (let i = 0; i < siblings.length; i++) {
-                   if (siblings[i].nodeType === 1 && siblings[i].nodeName === node.nodeName) {
-                       sameTagIndex++;
-                       if (siblings[i] === node) {
-                           matchIndex = sameTagIndex;
-                       }
-                   }
-               }
-
-               // Recursively build path for the parent structure
-               let parentXpath = generateUniqueXPath(parent);
-               return `${parentXpath}/${node.nodeName}[${matchIndex}]`;
-           }
-
-           // --- STRATEGY 4: Absolute Global Fallback ---
-           let fallbackXpath = `//${node.nodeName}`;
-           let globalResults = window.xmlDoc.evaluate(fallbackXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-           for (let i = 0; i < globalResults.snapshotLength; i++) {
-               if (globalResults.snapshotItem(i) === node) {
-                   return `(${fallbackXpath})[${i + 1}]`;
-               }
-           }
-
-           return fallbackXpath;
+           return node && node.nodeName ? `//${node.nodeName}` : "";
        }
 
-    // Helper utility to check absolute uniqueness of a generated path string
     function isXPathUnique(xpath) {
+        if (typeof window.isLocatorUniqueInPageSource === "function") {
+            return window.isLocatorUniqueInPageSource(xpath);
+        }
         try {
             let results = window.xmlDoc.evaluate(xpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
             return results.snapshotLength === 1;
@@ -11209,6 +11200,378 @@ async function resolveHoverRectForLocator(xpath) {
 }
 window.resolveHoverRectForLocator = resolveHoverRectForLocator;
 
+const WEAK_SCRAPE_IDENTITY_VALUES = new Set([
+    "other", "cell", "view", "viewgroup", "framelayout", "linearlayout", "relativelayout",
+    "constraintlayout", "scrollview", "image", "imageview", "group", "null", "undefined",
+    "node", "layout", "container", "content", "main", "root"
+]);
+
+function isWeakLocatorValue(val) {
+    const v = String(val == null ? "" : val).trim();
+    if (!v) return true;
+    const low = v.toLowerCase();
+    if (WEAK_SCRAPE_IDENTITY_VALUES.has(low)) return true;
+    if (/^xcui element type/i.test(v) || /^xcuielementtype/i.test(low.replace(/\s/g, ""))) return true;
+    if (/^android\.(view|widget|support)\./i.test(v) && !v.includes("/")) return true;
+    if (/^androidx\./i.test(v) && !v.includes("/")) return true;
+    return false;
+}
+
+function xpathLiteral(val) {
+    const s = String(val == null ? "" : val);
+    if (s.indexOf('"') === -1) return `"${s}"`;
+    if (s.indexOf("'") === -1) return `'${s}'`;
+    const parts = s.split('"').map((p) => `"${p}"`);
+    return `concat(${parts.join(', \'"\', ')})`;
+}
+
+function xpathAttrEq(attr, val) {
+    return `@${attr}=${xpathLiteral(val)}`;
+}
+
+function evaluateXPathSnapshot(xpath) {
+    if (!window.xmlDoc || !xpath) return null;
+    try {
+        return window.xmlDoc.evaluate(xpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+    } catch (_) {
+        return null;
+    }
+}
+
+function isLocatorUniqueInPageSource(xpath) {
+    const results = evaluateXPathSnapshot(xpath);
+    return !!(results && results.snapshotLength === 1);
+}
+
+function locatorMatchInfo(xpath, node) {
+    const results = evaluateXPathSnapshot(xpath);
+    if (!results) return { matches: false, count: 0 };
+    let matches = false;
+    for (let i = 0; i < results.snapshotLength; i++) {
+        if (results.snapshotItem(i) === node) {
+            matches = true;
+            break;
+        }
+    }
+    return { matches, count: results.snapshotLength };
+}
+
+function getDirectControlIdentity(node) {
+    if (!node || typeof node.getAttribute !== "function") return null;
+    const preferred = [
+        ["resource-id", node.getAttribute("resource-id")],
+        ["id", node.getAttribute("id")],
+        ["content-desc", node.getAttribute("content-desc")],
+        ["label", node.getAttribute("label")],
+        ["name", node.getAttribute("name")],
+        ["text", node.getAttribute("text")],
+        ["hint", node.getAttribute("hint")],
+        ["value", node.getAttribute("value")]
+    ];
+    for (let i = 0; i < preferred.length; i++) {
+        const attr = preferred[i][0];
+        const raw = String(preferred[i][1] == null ? "" : preferred[i][1]).trim();
+        if (!raw) continue;
+        if (attr !== "resource-id" && attr !== "id" && isWeakLocatorValue(raw)) continue;
+        return { attr, value: raw };
+    }
+    return null;
+}
+
+function getDescendantControlIdentity(node) {
+    if (!node || !node.getElementsByTagName) return null;
+    const kids = node.getElementsByTagName("*");
+    let best = null;
+    let bestScore = -1;
+    for (let i = 0; i < kids.length; i++) {
+        const kid = kids[i];
+        const ident = getDirectControlIdentity(kid);
+        if (!ident) continue;
+        const tag = getScrapeUiType(kid);
+        let score = ident.value.length;
+        if (/StaticText|TextView|Button|CheckedTextView/i.test(tag)) score += 40;
+        else if (/TextField|EditText|SearchField/i.test(tag)) score += 45;
+        else if (/Image|Switch|CheckBox|Radio/i.test(tag)) score += 20;
+        if (score > bestScore) {
+            bestScore = score;
+            best = ident;
+        }
+    }
+    return best;
+}
+
+function getBestControlIdentity(node) {
+    return getDirectControlIdentity(node) || getDescendantControlIdentity(node);
+}
+
+function getScrapeUiType(node) {
+    if (!node) return "";
+    if (typeof getUiNodeName === "function") {
+        const ui = getUiNodeName(node);
+        if (ui && String(ui).trim()) return String(ui).trim();
+    }
+    const cls = node.getAttribute && node.getAttribute("class");
+    if (cls && String(cls).trim()) return String(cls).trim();
+    return node.nodeName || "";
+}
+
+function isGenericScrapeContainerTag(tagName) {
+    const t = String(tagName || "");
+    if (!t || t === "node") return false;
+    return /^(XCUIElementTypeOther|XCUIElementTypeCell|Other|android\.view\.View)$/i.test(t)
+        || /ViewGroup$|FrameLayout$|LinearLayout$|RelativeLayout$|ConstraintLayout$|ScrollView$/i.test(t);
+}
+
+function isGenericScrapeContainerNode(node) {
+    if (!node) return false;
+    const ui = getScrapeUiType(node);
+    if (isGenericScrapeContainerTag(ui)) return true;
+    if (node.nodeName === "node") {
+        const cls = (node.getAttribute && node.getAttribute("class")) || "";
+        if (!cls) return true;
+        if (isGenericScrapeContainerTag(cls)) return true;
+    }
+    return false;
+}
+
+function isRedundantGenericContainer(node) {
+    if (!node) return false;
+    if (!isGenericScrapeContainerNode(node)) return false;
+    const own = getDirectControlIdentity(node);
+    const kids = node.getElementsByTagName ? node.getElementsByTagName("*") : [];
+    let meaningfulChild = false;
+    for (let i = 0; i < kids.length; i++) {
+        const kid = kids[i];
+        if (typeof isNodeVisibleOnScreen === "function" && !isNodeVisibleOnScreen(kid)) continue;
+        const kidId = getDirectControlIdentity(kid);
+        const kidTag = getScrapeUiType(kid);
+        const kidWidget = /Button|EditText|TextView|StaticText|TextField|SearchField|Image|Switch|CheckBox|Radio|Spinner|CheckedTextView/i.test(kidTag);
+        if (!kidId && !kidWidget) continue;
+        meaningfulChild = true;
+        if (!own) return true;
+        if (kidId && own.value === kidId.value) return true;
+    }
+    if (!own && meaningfulChild) return true;
+    return false;
+}
+
+function uniquifyScrapedControlName(name) {
+    let base = String(name || "").trim() || "control";
+    if (isWeakLocatorValue(base.replace(/_/g, " "))) base = "control";
+    const existing = new Set();
+    try {
+        document.querySelectorAll("#myTable td.cn").forEach((td) => {
+            const t = (td.innerText || "").trim().toLowerCase();
+            if (t) existing.add(t);
+        });
+    } catch (_) {}
+    if (!existing.has(base.toLowerCase())) return base;
+    let n = 2;
+    while (existing.has(`${base}_${n}`.toLowerCase())) n++;
+    return `${base}_${n}`;
+}
+
+function indexXPathForNode(xpath, node) {
+    const info = locatorMatchInfo(xpath, node);
+    if (!info.matches || info.count < 1) return "";
+    if (info.count === 1) return xpath;
+    const results = evaluateXPathSnapshot(xpath);
+    if (!results) return "";
+    for (let i = 0; i < results.snapshotLength; i++) {
+        if (results.snapshotItem(i) === node) {
+            return `(${xpath})[${i + 1}]`;
+        }
+    }
+    return "";
+}
+
+function rankScrapedXPaths(node, list) {
+    const unique = [];
+    list.forEach((xp) => {
+        const s = String(xp || "").trim();
+        if (s && unique.indexOf(s) === -1) unique.push(s);
+    });
+    const scored = [];
+    unique.forEach((xp) => {
+        const info = locatorMatchInfo(xp, node);
+        if (!info.matches) return;
+        const weak = /@(?:name|label|value|text|content-desc)=(('|")(Other|Cell|View|null)\2)/i.test(xp);
+        const attrCount = (xp.match(/@/g) || []).length;
+        const indexed = /\)\[\d+\]$/.test(xp) || /\/[A-Za-z0-9._]+\[\d+\]/.test(xp);
+        scored.push({
+            xp,
+            unique: info.count === 1,
+            count: info.count,
+            weak,
+            attrCount,
+            indexed,
+            len: xp.length
+        });
+    });
+    scored.sort((a, b) => {
+        if (a.unique !== b.unique) return a.unique ? -1 : 1;
+        if (a.weak !== b.weak) return a.weak ? 1 : -1;
+        if (a.attrCount !== b.attrCount) return b.attrCount - a.attrCount;
+        if (a.indexed !== b.indexed) return a.indexed ? 1 : -1;
+        return a.len - b.len;
+    });
+    return scored.map((s) => s.xp);
+}
+
+function buildUniqueXPathForNode(node) {
+    if (!node || node.nodeType !== 1) return "";
+    const stopNodes = ["AppiumAUT", "XCUIElementTypeApplication", "hierarchy", "XCUIElementTypeWindow"];
+    const tagName = node.nodeName;
+    if (stopNodes.includes(tagName)) return `//${tagName}`;
+
+    const tryPath = (xp) => {
+        const info = locatorMatchInfo(xp, node);
+        if (info.matches && info.count === 1) return xp;
+        return "";
+    };
+
+    const ident = getDirectControlIdentity(node);
+    const androidClass = (node.getAttribute && node.getAttribute("class")) || "";
+    if (ident) {
+        if (androidClass) {
+            const classTagged = `//${tagName}[${xpathAttrEq("class", androidClass)} and ${xpathAttrEq(ident.attr, ident.value)}]`;
+            const classHit = tryPath(classTagged) || indexXPathForNode(classTagged, node);
+            if (classHit && locatorMatchInfo(classHit, node).count === 1) return classHit;
+            const classWild = `//*[${xpathAttrEq("class", androidClass)} and ${xpathAttrEq(ident.attr, ident.value)}]`;
+            const classWildHit = tryPath(classWild);
+            if (classWildHit) return classWildHit;
+        }
+        const tagged = `//${tagName}[${xpathAttrEq(ident.attr, ident.value)}]`;
+        const hit = tryPath(tagged) || indexXPathForNode(tagged, node);
+        if (hit && locatorMatchInfo(hit, node).count === 1) return hit;
+        const wild = `//*[${xpathAttrEq(ident.attr, ident.value)}]`;
+        const wildHit = tryPath(wild);
+        if (wildHit) return wildHit;
+    }
+
+    const childIdent = getDescendantControlIdentity(node);
+    if (childIdent) {
+        const viaChild = `//${tagName}[.//*[${xpathAttrEq(childIdent.attr, childIdent.value)}]]`;
+        const hit = tryPath(viaChild) || indexXPathForNode(viaChild, node);
+        if (hit) return hit;
+    }
+
+    let ancestor = node.parentNode;
+    while (ancestor && ancestor.nodeType === 1 && !stopNodes.includes(ancestor.nodeName)) {
+        const aIdent = getDirectControlIdentity(ancestor);
+        if (aIdent) {
+            const ancestorPath = `//${ancestor.nodeName}[${xpathAttrEq(aIdent.attr, aIdent.value)}]`;
+            if (isLocatorUniqueInPageSource(ancestorPath) || locatorMatchInfo(ancestorPath, ancestor).matches) {
+                const relative = `${ancestorPath}//${tagName}`;
+                const relHit = tryPath(relative) || indexXPathForNode(relative, node);
+                if (relHit) return relHit;
+                if (ident) {
+                    const relAttr = `${ancestorPath}//${tagName}[${xpathAttrEq(ident.attr, ident.value)}]`;
+                    const relAttrHit = tryPath(relAttr) || indexXPathForNode(relAttr, node);
+                    if (relAttrHit) return relAttrHit;
+                }
+            }
+        }
+        ancestor = ancestor.parentNode;
+    }
+
+    const parent = node.parentNode;
+    if (parent && parent.nodeType === 1 && !stopNodes.includes(parent.nodeName)) {
+        let matchIndex = 1;
+        let seen = 0;
+        const siblings = parent.childNodes;
+        for (let i = 0; i < siblings.length; i++) {
+            if (siblings[i].nodeType === 1 && siblings[i].nodeName === tagName) {
+                seen++;
+                if (siblings[i] === node) matchIndex = seen;
+            }
+        }
+        const parentXp = buildUniqueXPathForNode(parent);
+        if (parentXp) return `${parentXp}/${tagName}[${matchIndex}]`;
+    }
+
+    return indexXPathForNode(`//${tagName}`, node) || `//${tagName}`;
+}
+
+function resolveTapScrapeNode(node, clickX, clickY) {
+    if (!node) return node;
+    const containsClick = (n) => {
+        const rect = typeof parseNodeRect === "function" ? parseNodeRect(n) : null;
+        if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+        return clickX >= rect.x && clickX <= (rect.x + rect.width) && clickY >= rect.y && clickY <= (rect.y + rect.height);
+    };
+    const scoreNode = (n) => {
+        const tag = getScrapeUiType(n);
+        let s = 0;
+        if (/Button|TextField|EditText|SearchField|SecureTextField/i.test(tag)) s += 55;
+        else if (/StaticText|TextView|CheckedTextView/i.test(tag)) s += 48;
+        else if (/Switch|CheckBox|Radio|Image/i.test(tag)) s += 30;
+        else if (/Cell/i.test(tag)) s += 10;
+        else if (/Other|ViewGroup|View$|Layout/i.test(tag)) s += 2;
+        if (getDirectControlIdentity(n)) s += 32;
+        const rect = typeof parseNodeRect === "function" ? parseNodeRect(n) : null;
+        if (rect) s += Math.max(0, 12 - Math.log((rect.width * rect.height) + 1));
+        return s;
+    };
+    const candidates = [];
+    const add = (n) => {
+        if (!n || n.nodeType !== 1) return;
+        if (candidates.indexOf(n) !== -1) return;
+        if (typeof isNodeVisibleOnScreen === "function" && !isNodeVisibleOnScreen(n)) return;
+        candidates.push(n);
+    };
+    add(node);
+    const desc = node.getElementsByTagName ? node.getElementsByTagName("*") : [];
+    for (let i = 0; i < desc.length; i++) {
+        if (containsClick(desc[i])) add(desc[i]);
+    }
+    let anc = node.parentNode;
+    while (anc && anc.nodeType === 1) {
+        const tag = getScrapeUiType(anc);
+        const ancRect = typeof parseNodeRect === "function" ? parseNodeRect(anc) : null;
+        const img = document.getElementById("screenshot");
+        const screenArea = img && img.naturalWidth && img.naturalHeight ? (img.naturalWidth * img.naturalHeight) : 0;
+        const tooLarge = !!(ancRect && screenArea && ((ancRect.width * ancRect.height) / screenArea) > 0.45);
+        const isRowLike = /Cell|ListView|RecyclerView|CollectionView|Table/i.test(tag);
+        const isLabeledShell = !tooLarge && isGenericScrapeContainerNode(anc) && getBestControlIdentity(anc);
+        if (isRowLike || isLabeledShell) {
+            add(anc);
+            const ad = anc.getElementsByTagName ? anc.getElementsByTagName("*") : [];
+            for (let i = 0; i < ad.length; i++) {
+                if (containsClick(ad[i])) add(ad[i]);
+            }
+            if (!candidates.some((c) => getDirectControlIdentity(c))) {
+                for (let i = 0; i < ad.length; i++) {
+                    if (containsClick(ad[i]) && getDirectControlIdentity(ad[i])) add(ad[i]);
+                    else if (!tooLarge && getDirectControlIdentity(ad[i])) add(ad[i]);
+                }
+            }
+            break;
+        }
+        anc = anc.parentNode;
+    }
+    let best = node;
+    let bestScore = -1;
+    for (let i = 0; i < candidates.length; i++) {
+        const sc = scoreNode(candidates[i]);
+        if (sc > bestScore) {
+            bestScore = sc;
+            best = candidates[i];
+        }
+    }
+    return best;
+}
+
+window.isWeakLocatorValue = isWeakLocatorValue;
+window.getDirectControlIdentity = getDirectControlIdentity;
+window.getBestControlIdentity = getBestControlIdentity;
+window.isRedundantGenericContainer = isRedundantGenericContainer;
+window.uniquifyScrapedControlName = uniquifyScrapedControlName;
+window.buildUniqueXPathForNode = buildUniqueXPathForNode;
+window.isLocatorUniqueInPageSource = isLocatorUniqueInPageSource;
+window.resolveTapScrapeNode = resolveTapScrapeNode;
+window.generateUniqueXPath = buildUniqueXPathForNode;
+
 function getAllPossibleXPaths(node) {
     if (!node || node.nodeType !== 1) return [];
 
@@ -11219,148 +11582,120 @@ function getAllPossibleXPaths(node) {
         return [`//${tagName}`];
     }
 
-    const isGeneric = (
-        tagName === "XCUIElementTypeOther"
-        || tagName === "Other"
-        || tagName === "android.view.View"
-        || tagName === "XCUIElementTypeCell"
-        || tagName === "android.view.ViewGroup"
-        || tagName === "android.widget.FrameLayout"
-        || tagName === "android.widget.LinearLayout"
-        || tagName === "android.widget.RelativeLayout"
-    );
-
     const isAndroidNode = (typeof isAndroidPlatform === "function" && isAndroidPlatform())
         || tagName.startsWith("android.")
-        || !!(node.getAttribute && (node.getAttribute('resource-id') || node.getAttribute('content-desc') || node.getAttribute('bounds')));
+        || !!(node.getAttribute && (node.getAttribute("resource-id") || node.getAttribute("content-desc") || node.getAttribute("bounds")));
 
     const attributes = isAndroidNode
         ? ["resource-id", "id", "text", "content-desc", "hint", "class"]
         : ["name", "label", "value", "id"];
 
-    const cleanAttr = (val) => String(val == null ? '' : val).trim().replace(/"/g, '');
     const pushUnique = (xpath) => {
-        const xp = String(xpath || '').trim();
-        if (xp && !candidates.includes(xp)) candidates.push(xp);
+        const xp = String(xpath || "").trim();
+        if (xp && candidates.indexOf(xp) === -1) candidates.push(xp);
     };
 
     const attrVals = {};
     attributes.forEach((attr) => {
         const raw = node.getAttribute && node.getAttribute(attr);
-        const clean = cleanAttr(raw);
-        if (clean) attrVals[attr] = clean;
+        const clean = String(raw == null ? "" : raw).trim();
+        if (!clean) return;
+        if (attr !== "resource-id" && attr !== "id" && attr !== "class" && isWeakLocatorValue(clean)) return;
+        attrVals[attr] = clean;
     });
 
-    // 1) Strong attribute locators (tagged + wildcard for key attrs)
     attributes.forEach((attr) => {
         if (!attrVals[attr]) return;
-        if (attr === 'class' && Object.keys(attrVals).some((k) => k !== 'class')) {
-            // still useful as an alternate — add after stronger ones below
-            return;
-        }
-        const cleanVal = attrVals[attr];
-        pushUnique(`//${tagName}[@${attr}="${cleanVal}"]`);
-        if (attr === 'resource-id' || attr === 'content-desc' || attr === 'name' || attr === 'label' || attr === 'text' || attr === 'id') {
-            pushUnique(`//*[@${attr}="${cleanVal}"]`);
+        if (attr === "class" && Object.keys(attrVals).some((k) => k !== "class")) return;
+        const pred = xpathAttrEq(attr, attrVals[attr]);
+        const tagged = `//${tagName}[${pred}]`;
+        pushUnique(tryUniqueOrIndexed(tagged));
+        if (attr === "resource-id" || attr === "content-desc" || attr === "name" || attr === "label" || attr === "text" || attr === "id") {
+            pushUnique(tryUniqueOrIndexed(`//*[${pred}]`));
         }
     });
 
-    // 1b) Class-only / class alternate (Android)
     if (attrVals.class) {
-        pushUnique(`//${tagName}[@class="${attrVals.class}"]`);
+        pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("class", attrVals.class)}]`));
     }
 
-    // 1c) Combined attribute locators (more stable on real devices)
+    function tryUniqueOrIndexed(xp) {
+        const uniqueOrIndexed = indexXPathForNode(xp, node);
+        return uniqueOrIndexed || xp;
+    }
+
     if (isAndroidNode) {
-        if (attrVals['resource-id'] && attrVals.text) {
-            pushUnique(`//${tagName}[@resource-id="${attrVals['resource-id']}" and @text="${attrVals.text}"]`);
+        if (attrVals.class) {
+            ["resource-id", "text", "content-desc", "hint"].forEach((attr) => {
+                if (!attrVals[attr]) return;
+                pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("class", attrVals.class)} and ${xpathAttrEq(attr, attrVals[attr])}]`));
+                pushUnique(tryUniqueOrIndexed(`//*[${xpathAttrEq("class", attrVals.class)} and ${xpathAttrEq(attr, attrVals[attr])}]`));
+            });
         }
-        if (attrVals['resource-id'] && attrVals['content-desc']) {
-            pushUnique(`//${tagName}[@resource-id="${attrVals['resource-id']}" and @content-desc="${attrVals['content-desc']}"]`);
+        if (attrVals["resource-id"] && attrVals.text) {
+            pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("resource-id", attrVals["resource-id"])} and ${xpathAttrEq("text", attrVals.text)}]`));
         }
-        if (attrVals.text && attrVals['content-desc']) {
-            pushUnique(`//${tagName}[@text="${attrVals.text}" and @content-desc="${attrVals['content-desc']}"]`);
+        if (attrVals["resource-id"] && attrVals["content-desc"]) {
+            pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("resource-id", attrVals["resource-id"])} and ${xpathAttrEq("content-desc", attrVals["content-desc"])}]`));
+        }
+        if (attrVals.text && attrVals["content-desc"]) {
+            pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("text", attrVals.text)} and ${xpathAttrEq("content-desc", attrVals["content-desc"])}]`));
         }
     } else {
         if (attrVals.name && attrVals.label) {
-            pushUnique(`//${tagName}[@name="${attrVals.name}" and @label="${attrVals.label}"]`);
+            pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("name", attrVals.name)} and ${xpathAttrEq("label", attrVals.label)}]`));
         }
         if (attrVals.name && attrVals.value) {
-            pushUnique(`//${tagName}[@name="${attrVals.name}" and @value="${attrVals.value}"]`);
+            pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("name", attrVals.name)} and ${xpathAttrEq("value", attrVals.value)}]`));
         }
         if (attrVals.label && attrVals.value) {
-            pushUnique(`//${tagName}[@label="${attrVals.label}" and @value="${attrVals.value}"]`);
+            pushUnique(tryUniqueOrIndexed(`//${tagName}[${xpathAttrEq("label", attrVals.label)} and ${xpathAttrEq("value", attrVals.value)}]`));
         }
     }
 
-    // 2) Parent-context relative paths (always useful alternate — not only when empty)
+    const childIdent = getDescendantControlIdentity(node);
+    if (childIdent) {
+        pushUnique(tryUniqueOrIndexed(`//${tagName}[.//*[${xpathAttrEq(childIdent.attr, childIdent.value)}]]`));
+        pushUnique(tryUniqueOrIndexed(`//${tagName}[.//*[@${childIdent.attr}=${xpathLiteral(childIdent.value)}]]`));
+    }
+
     if (window.xmlDoc) {
         let ancestor = node.parentNode;
         let ancestorXpath = "";
         while (ancestor && ancestor.nodeType === 1 && !["XCUIElementTypeApplication", "hierarchy", "AppiumAUT", "XCUIElementTypeWindow"].includes(ancestor.nodeName)) {
-            for (let attr of attributes) {
-                let parentVal = ancestor.getAttribute && ancestor.getAttribute(attr);
-                const cleanParentVal = cleanAttr(parentVal);
-                if (cleanParentVal && attr !== 'class') {
-                    ancestorXpath = `//${ancestor.nodeName}[@${attr}="${cleanParentVal}"]`;
-                    break;
-                }
+            const aIdent = getDirectControlIdentity(ancestor);
+            if (aIdent) {
+                ancestorXpath = `//${ancestor.nodeName}[${xpathAttrEq(aIdent.attr, aIdent.value)}]`;
+                break;
             }
-            if (ancestorXpath) break;
             ancestor = ancestor.parentNode;
         }
 
         if (ancestorXpath) {
-            try {
-                const relativePath = `${ancestorXpath}//${tagName}`;
-                const scopedResults = window.xmlDoc.evaluate(relativePath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-                for (let i = 0; i < scopedResults.snapshotLength; i++) {
-                    if (scopedResults.snapshotItem(i) === node) {
-                        pushUnique(`(${relativePath})[${i + 1}]`);
-                        // Also keep unindexed if unique in scope
-                        if (scopedResults.snapshotLength === 1) pushUnique(relativePath);
-                        break;
-                    }
-                }
-                // If node has a strong attr, also parent+attr relative
-                const strongAttr = isAndroidNode
-                    ? (attrVals['resource-id'] ? 'resource-id' : (attrVals['content-desc'] ? 'content-desc' : (attrVals.text ? 'text' : '')))
-                    : (attrVals.name ? 'name' : (attrVals.label ? 'label' : (attrVals.value ? 'value' : '')));
-                if (strongAttr && attrVals[strongAttr]) {
-                    pushUnique(`${ancestorXpath}//${tagName}[@${strongAttr}="${attrVals[strongAttr]}"]`);
-                }
-            } catch (_) {}
-        }
-    }
-
-    // 3) Indexed tag path — always include as alternate (Win/Mac, real/emulator/simulator)
-    if (window.xmlDoc) {
-        try {
-            const fallbackXpath = `//${tagName}`;
-            const globalResults = window.xmlDoc.evaluate(fallbackXpath, window.xmlDoc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
-            for (let i = 0; i < globalResults.snapshotLength; i++) {
-                if (globalResults.snapshotItem(i) === node) {
-                    pushUnique(`(${fallbackXpath})[${i + 1}]`);
-                    break;
-                }
+            const relativePath = `${ancestorXpath}//${tagName}`;
+            const scoped = indexXPathForNode(relativePath, node);
+            if (scoped) pushUnique(scoped);
+            const ident = getDirectControlIdentity(node);
+            if (ident) {
+                pushUnique(tryUniqueOrIndexed(`${ancestorXpath}//${tagName}[${xpathAttrEq(ident.attr, ident.value)}]`));
             }
-        } catch (_) {}
+        }
     }
 
-    // 4) Structural unique path (when available)
     try {
-        if (typeof generateUniqueXPath === 'function') {
-            const uniqueXp = generateUniqueXPath(node);
-            if (uniqueXp) pushUnique(uniqueXp);
-        }
+        const uniqueXp = buildUniqueXPathForNode(node);
+        if (uniqueXp) pushUnique(uniqueXp);
     } catch (_) {}
 
-    // 5) Generic with no attrs: ensure at least parent or tag fallback already covered
-    if (candidates.length === 0 && isGeneric) {
-        pushUnique(`//${tagName}`);
+    if (window.xmlDoc) {
+        const indexedTag = indexXPathForNode(`//${tagName}`, node);
+        if (indexedTag) pushUnique(indexedTag);
     }
 
-    return candidates.length > 0 ? candidates : [`//${tagName}`];
+    const ranked = rankScrapedXPaths(node, candidates);
+    if (ranked.length) return ranked;
+    const fallback = buildUniqueXPathForNode(node);
+    return fallback ? [fallback] : [`//${tagName}`];
 }
 window.getAllPossibleXPaths = getAllPossibleXPaths;
 
@@ -13037,14 +13372,19 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                 }
             }
 
+            if (matchedNode && typeof resolveTapScrapeNode === "function") {
+                matchedNode = resolveTapScrapeNode(matchedNode, clickX, clickY) || matchedNode;
+            }
+
             if (!matchedNode) {
                 createAndAppendTable([
                     {
                         ControlName: `coord_${Math.round(clickX)}_${Math.round(clickY)}`,
-                        ControlType: "Coordinate",
+                        ControlType: "Parent",
+                        ControlAction: (typeof getDefaultControlAction === "function") ? getDefaultControlAction("Parent") : "clicked",
                         ControlId: [`COORDINATE(${Math.round(clickX)},${Math.round(clickY)})`],
                         ControlValue: "",
-                        IdentificationType: "Coordinate",
+                        IdentificationType: "COORDINATE",
                         FeatureName: effectiveFeatureName || pageName,
                         NodeName: pageName,
                         rect: { x: Math.round(clickX), y: Math.round(clickY), width: 1, height: 1 }
@@ -13055,7 +13395,13 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
 
             // 1. Generate Clean Variable Name & Type normally
                         let controlName = generateProfessionalControlName(matchedNode);
+                        if (typeof uniquifyScrapedControlName === "function") {
+                            controlName = uniquifyScrapedControlName(controlName);
+                        }
                         let controlType = mapControlType(typeof getUiNodeName === 'function' ? getUiNodeName(matchedNode) : matchedNode.nodeName, matchedNode);
+                        if (typeof normalizeScrapedControlType === 'function') {
+                            controlType = normalizeScrapedControlType(controlType) || controlType;
+                        }
 
                         // 2. Fetch XPaths
                         let allXPaths = getAllPossibleXPaths(matchedNode);
@@ -13068,6 +13414,7 @@ function verifyPageNameSavedBeforeScraping(actionLabel) {
                             {
                                 ControlName: controlName,
                                 ControlType: controlType,
+                                ControlAction: (typeof getDefaultControlAction === 'function') ? getDefaultControlAction(controlType) : 'selected',
                                 ControlId: allXPaths,
                                 ControlValue: controlValue,
                                 IdentificationType: inferIdentificationType(allXPaths[0]),
@@ -14947,22 +15294,40 @@ function updateRowEyeButtonState() {
 function generateProfessionalControlName(node) {
     if (!node) return "unknown_control";
 
-    // 1. Prefer visible labels / text — include iOS `name` (common on XCUI nodes)
-    let rawName = node.getAttribute("label") ||
-                  node.getAttribute("name") ||
-                  node.getAttribute("text") ||
-                  node.getAttribute("value") ||
-                  node.getAttribute("content-desc") ||
-                  "";
+    const pickVisibleName = (n) => {
+        if (!n || typeof n.getAttribute !== "function") return "";
+        const keys = ["label", "name", "text", "content-desc", "value"];
+        for (let i = 0; i < keys.length; i++) {
+            const v = String(n.getAttribute(keys[i]) || "").trim();
+            if (v && !(typeof isWeakLocatorValue === "function" && isWeakLocatorValue(v))) return v;
+        }
+        return "";
+    };
 
-    if (!rawName.trim()) {
+    // 1. Prefer visible labels / text — skip generic iOS/Android wrapper names like Other/Cell
+    let rawName = pickVisibleName(node);
+
+    if (!rawName) {
         let resId = node.getAttribute("resource-id");
         if (resId && resId.includes('/')) {
             rawName = resId.split('/')[1];
         }
     }
 
-    rawName = rawName.trim();
+    if (!rawName && typeof getBestControlIdentity === "function") {
+        const ident = getBestControlIdentity(node);
+        if (ident && ident.value) rawName = ident.value;
+    }
+
+    if (!rawName && node.getElementsByTagName) {
+        const kids = node.getElementsByTagName("*");
+        for (let i = 0; i < kids.length; i++) {
+            rawName = pickVisibleName(kids[i]);
+            if (rawName) break;
+        }
+    }
+
+    rawName = String(rawName || "").trim();
 
     // 2. Identify UI Type for Prefix (COMMENTED OUT)
     /*
@@ -14984,8 +15349,10 @@ function generateProfessionalControlName(node) {
             .replace("android.widget.", "")
             .replace("android.view.", "");
 
-        // return `${prefix}${cleanTag}`; // COMMENTED OUT
-        return cleanTag;
+        if (typeof isWeakLocatorValue === "function" && isWeakLocatorValue(cleanTag)) {
+            return "control";
+        }
+        return cleanTag || "control";
     }
 
     // 4. Smart Sanitize and Format
@@ -15009,6 +15376,10 @@ function generateProfessionalControlName(node) {
     // Prevent starting with a number
     if (/^\d/.test(cleanName)) {
         cleanName = "num_" + cleanName;
+    }
+
+    if (!cleanName || (typeof isWeakLocatorValue === "function" && isWeakLocatorValue(cleanName.replace(/_/g, " ")))) {
+        return "control";
     }
 
     // return `${prefix}${cleanName}`; // COMMENTED OUT
@@ -18140,7 +18511,7 @@ if (bulkDeleteBtn) {
 // Android hierarchy: bounds="[x1,y1][x2,y2]", class=, resource-id=, text=, ...
 // iOS hierarchy:     x/y/width/height attrs, name=, label=, type=, ...
 // parseNodeRect() normalizes both into {x,y,width,height} for hover/tap/scrape
-// inferIdentificationType() maps primary locator → Id|Name|Label|Text|XPath|...
+// inferIdentificationType() maps primary locator → ID | XPATH
 // ===========================================================================
 
 // --- Dual-platform helpers (Android bounds + iOS x/y/width/height) ---
@@ -18169,38 +18540,161 @@ function getCurrentAppIdentity() {
     return (document.getElementById('apppackage')?.value || '').trim();
 }
 
-/** Map primary Control ID string → Identification Type (Id, Name, Label, XPath, …). */
+/** Map primary Control ID string or type → Identification Type ("ID" or "XPATH"). */
 function inferIdentificationType(locatorOrType) {
     const v = String(locatorOrType || '').trim();
     if (!v) return "";
 
-    // Explicit action / gesture locators
-    if (v.startsWith("COORDINATE(") || /^coordinate$/i.test(v)) return "Coordinate";
-    if (v.startsWith("SWIPE(") || /^scroll$/i.test(v)) return "Scroll";
+    if (/^id$/i.test(v)) return "ID";
+    if (/^xpath$/i.test(v)) return "XPATH";
 
-    // Attribute-based locators → identification strategy (not always XPath)
+    if (v.startsWith("COORDINATE(") || v.startsWith("SWIPE(")) return "XPATH";
+
     const attrMatch = v.match(/\[@([a-zA-Z0-9_-]+)\s*=/);
     if (attrMatch) {
         const attr = attrMatch[1].toLowerCase();
-        if (attr === "resource-id" || attr === "resourceid" || attr === "id") return "Id";
-        if (attr === "name") return "Name";
-        if (attr === "content-desc" || attr === "contentdescription") return "AccessibilityId";
-        if (attr === "label") return "Label";
-        if (attr === "text") return "Text";
-        if (attr === "value") return "Value";
-        if (attr === "hint") return "Hint";
-        if (attr === "class" || attr === "classname") return "ClassName";
+        if (attr === "resource-id" || attr === "resourceid" || attr === "id") return "ID";
+        return "XPATH";
     }
 
-    // Pure class / tag index without attributes
-    // e.g. (//android.widget.Button)[1] or //XCUIElementTypeButton
-    if (/^\(?\/{1,2}[A-Za-z0-9._]+\)?(\[\d+\])?$/.test(v) || /^\(\/\/[A-Za-z0-9._]+\)\[\d+\]$/.test(v)) {
-        return "ClassName";
+    if (v.includes("@resource-id=") || v.includes("@resourceid=") || v.includes("@id=") || v.includes(":id/")) {
+        return "ID";
     }
 
-    // Indexed / nested / complex path
-    return "XPath";
+    return "XPATH";
 }
+
+/** UI may show "iPhone 17 Pro (simulator)"; export/send uses the name without the type suffix. */
+function getExportDeviceName(fallbackName) {
+    let raw = String(fallbackName || "").trim();
+    try {
+        const sel = document.getElementById("devicename");
+        const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+        if (opt) {
+            raw = String((opt.dataset && opt.dataset.deviceName) || opt.text || opt.value || raw).trim();
+        } else if (!raw && sel) {
+            raw = String(sel.value || "").trim();
+        }
+    } catch (_) {}
+    return raw.replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
+}
+window.getExportDeviceName = getExportDeviceName;
+
+/** Official control types shown in the table dropdown, with the attached CONTROL ACTION. */
+const STANDARD_CONTROL_TYPE_ACTIONS = {
+    TextBox: "entered",
+    Button: "selected",
+    RadioButton: "selected",
+    CheckBox: "checked",
+    Link: "clicked",
+    DropDownList: "selected",
+    Image: "Displayed",
+    TextArea: "entered",
+    FileUpload: "selected",
+    Label: "verify text",
+    Page: "displayed",
+    AnchorTag: "Click by Index",
+    Mouse: "mousehover",
+    Scroll: "scroll vertical",
+    Window: "verify content",
+    NewTab: "Open new tab and Navigate",
+    Parent: "clicked"
+};
+
+function getStandardControlTypes() {
+    return Object.keys(STANDARD_CONTROL_TYPE_ACTIONS);
+}
+
+function normalizeScrapedControlType(type) {
+    const raw = String(type || "").trim();
+    if (!raw) return "";
+    if (Object.prototype.hasOwnProperty.call(STANDARD_CONTROL_TYPE_ACTIONS, raw)) return raw;
+
+    const key = raw.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const alias = {
+        edittext: "TextBox",
+        textfield: "TextBox",
+        securetextfield: "TextBox",
+        searchfield: "TextBox",
+        searchautocomplete: "TextBox",
+        textinput: "TextBox",
+        input: "TextBox",
+        textarea: "TextArea",
+        statictext: "Label",
+        textview: "Label",
+        checkedtextview: "Label",
+        label: "Label",
+        imageview: "Image",
+        imagebutton: "Button",
+        icon: "Image",
+        spinner: "DropDownList",
+        dropdown: "DropDownList",
+        combobox: "DropDownList",
+        picker: "DropDownList",
+        pickerwheel: "DropDownList",
+        switch: "CheckBox",
+        toggle: "CheckBox",
+        togglebutton: "CheckBox",
+        checkbox: "CheckBox",
+        radiobutton: "RadioButton",
+        link: "Link",
+        hyperlink: "Link",
+        anchortag: "AnchorTag",
+        scrollview: "Scroll",
+        nestedscrollview: "Scroll",
+        recyclerview: "Scroll",
+        listview: "Scroll",
+        gridview: "Scroll",
+        collectionview: "Scroll",
+        swipe: "Scroll",
+        coordinate: "Parent",
+        cell: "Parent",
+        other: "Parent",
+        view: "Parent",
+        viewgroup: "Parent",
+        framelayout: "Parent",
+        linearlayout: "Parent",
+        relativelayout: "Parent",
+        constraintlayout: "Parent",
+        card: "Parent",
+        node: "Parent"
+    };
+    if (alias[key] && STANDARD_CONTROL_TYPE_ACTIONS[alias[key]]) return alias[key];
+    return "Parent";
+}
+
+function getDefaultControlAction(controlType) {
+    const ct = normalizeScrapedControlType(controlType);
+    if (!ct) return "";
+    return STANDARD_CONTROL_TYPE_ACTIONS[ct] || "selected";
+}
+
+function buildControlTypeSelectHtml(selectedType) {
+    const types = getStandardControlTypes();
+    const selected = normalizeScrapedControlType(selectedType);
+    const optionsHtml = types.map((type) =>
+        `<option value="${type}"${type === selected ? " selected" : ""}>${type}</option>`
+    ).join("");
+    const placeholder = selected ? "" : `<option value="" disabled selected hidden>Controls</option>`;
+    return `<select class="xpath-dropdown js-table-custom-select control-type-dropdown" onchange="onControlTypeChange(this)" style="width: 100%; border: none; background: transparent; font-size: 11px; font-weight: 600;">${placeholder}${optionsHtml}</select>`;
+}
+
+function onControlTypeChange(selectEl) {
+    if (!selectEl) return;
+    const tr = selectEl.closest && selectEl.closest("tr");
+    const action = getDefaultControlAction(selectEl.value);
+    if (tr) tr.dataset.controlAction = action;
+    if (typeof window.syncActiveProjectToRepo === "function") {
+        try { window.syncActiveProjectToRepo(); } catch (_) {}
+    }
+}
+
+window.STANDARD_CONTROL_TYPE_ACTIONS = STANDARD_CONTROL_TYPE_ACTIONS;
+window.getStandardControlTypes = getStandardControlTypes;
+window.normalizeScrapedControlType = normalizeScrapedControlType;
+window.getDefaultControlAction = getDefaultControlAction;
+window.buildControlTypeSelectHtml = buildControlTypeSelectHtml;
+window.onControlTypeChange = onControlTypeChange;
 
 /** Normalize Android bounds= or iOS x/y/width/height into {x,y,width,height}. */
 function parseNodeRect(node) {
@@ -18357,7 +18851,16 @@ function isMeaningfulControlNode(node) {
     };
     const flag = (key) => String(node.getAttribute(key) || '').toLowerCase() === 'true';
 
-    const hasLabel = attr('label') || attr('name') || attr('value') || attr('content-desc') || attr('text') || attr('hint');
+    const hasRawLabel = attr('label') || attr('name') || attr('value') || attr('content-desc') || attr('text') || attr('hint');
+    const strongIdent = typeof getDirectControlIdentity === 'function' ? getDirectControlIdentity(node) : null;
+    const hasLabel = !!strongIdent || (hasRawLabel && !(typeof isWeakLocatorValue === 'function' && (
+        isWeakLocatorValue(node.getAttribute('label')) &&
+        isWeakLocatorValue(node.getAttribute('name')) &&
+        isWeakLocatorValue(node.getAttribute('value')) &&
+        isWeakLocatorValue(node.getAttribute('content-desc')) &&
+        isWeakLocatorValue(node.getAttribute('text')) &&
+        isWeakLocatorValue(node.getAttribute('hint'))
+    )));
     const hasId = attr('resource-id') || attr('id');
     const interactive = flag('clickable') || flag('long-clickable') || flag('checkable') || flag('scrollable') || flag('focusable');
     const isWidget = /Button|EditText|TextView|ImageView|ImageButton|CheckBox|Switch|Radio|Spinner|CheckedTextView|Toggle|SeekBar|Chip|RecyclerView|ListView|GridView|FloatingActionButton|CompoundButton|StaticText|TextField|SearchField|Image$/i.test(tag);
@@ -18374,7 +18877,11 @@ function isMeaningfulControlNode(node) {
 }
 
 function mapControlType(nodeName, node) {
-    const n = nodeName || (node ? ((node.getAttribute && node.getAttribute('class')) || node.nodeName) : '') || '';
+    let n = nodeName || (node ? ((node.getAttribute && node.getAttribute('class')) || node.nodeName) : '') || '';
+    if (node && typeof getUiNodeName === 'function' && (!n || n === 'node' || n === 'Other' || n === 'XCUIElementTypeOther')) {
+        const ui = getUiNodeName(node);
+        if (ui) n = ui;
+    }
 
     // 1. Direct standard Button types
     if (
@@ -18386,18 +18893,31 @@ function mapControlType(nodeName, node) {
         return 'Button';
     }
 
+    if (
+        n === 'XCUIElementTypeLink' ||
+        /Hyperlink$|^Link$/i.test(n)
+    ) {
+        return 'Link';
+    }
+
     // 2. Direct standard TextBox types
     if (
         n === 'XCUIElementTypeTextField' ||
         n === 'XCUIElementTypeSecureTextField' ||
         n === 'XCUIElementTypeSearchField' ||
-        n === 'XCUIElementTypeTextView' ||
         n === 'android.widget.EditText' ||
         n === 'android.widget.AutoCompleteTextView' ||
         n === 'android.widget.MultiAutoCompleteTextView' ||
         /EditText$|TextInputEditText$|SearchAutoComplete$/i.test(n)
     ) {
         return 'TextBox';
+    }
+
+    if (
+        n === 'XCUIElementTypeTextView' ||
+        /TextArea$|MultilineEditText$/i.test(n)
+    ) {
+        return 'TextArea';
     }
 
     // 3. Direct standard Label types
@@ -18431,13 +18951,29 @@ function mapControlType(nodeName, node) {
     }
 
     // 6. RadioButton types
-    if (n === 'android.widget.RadioButton' || /RadioButton$/i.test(n)) {
+    if (n === 'android.widget.RadioButton' || n === 'XCUIElementTypeRadioButton' || /RadioButton$/i.test(n)) {
         return 'RadioButton';
     }
 
     // 7. DropDownList / Spinner
-    if (n === 'android.widget.Spinner' || /Spinner$/i.test(n)) {
+    if (
+        n === 'android.widget.Spinner' ||
+        n === 'XCUIElementTypePicker' ||
+        n === 'XCUIElementTypePickerWheel' ||
+        /Spinner$|Picker$|PickerWheel$|ComboBox$/i.test(n)
+    ) {
         return 'DropDownList';
+    }
+
+    if (
+        n === 'XCUIElementTypeScrollView' ||
+        n === 'android.widget.ScrollView' ||
+        n === 'android.widget.HorizontalScrollView' ||
+        n === 'android.widget.ListView' ||
+        n === 'androidx.recyclerview.widget.RecyclerView' ||
+        /ScrollView$|RecyclerView$|CollectionView$|ListView$|GridView$|NestedScrollView$/i.test(n)
+    ) {
+        return 'Scroll';
     }
 
     // 8. If node is provided or for ViewGroup/View/Layout/Other: inspect attributes & child hierarchy
@@ -18501,8 +19037,13 @@ function mapControlType(nodeName, node) {
             return isClickable ? 'Button' : 'Label';
         }
 
+        if (getAttr('scrollable') === 'true' && /Scroll|Recycler|ListView|CollectionView|GridView/i.test(n)) {
+            return 'Scroll';
+        }
+
+        // Generic tappable shells (cells, other, layouts) are Parent — not Button
         if (isClickable) {
-            return 'Button';
+            return 'Parent';
         }
 
         if (text && text.trim()) {
@@ -18510,14 +19051,10 @@ function mapControlType(nodeName, node) {
         }
     }
 
-    const clean = n.replace('XCUIElementType', '').replace('android.widget.', '').replace('android.view.', '').replace(/^androidx\.[a-z0-9_.]+\./i, '') || 'Other';
-    if (clean === 'ViewGroup' || clean === 'View') {
-        if (node && (node.getAttribute && (node.getAttribute('clickable') === 'true' || node.getAttribute('long-clickable') === 'true'))) {
-            return 'Button';
-        }
-        return 'Other';
+    if (typeof normalizeScrapedControlType === 'function') {
+        return normalizeScrapedControlType(n) || 'Parent';
     }
-    return clean;
+    return 'Parent';
 }
 
 function generateNodeFingerprint(node) {
@@ -21478,7 +22015,9 @@ if (platformVersionField) {
             const itemPlatform = project.platform || platform || 'Android';
             const isAndroidItem = String(itemPlatform).toLowerCase().includes('android');
             const isIOSItem = String(itemPlatform).toLowerCase().includes('ios');
-            const devNameItem = (project.device && project.device.name) || project.deviceName || '';
+            const devNameItem = (typeof getExportDeviceName === "function")
+                ? getExportDeviceName((project.device && project.device.name) || project.deviceName || "")
+                : String((project.device && project.device.name) || project.deviceName || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
             const udidItem = (project.device && project.device.id) || project.deviceId || '';
             const appPkgItem = (project.capabilities && (project.capabilities['appium:appPackage'] || project.capabilities.appPackage)) || '';
             const appActItem = (project.capabilities && (project.capabilities['appium:appActivity'] || project.capabilities.appActivity)) || '';
