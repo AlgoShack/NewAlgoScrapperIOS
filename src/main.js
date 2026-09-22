@@ -2156,11 +2156,9 @@
     // ===========================================================================
 
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
-    // Windows: use execFile + retries (shell quoting / CRLF / daemon warm-up are flaky).
     async function getConnectedAndroidDevices() {
         applyAndroidToolingToEnv(process.env);
         const adbPath = getAdbExecutable();
-        const { execFile } = require('child_process');
 
         const parseDevicesFromStdout = (stdout) => {
             const found = [];
@@ -2214,106 +2212,72 @@
         };
 
         let sawDeviceListOutput = false;
-        const runAdbDevices = (args) => new Promise((resolve) => {
-            const finish = (stdout, error, stderr) => {
-                if (error) {
-                    console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
-                }
-                const text = `${stdout || ''}\n${stderr || ''}`.replace(/\r/g, '');
+        // exec/execFile keep stdin open. On Windows adb.exe then never exits, the timeout
+        // kills it, and the log is only "Command failed" with an empty device list.
+        const runAdb = (args, timeoutMs) => new Promise((resolve) => {
+            const { spawn } = require('child_process');
+            let stdout = '';
+            let stderr = '';
+            let settled = false;
+            const finish = (code) => {
+                if (settled) return;
+                settled = true;
+                const text = `${stdout}\n${stderr}`.replace(/\r/g, '');
                 const parsed = parseDevicesFromStdout(text);
                 if (/list of devices attached/i.test(text) || parsed.length) sawDeviceListOutput = true;
+                if (!parsed.length && args[0] !== 'start-server') {
+                    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 300);
+                    console.warn(`[Android Discovery] adb ${args.join(' ')} code=${code} out=${snippet || '(empty)'}`);
+                }
                 resolve(parsed);
             };
 
+            let child;
             try {
-                execFile(
-                    adbPath,
-                    args,
-                    {
-                        timeout: 12000,
-                        env: process.env,
-                        windowsHide: true,
-                        maxBuffer: 10 * 1024 * 1024
-                    },
-                    (error, stdout, stderr) => finish(stdout, error, stderr)
-                );
+                child = spawn(adbPath, args, {
+                    env: process.env,
+                    windowsHide: true,
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
             } catch (err) {
-                // Fallback for odd Windows path/shell cases
-                try {
-                    const quoted = adbPath.includes(' ') ? `"${adbPath}"` : adbPath;
-                    exec(`${quoted} ${args.join(' ')}`, {
-                        timeout: 12000,
-                        env: process.env,
-                        windowsHide: true,
-                        maxBuffer: 10 * 1024 * 1024
-                    }, (error2, stdout2, stderr2) => finish(stdout2, error2 || err, stderr2));
-                } catch (err2) {
-                    console.warn('[Android Discovery] adb exec fallback threw:', err2);
-                    resolve([]);
-                }
+                stderr = String(err && err.message ? err.message : err);
+                finish(-1);
+                return;
             }
+
+            const timer = setTimeout(() => {
+                try { child.kill(); } catch (_) {}
+            }, timeoutMs || 8000);
+            const hardStop = setTimeout(() => finish(-1), (timeoutMs || 8000) + 800);
+
+            child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+            child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+            child.on('error', (err) => {
+                clearTimeout(timer);
+                clearTimeout(hardStop);
+                stderr += String(err && err.message ? err.message : err);
+                finish(-1);
+            });
+            child.on('close', (code) => {
+                clearTimeout(timer);
+                clearTimeout(hardStop);
+                finish(code == null ? -1 : code);
+            });
         });
 
-        // Two quick reads. A long retry loop blocks detection while another adb command is running.
-        const attempts = 2;
-        let devices = [];
-        for (let i = 0; i < attempts; i++) {
-            devices = await runAdbDevices(['devices', '-l']);
-            if (!devices.length) {
-                devices = await runAdbDevices(['devices']);
-            }
-            if (devices.length) break;
-            if (i < attempts - 1) {
-                await new Promise((r) => setTimeout(r, 400));
-            }
-        }
+        let devices = await runAdb(['devices', '-l'], 8000);
+        if (!devices.length) devices = await runAdb(['devices'], 8000);
 
         console.log(`[Android Discovery] adb=${adbPath} found=${devices.length} reliable=${sawDeviceListOutput}`, devices.map((d) => d.id).join(', '));
 
-        // Daemon not up yet: kick it once, then read devices again.
-        if (!sawDeviceListOutput && !getConnectedAndroidDevices._daemonKickTried) {
+        if (!devices.length && !getConnectedAndroidDevices._daemonKickTried) {
             getConnectedAndroidDevices._daemonKickTried = true;
-            try {
-                await runAdbDevices(['start-server']);
-                sawDeviceListOutput = false;
-                devices = await runAdbDevices(['devices', '-l']);
-                if (!devices.length) devices = await runAdbDevices(['devices']);
-                console.log(`[Android Discovery] after start-server found=${devices.length}`);
-            } catch (kickErr) {
-                console.warn('[Android Discovery] start-server failed:', kickErr && kickErr.message ? kickErr.message : kickErr);
-            }
-        }
-
-        // Last-resort shell fallback if execFile path never yielded devices on Windows
-        if (!devices.length) {
-            try {
-                const adbCmd = getAdbCommandPrefix();
-                const { stdout } = await new Promise((resolve) => {
-                    exec(`${adbCmd} devices -l`, {
-                        timeout: 12000,
-                        env: process.env,
-                        windowsHide: true,
-                        maxBuffer: 10 * 1024 * 1024
-                    }, (error, out, err) => resolve({ stdout: out || '', error, err }));
-                });
-                devices = parseDevicesFromStdout(String(stdout || '') + '\n' + String(err || ''));
-                if (devices.length) sawDeviceListOutput = true;
-                if (!devices.length) {
-                    const second = await new Promise((resolve) => {
-                        exec(`${adbCmd} devices`, {
-                            timeout: 10000,
-                            env: process.env,
-                            windowsHide: true,
-                            maxBuffer: 10 * 1024 * 1024
-                        }, (error, out) => resolve(out || ''));
-                    });
-                    devices = parseDevicesFromStdout(second);
-                    if (devices.length) sawDeviceListOutput = true;
-                }
-                console.log(`[Android Discovery] shell fallback found=${devices.length}`, devices.map((d) => d.id).join(', '));
-            } catch (fallbackErr) {
-                console.warn('[Android Discovery] shell fallback failed:', fallbackErr);
-            }
+            await runAdb(['start-server'], 6000);
+            await new Promise((r) => setTimeout(r, 400));
+            sawDeviceListOutput = false;
+            devices = await runAdb(['devices', '-l'], 8000);
+            if (!devices.length) devices = await runAdb(['devices'], 8000);
+            console.log(`[Android Discovery] after start-server found=${devices.length}`);
         }
 
         // An app-list adb command can hide the device for one tick. Keep the last good list.
@@ -3423,19 +3387,44 @@
 
         const serial = String(udid || '').trim();
         const adbPath = getAdbExecutable();
-        const { execFile } = require('child_process');
+        const { spawn } = require('child_process');
         androidAppListInFlight = true;
         const runAdb = (args, timeoutMs) => new Promise((resolve) => {
-            execFile(adbPath, ['-s', serial].concat(args), {
-                timeout: timeoutMs || 12000,
-                env: process.env,
-                windowsHide: true,
-                maxBuffer: 20 * 1024 * 1024
-            }, (error, stdout, stderr) => {
-                if (error) {
-                    console.warn('[Android Apps] adb', args.join(' '), 'failed:', error.message || error, stderr || '');
-                }
-                resolve(`${stdout || ''}\n${stderr || ''}`);
+            let stdout = '';
+            let stderr = '';
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                resolve(`${stdout}\n${stderr}`);
+            };
+            let child;
+            try {
+                child = spawn(adbPath, ['-s', serial].concat(args), {
+                    env: process.env,
+                    windowsHide: true,
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
+            } catch (err) {
+                console.warn('[Android Apps] adb', args.join(' '), 'failed:', err && err.message ? err.message : err);
+                resolve('');
+                return;
+            }
+            const limit = timeoutMs || 12000;
+            const timer = setTimeout(() => { try { child.kill(); } catch (_) {} }, limit);
+            const hardStop = setTimeout(finish, limit + 800);
+            child.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+            child.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+            child.on('error', (err) => {
+                clearTimeout(timer);
+                clearTimeout(hardStop);
+                console.warn('[Android Apps] adb', args.join(' '), 'failed:', err && err.message ? err.message : err);
+                finish();
+            });
+            child.on('close', () => {
+                clearTimeout(timer);
+                clearTimeout(hardStop);
+                finish();
             });
         });
 
