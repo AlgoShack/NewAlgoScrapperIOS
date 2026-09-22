@@ -2978,6 +2978,7 @@
         }
 
         console.log('[Devices] Fetching installed apps for', devicePayload.id, devicePayload.platform, devicePayload.type || '');
+        devicePayload.requestId = seq;
         ipcRenderer.send('get-installed-apps', devicePayload);
         return true;
     }
@@ -3253,8 +3254,10 @@
             const result = await ipcRenderer.invoke('refresh-connected-devices');
             if (result && Array.isArray(result.devices)) {
                 connectedDevices = preferAndroidDevicesFirst(result.devices);
+                window._devicesConfirmedEmpty = !!result.confirmedEmpty && connectedDevices.length === 0;
             } else {
                 connectedDevices = [];
+                window._devicesConfirmedEmpty = false;
             }
             return connectedDevices || [];
         } catch (err) {
@@ -3414,8 +3417,13 @@
         }
         const list = (message && message.connectedDevices) || [];
         console.log('connectedDevices (startup) =', list.length, list);
+        const confirmedEmpty = !!(message && message.confirmedEmpty);
         const isFirstFill = !initialDeviceUiApplied;
-        // First empty reply before ADB finishes — ignore; only clear on confirmed empty after a fill
+        if (!list.length && !confirmedEmpty) {
+            console.warn('[Devices] Ignoring unconfirmed empty startup payload');
+            startRealtimeDeviceMonitoring();
+            return;
+        }
         if (!list.length && !initialDeviceUiApplied) {
             console.warn('[Devices] Ignoring empty startup payload until a real scan arrives');
             startRealtimeDeviceMonitoring();
@@ -3432,7 +3440,12 @@
     // Main can also push devices after did-finish-load + realtime watcher (same payload shape)
     ipcRenderer.on('connected-devices-updated', (event, payload) => {
         const list = (payload && payload.devices) || (payload && payload.connectedDevices) || [];
-        console.log('connectedDevices (push) =', list.length, list);
+        const confirmedEmpty = !!(payload && payload.confirmedEmpty);
+        console.log('connectedDevices (push) =', list.length, list, 'confirmedEmpty=', confirmedEmpty);
+        if (!list.length && !confirmedEmpty) {
+            if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
+            return;
+        }
         if (!list.length && !initialDeviceUiApplied) {
             if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
             return;
@@ -3558,6 +3571,9 @@
                     );
 
                     if (!isDeviceStillConnected) {
+                        if (!freshDevices.length && !window._devicesConfirmedEmpty) {
+                            return;
+                        }
                         console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
                         const previousName = deviceName || activeUdid || 'device';
                         lastKnownDeviceFingerprint = '';
@@ -3704,10 +3720,11 @@
                             if (selected) requestInstalledAppsForDevice(selected);
                         }
                     }
+                } else if (!window._devicesConfirmedEmpty) {
+                    return;
                 } else {
                     consecutiveEmptyDevicePolls += 1;
-                    // 2 empty polls on all platforms — avoids flaky ADB/simctl one-tick misses
-                    const emptyNeeded = 2;
+                    const emptyNeeded = 1;
                     if (consecutiveEmptyDevicePolls < emptyNeeded) {
                         return;
                     }
@@ -3825,10 +3842,18 @@
 //    document.getElementById('platformname').disabled = true;
 
 
-    ipcRenderer.on("installed-apps", (event, apps) => {
-            console.log("Installed Apps:", apps);
+    ipcRenderer.on("installed-apps", (event, payload) => {
+            const apps = Array.isArray(payload) ? payload : ((payload && payload.apps) || []);
+            const requestId = payload && !Array.isArray(payload) ? payload.requestId : 0;
+            const replyDeviceId = payload && !Array.isArray(payload) ? String(payload.deviceId || '').trim() : '';
+            console.log("Installed Apps:", apps && apps.length, 'request', requestId);
             const dropdown = document.getElementById("appname");
             if (!dropdown) return;
+
+            if (requestId && window._installedAppsRequestSeq && requestId !== window._installedAppsRequestSeq) {
+                console.warn('[Devices] Ignoring stale installed-apps request', requestId);
+                return;
+            }
 
             // Device was disconnected while apps were loading
             if (isDeviceDropdownEmpty()) {
@@ -3839,9 +3864,28 @@
             // Ignore stale replies from a previous device
             const pendingId = String(window._pendingInstalledAppsDeviceId || '').trim();
             const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
+            if (replyDeviceId && currentUdid && replyDeviceId !== currentUdid) {
+                console.warn('[Devices] Ignoring installed-apps for', replyDeviceId, '(current', currentUdid + ')');
+                return;
+            }
             if (pendingId && currentUdid && pendingId !== currentUdid) {
                 console.warn('[Devices] Ignoring stale installed-apps for', pendingId, '(current', currentUdid + ')');
                 return;
+            }
+
+            if (!apps.length) {
+                const retries = window._installedAppsEmptyRetries || 0;
+                if (retries < 1) {
+                    window._installedAppsEmptyRetries = retries + 1;
+                    const selected = (connectedDevices || []).find((d) => d.id === currentUdid || d.name === currentUdid);
+                    if (selected) {
+                        console.warn('[Devices] App list empty — retrying once for', currentUdid);
+                        requestInstalledAppsForDevice(selected, { silent: true });
+                        return;
+                    }
+                }
+            } else {
+                window._installedAppsEmptyRetries = 0;
             }
 
             const platform = (document.getElementById('platformname') && document.getElementById('platformname').value) || 'Android';
