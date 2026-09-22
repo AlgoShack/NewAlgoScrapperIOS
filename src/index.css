@@ -99,6 +99,7 @@ pre,
 textarea,
 code,
 .repo-page-wrapper,
+.repo-projects-scroll,
 .repo-projects-grid,
 .repo-asset-sidebar,
 .repo-horizontal-strip,
@@ -1776,7 +1777,7 @@ body.home-row-reordering {
     inset: 0;
     width: 100%;
     height: 100%;
-    z-index: 2000;
+    z-index: 2500;
     pointer-events: all;
     justify-content: center;
     align-items: center;
@@ -1823,10 +1824,10 @@ body.home-row-reordering {
     display: none;
     position: fixed;
     inset: 0;
-    z-index: 10000;
-    background: rgba(255, 255, 255, 0.35);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    z-index: 100000;
+    background: rgba(255, 255, 255, 0.12);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
     justify-content: center;
     align-items: center;
     flex-direction: column;
@@ -4723,16 +4724,31 @@ html, body {
   min-width: 0;
   overflow: hidden;
   height: 28px;
+  position: relative;
+  mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 14px), transparent 100%);
+  -webkit-mask-image: linear-gradient(to right, #000 0%, #000 calc(100% - 14px), transparent 100%);
 }
 
 .table-hint-type {
   display: inline-block;
+  width: max-content;
+  max-width: none;
   color: #1e4b75;
   font-size: 14px;
   font-weight: 600;
   letter-spacing: 0.01em;
   white-space: nowrap;
   line-height: 28px;
+  will-change: transform;
+}
+
+.table-hint-type.is-marquee {
+  animation: tableHintMarquee var(--marquee-duration, 7s) linear infinite alternate;
+}
+
+@keyframes tableHintMarquee {
+  0%, 10% { transform: translateX(0); }
+  90%, 100% { transform: translateX(calc(-1 * var(--marquee-distance, 0px))); }
 }
 
 #pagination_controls {
@@ -10071,7 +10087,8 @@ html.platform-win #tab-home .home-preview #dummyDevice {
   display: flex !important;
 }
 
-.sc-th.th-mac {
+.sc-th.th-mac,
+.sc-th.th-win {
   flex: 0 0 auto;
   justify-content: flex-end;
   text-align: right;
@@ -10552,24 +10569,23 @@ html.os-win .sc-subtitle-win {
    ============================================================================= */
 #tab-repository {
   background: var(--as-bg, #f8fafc);
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
+  overflow: hidden !important;
   scrollbar-width: none;
   -ms-overflow-style: none;
   height: 100% !important;
   max-height: 100% !important;
   position: relative;
   box-sizing: border-box !important;
-  -webkit-overflow-scrolling: touch;
+  display: flex;
+  flex-direction: column;
 }
 
 #tab-repository.is-active:not(.is-workspace-open) {
-  display: block !important;
+  display: flex !important;
+  flex-direction: column !important;
   height: 100% !important;
   max-height: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch !important;
+  overflow: hidden !important;
   box-sizing: border-box !important;
 }
 
@@ -10594,7 +10610,8 @@ html.os-win .sc-subtitle-win {
   animation: aboutFadeInUp 0.55s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both;
 }
 
-#tab-repository::-webkit-scrollbar {
+#tab-repository::-webkit-scrollbar,
+.repo-projects-scroll::-webkit-scrollbar {
   width: 0;
   height: 0;
   display: none;
@@ -10639,14 +10656,15 @@ html.os-win .sc-subtitle-win {
 }
 
 .repo-page-wrapper {
-  padding: 12px clamp(10px, 1.5vw, 18px) 40px !important;
+  padding: 12px clamp(10px, 1.5vw, 18px) 16px !important;
   max-width: 100%;
   margin: 0;
   width: 100%;
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
-  min-height: min-content !important;
+  flex: 1 1 0;
+  min-height: 0 !important;
+  overflow: hidden;
   gap: 12px;
   box-sizing: border-box;
   position: relative;
@@ -10671,7 +10689,7 @@ html.os-win .sc-subtitle-win {
   box-shadow: 0 4px 18px -4px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.02);
   flex-shrink: 0;
   overflow: hidden;
-  z-index: 1;
+  z-index: 5;
   transition: all 0.25s ease;
 }
 
@@ -10918,8 +10936,9 @@ html.os-win .sc-subtitle-win {
 #repoProjectsView {
   display: flex;
   flex-direction: column;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
   position: relative;
   z-index: 1;
 }
@@ -10929,6 +10948,7 @@ html.os-win .sc-subtitle-win {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: clamp(8px, 1vw, 14px);
   margin-bottom: 14px;
+  flex-shrink: 0;
 }
 
 .repo-hero-stat-card {
@@ -11023,8 +11043,11 @@ html.os-win .sc-subtitle-win {
   display: flex;
   flex-direction: column;
   gap: 0;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
   width: 100%;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 4;
 }
 
 .repo-toolbar-top-row {
@@ -11339,12 +11362,31 @@ html.os-win .sc-subtitle-win {
   font-weight: 700;
 }
 
-/* --- PROJECTS GRID --- */
+/* --- PROJECTS GRID (scrolls independently; header/toolbar stay fixed) --- */
+.repo-projects-scroll {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+  padding-right: 2px;
+  box-sizing: border-box;
+}
+
 .repo-projects-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 14px;
-  margin-top: 4px;
+  margin-top: 0;
+  align-content: start;
+}
+
+.repo-projects-scroll:has(.repo-empty-state),
+.repo-projects-scroll:has(.repo-projects-grid.is-empty) {
+  display: flex;
+  flex-direction: column;
 }
 
 .repo-projects-grid:has(.repo-empty-state),
@@ -11354,7 +11396,7 @@ html.os-win .sc-subtitle-win {
   align-items: center !important;
   justify-content: center !important;
   flex: 1 1 auto !important;
-  min-height: 280px !important;
+  min-height: 100% !important;
   width: 100% !important;
   margin: auto 0 !important;
 }
@@ -13364,26 +13406,30 @@ pre#repoJsonCodeContent * {
  * WINDOWS REPOSITORY & EMPTY STATE PARITY
  * ============================================================================= */
 html.platform-win #tab-repository.is-active:not(.is-workspace-open),
-.platform-win #tab-repository.is-active:not(.is-workspace-open) {
-  display: block !important;
+.platform-win #tab-repository.is-active:not(.is-workspace-open),
+html.os-win #tab-repository.is-active:not(.is-workspace-open) {
+  display: flex !important;
+  flex-direction: column !important;
   height: 100% !important;
   max-height: 100% !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  -webkit-overflow-scrolling: touch !important;
+  overflow: hidden !important;
   box-sizing: border-box !important;
 }
 
 html.platform-win .repo-page-wrapper,
-.platform-win .repo-page-wrapper {
+.platform-win .repo-page-wrapper,
+html.os-win .repo-page-wrapper {
   display: flex !important;
   flex-direction: column !important;
   width: 100% !important;
 }
 
 html.platform-win #tab-repository:not(.is-workspace-open) .repo-page-wrapper,
-.platform-win #tab-repository:not(.is-workspace-open) .repo-page-wrapper {
-  min-height: min-content !important;
+.platform-win #tab-repository:not(.is-workspace-open) .repo-page-wrapper,
+html.os-win #tab-repository:not(.is-workspace-open) .repo-page-wrapper {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
 }
 
 html.platform-win #tab-repository.is-workspace-open .repo-page-wrapper,
@@ -13394,11 +13440,22 @@ html.platform-win #tab-repository.is-workspace-open .repo-page-wrapper,
 }
 
 html.platform-win #tab-repository:not(.is-workspace-open) #repoProjectsView,
-.platform-win #tab-repository:not(.is-workspace-open) #repoProjectsView {
+.platform-win #tab-repository:not(.is-workspace-open) #repoProjectsView,
+html.os-win #tab-repository:not(.is-workspace-open) #repoProjectsView {
   display: flex !important;
   flex-direction: column !important;
-  flex: 1 1 auto !important;
+  flex: 1 1 0 !important;
   min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+html.platform-win #tab-repository:not(.is-workspace-open) .repo-projects-scroll,
+.platform-win #tab-repository:not(.is-workspace-open) .repo-projects-scroll,
+html.os-win #tab-repository:not(.is-workspace-open) .repo-projects-scroll {
+  flex: 1 1 0 !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
 }
 
 html.platform-win #tab-repository.is-workspace-open #repoProjectsView,

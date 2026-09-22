@@ -1791,9 +1791,11 @@
     }
 
     function createLoadingWindow() {
+      const isWin = process.platform === 'win32';
       loadingWindow = new BrowserWindow({
-        width: 420,
-        height: 260,
+        width: isWin ? 340 : 400,
+        height: isWin ? 188 : 236,
+        useContentSize: true,
         frame: false,
         transparent: false,
         backgroundColor: "#141820",
@@ -1981,6 +1983,100 @@
       */
     }
 
+    function installAppKeyboardShortcuts(win) {
+      if (!win || win.isDestroyed()) return;
+      const isMac = process.platform === 'darwin';
+
+      const editSubmenu = [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? [{ role: 'pasteAndMatchStyle' }] : []),
+        { role: 'delete' },
+        { role: 'selectAll' }
+      ];
+
+      const viewSubmenu = [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ];
+
+      const template = isMac
+        ? [
+            { role: 'appMenu' },
+            { label: 'Edit', submenu: editSubmenu },
+            { label: 'View', submenu: viewSubmenu },
+            { role: 'windowMenu' }
+          ]
+        : [
+            { label: 'Edit', submenu: editSubmenu },
+            { label: 'View', submenu: viewSubmenu }
+          ];
+
+      try {
+        Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+      } catch (_) {}
+
+      try {
+        win.setMenuBarVisibility(false);
+        win.setAutoHideMenuBar(false);
+      } catch (_) {}
+
+      win.webContents.on('before-input-event', (event, input) => {
+        if (!input || input.type !== 'keyDown') return;
+        const ctrlOrCmd = isMac ? !!input.meta : !!input.control;
+        const key = String(input.key || '').toLowerCase();
+        const code = String(input.code || '');
+
+        if (ctrlOrCmd && !input.alt && key === 'r') {
+          event.preventDefault();
+          if (input.shift) win.webContents.reloadIgnoringCache();
+          else win.webContents.reload();
+          return;
+        }
+        if (key === 'f5') {
+          event.preventDefault();
+          if (input.control || input.shift) win.webContents.reloadIgnoringCache();
+          else win.webContents.reload();
+          return;
+        }
+        if (key === 'f12' || (ctrlOrCmd && input.shift && !input.alt && (key === 'i' || key === 'j'))) {
+          event.preventDefault();
+          win.webContents.toggleDevTools();
+          return;
+        }
+        if (key === 'f11') {
+          event.preventDefault();
+          win.setFullScreen(!win.isFullScreen());
+          return;
+        }
+        if (ctrlOrCmd && !input.alt && !input.shift && (key === '0' || code === 'Digit0' || code === 'Numpad0')) {
+          event.preventDefault();
+          win.webContents.setZoomLevel(0);
+          return;
+        }
+        if (ctrlOrCmd && !input.alt && (key === '=' || key === '+' || code === 'Equal' || code === 'NumpadAdd')) {
+          event.preventDefault();
+          win.webContents.setZoomLevel(win.webContents.getZoomLevel() + 0.5);
+          return;
+        }
+        if (ctrlOrCmd && !input.alt && (key === '-' || key === '_' || code === 'Minus' || code === 'NumpadSubtract')) {
+          event.preventDefault();
+          win.webContents.setZoomLevel(win.webContents.getZoomLevel() - 0.5);
+        }
+      });
+    }
+
     const createWindow = () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         try {
@@ -2014,6 +2110,7 @@
         useContentSize: false,
         backgroundColor: "#e8edf3",
         icon: getAppWindowIcon(),
+        autoHideMenuBar: false,
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,
@@ -2022,43 +2119,7 @@
         }
       });
 
-      Menu.setApplicationMenu(null);
-      const template = [
-        {
-          label: 'Edit',
-          submenu: [
-            { role: 'undo' },
-            { role: 'redo' },
-            { type: 'separator' },
-            { role: 'cut' },
-            { role: 'copy' },
-            { role: 'paste' },
-            { role: 'selectAll' }
-          ]
-        },
-        {
-          label: 'View',
-          submenu: [
-            { role: 'reload' },
-            { role: 'forcereload' },
-            { role: 'toggledevtools' },
-            { type: 'separator' },
-            { role: 'resetzoom' },
-            { role: 'zoomin' },
-            { role: 'zoomout' },
-            { type: 'separator' },
-            { role: 'togglefullscreen' }
-          ]
-        },
-        {
-          label: 'Window',
-          submenu: [
-            { role: 'Close' }
-          ]
-        }
-      ];
-      const menu = Menu.buildFromTemplate(template);
-      Menu.setApplicationMenu(menu);
+      installAppKeyboardShortcuts(mainWindow);
 
       let shown = false;
       const enforceMinBounds = () => {
@@ -2192,6 +2253,144 @@
     let lastGoodAndroidDevices = [];
     let emptyAndroidScanStreak = 0;
     let androidAppsInFlightByUdid = Object.create(null);
+    const androidFriendlyNameCache = Object.create(null);
+
+    function looksLikeAdbSerial(name, id) {
+        const n = String(name || '').trim();
+        const serial = String(id || '').trim();
+        if (!n) return true;
+        if (serial && n.toLowerCase() === serial.toLowerCase()) return true;
+        if (/^emulator-\d+$/i.test(n)) return true;
+        if (/^\d{1,3}(?:\.\d{1,3}){3}:\d+$/.test(n)) return true;
+        return false;
+    }
+
+    function prettyAndroidName(raw) {
+        return String(raw || '')
+            .replace(/\r/g, '')
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function isGenericAndroidModel(name) {
+        return /^(sdk gphone.*|generic|android sdk built for.*|emulator)$/i.test(String(name || '').trim());
+    }
+
+    function pickAndroidFriendlyName(id, isEmulator, props) {
+        const p = props || {};
+        const candidates = isEmulator
+            ? [
+                p['ro.boot.qemu.avd_name'],
+                p['ro.kernel.qemu.avd_name'],
+                p['qemu.avd.name'],
+                p['avd.ini.displayname'],
+                p['ro.product.model'],
+                p['ro.product.name']
+            ]
+            : [
+                p['ro.vendor.oplus.market.name'],
+                p['ro.oppo.market.name'],
+                p['ro.vivo.market.name'],
+                p['ro.product.marketname'],
+                p['ro.product.vendor.marketname'],
+                p['ro.config.marketing_name'],
+                p['ro.product.model'],
+                p['ro.product.device']
+            ];
+        for (const candidate of candidates) {
+            const pretty = prettyAndroidName(candidate);
+            if (!pretty || looksLikeAdbSerial(pretty, id)) continue;
+            if (isEmulator && isGenericAndroidModel(pretty)) continue;
+            return pretty;
+        }
+        return '';
+    }
+
+    async function readAndroidProperties(id) {
+        try {
+            const client = getAdbkitClient();
+            if (client && typeof client.getProperties === 'function') {
+                const props = await withTimeout(client.getProperties(id), 2500, 'getProperties');
+                if (props && typeof props === 'object') return props;
+            }
+        } catch (_) {}
+        try {
+            const { stdout } = await runAdbFile([
+                '-s', id,
+                'shell',
+                'getprop ro.boot.qemu.avd_name; getprop ro.kernel.qemu.avd_name; getprop qemu.avd.name; getprop avd.ini.displayname; getprop ro.product.model; getprop ro.product.marketname; getprop ro.product.vendor.marketname; getprop ro.vendor.oplus.market.name; getprop ro.oppo.market.name; getprop ro.vivo.market.name; getprop ro.config.marketing_name; getprop ro.product.manufacturer; getprop ro.product.device; getprop ro.product.name'
+            ], 3000);
+            const lines = String(stdout || '').split(/\r?\n/).map((s) => s.trim());
+            const keys = [
+                'ro.boot.qemu.avd_name',
+                'ro.kernel.qemu.avd_name',
+                'qemu.avd.name',
+                'avd.ini.displayname',
+                'ro.product.model',
+                'ro.product.marketname',
+                'ro.product.vendor.marketname',
+                'ro.vendor.oplus.market.name',
+                'ro.oppo.market.name',
+                'ro.vivo.market.name',
+                'ro.config.marketing_name',
+                'ro.product.manufacturer',
+                'ro.product.device',
+                'ro.product.name'
+            ];
+            const props = {};
+            keys.forEach((key, i) => {
+                if (lines[i]) props[key] = lines[i];
+            });
+            return props;
+        } catch (_) {
+            return {};
+        }
+    }
+
+    async function resolveAvdConsoleName(id) {
+        try {
+            const { stdout } = await runAdbFile(['-s', id, 'emu', 'avd', 'name'], 2500);
+            const line = String(stdout || '')
+                .split(/\r?\n/)
+                .map((s) => s.trim())
+                .find((s) => s && !/^(OK|KO)$/i.test(s));
+            const pretty = prettyAndroidName(line);
+            if (pretty && !looksLikeAdbSerial(pretty, id)) return pretty;
+        } catch (_) {}
+        return '';
+    }
+
+    async function attachAndroidFriendlyNames(devices) {
+        const list = Array.isArray(devices) ? devices : [];
+        const liveIds = new Set(list.map((d) => String(d.id || '')).filter(Boolean));
+        Object.keys(androidFriendlyNameCache).forEach((id) => {
+            if (!liveIds.has(id)) delete androidFriendlyNameCache[id];
+        });
+        await Promise.all(list.map(async (device) => {
+            const id = String(device.id || '');
+            if (!id) return;
+            const cached = androidFriendlyNameCache[id];
+            if (cached && !looksLikeAdbSerial(cached, id) && !isGenericAndroidModel(cached)) {
+                device.name = cached;
+                return;
+            }
+            let name = prettyAndroidName(device.name);
+            if (looksLikeAdbSerial(name, id) || isGenericAndroidModel(name)) {
+                const props = await readAndroidProperties(id);
+                name = pickAndroidFriendlyName(id, device.type === 'emulator', props);
+            }
+            if ((!name || looksLikeAdbSerial(name, id) || isGenericAndroidModel(name)) && device.type === 'emulator') {
+                name = (await resolveAvdConsoleName(id)) || name;
+            }
+            if (!name || looksLikeAdbSerial(name, id)) {
+                name = prettyAndroidName(device.name) || id;
+            }
+            androidFriendlyNameCache[id] = name;
+            device.name = name;
+        }));
+        return list;
+    }
 
     // ===========================================================================
     // [DEVICES] Connected targets — Android (emulator + physical) and iOS (sim + physical)
@@ -2228,11 +2427,12 @@
                         };
                     });
                 if (devices.length) {
+                    await attachAndroidFriendlyNames(devices);
                     lastGoodAndroidDevices = devices;
                     emptyAndroidScanStreak = 0;
                     console.log(
                         `[Android Discovery] adbkit found=${devices.length}`,
-                        devices.map((d) => `${d.id}:${d.type}`).join(', ')
+                        devices.map((d) => `${d.name} [${d.id}:${d.type}]`).join(', ')
                     );
                     return devices;
                 }
@@ -2360,6 +2560,7 @@
             }
 
             if (devices.length) {
+                await attachAndroidFriendlyNames(devices);
                 lastGoodAndroidDevices = devices;
                 emptyAndroidScanStreak = 0;
             } else {
@@ -2378,7 +2579,7 @@
 
             console.log(
                 `[Android Discovery] adb=${adbPath} found=${devices.length}`,
-                devices.map((d) => `${d.id}:${d.type}`).join(', ')
+                devices.map((d) => `${d.name} [${d.id}:${d.type}]`).join(', ')
             );
             return devices;
         })().finally(() => {

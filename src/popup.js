@@ -1822,6 +1822,9 @@
                 return;
             }
 
+            // Launch Application blur must stay until the screenshot is ready
+            if (window._launchScreenLoading) return;
+
             // Don't clobber an in-progress launch loader unless forced
             const mainText = (document.getElementById('dummyMainText')?.textContent || '').toLowerCase();
             if (!options.force && (mainText.includes('starting session') || mainText.includes('loading'))) {
@@ -1856,6 +1859,9 @@
     window.syncDevicePreviewConnectionMessage = syncDevicePreviewConnectionMessage;
 
     function resetLaunchPlaceholder(message, theme = 'error') {
+        if (typeof clearLaunchScreenLoader === 'function') {
+            clearLaunchScreenLoader();
+        }
         if (!message) {
             if (typeof syncDevicePreviewConnectionMessage === 'function') {
                 syncDevicePreviewConnectionMessage(connectedDevices || [], { force: true });
@@ -3112,7 +3118,10 @@
             if (previewContainer) previewContainer.innerHTML = '';
 
             const screenshotImg = document.getElementById('screenshot');
-            if (screenshotImg) screenshotImg.style.display = 'none';
+            if (screenshotImg) {
+                screenshotImg.style.display = 'none';
+                try { screenshotImg.removeAttribute('src'); } catch (_) {}
+            }
 
             window.activeProjectSessionMode = null;
             window.activeResumedProjectKey = null;
@@ -3140,8 +3149,26 @@
 
             if (typeof setPageNameBoxEnabled === 'function') setPageNameBoxEnabled(false);
 
+            const liveDriver = driver;
             driver = null;
             refreshShouldLaunchApp = true;
+            window._sessionDeviceId = '';
+            window._sessionDeviceName = '';
+            if (liveDriver && typeof liveDriver.quit === 'function') {
+                try { liveDriver.quit(); } catch (_) {}
+            }
+
+            const dummy = document.getElementById('dummyDevice');
+            if (dummy) dummy.style.display = '';
+            if (typeof hideLocalDeviceLoader === 'function') hideLocalDeviceLoader();
+            window._launchScreenLoading = false;
+
+            if (typeof unlockLaunchForm === 'function') {
+                unlockLaunchForm();
+            } else if (typeof setLaunchEnabled === 'function' && typeof canEnableLaunch === 'function') {
+                setPlatformAppDeviceEditable(true);
+                setLaunchEnabled(canEnableLaunch());
+            }
         } finally {
             window._resettingHome = false;
             window._restoringProject = false;
@@ -3149,6 +3176,69 @@
         }
     }
     window.resetHomeToStartingStateOnDisconnect = resetHomeToStartingStateOnDisconnect;
+
+    function getActiveSessionDeviceId() {
+        return String(window._sessionDeviceId || document.getElementById('udid')?.value || deviceId || '').trim();
+    }
+
+    function isSessionDeviceInList(devices) {
+        const list = Array.isArray(devices) ? devices : [];
+        const sid = getActiveSessionDeviceId();
+        if (sid) return list.some((d) => d && String(d.id) === sid);
+        const sname = String(window._sessionDeviceName || deviceName || '').trim();
+        if (!sname) return false;
+        return list.some((d) => d && (d.name === sname || d.id === sname));
+    }
+
+    async function handleSessionDeviceLost(freshDevices, previousName) {
+        if (window._sessionDeviceLostInFlight) return;
+        window._sessionDeviceLostInFlight = true;
+        try {
+        const prev = previousName
+            || window._sessionDeviceName
+            || deviceName
+            || getActiveSessionDeviceId()
+            || 'device';
+        if (typeof resetHomeToStartingStateOnDisconnect === 'function') {
+            resetHomeToStartingStateOnDisconnect();
+        }
+        const remaining = preferAndroidDevicesFirst(Array.isArray(freshDevices) ? freshDevices : []);
+        applyConnectedDevicesToUi(remaining, {
+            startup: false,
+            requestApps: remaining.length > 0,
+            forceEmpty: remaining.length === 0
+        });
+        lastKnownDeviceFingerprint = computeDeviceFingerprint(remaining);
+        consecutiveEmptyDevicePolls = remaining.length ? 0 : consecutiveEmptyDevicePolls;
+
+        const nextLabel = remaining.length
+            ? (document.getElementById('devicename')?.selectedOptions?.[0]?.text
+                || remaining[0].name
+                || remaining[0].id
+                || 'another device')
+            : '';
+        if (typeof showStructuredAlert === 'function') {
+            showStructuredAlert(
+                'Device Disconnected',
+                remaining.length
+                    ? {
+                        lead: `“${String(prev)}” disconnected, so the scraping session was closed.`,
+                        hint: `Now using “${String(nextLabel)}”. Select an app and click Launch Application to start a new session.`
+                    }
+                    : {
+                        lead: `“${String(prev)}” disconnected, so the scraping session was closed.`,
+                        hint: process.platform === 'win32'
+                            ? 'Connect an Android device or emulator, then click Launch Application.'
+                            : 'Connect a device, emulator, or simulator, then click Launch Application.'
+                    },
+                'warning'
+            );
+        }
+        } finally {
+            window._sessionDeviceLostInFlight = false;
+        }
+    }
+    window.handleSessionDeviceLost = handleSessionDeviceLost;
 
     let realtimeDeviceMonitorInterval = null;
     let lastKnownDeviceFingerprint = "";
@@ -3432,6 +3522,16 @@
             startRealtimeDeviceMonitoring();
             return;
         }
+        if (driver && !isSessionDeviceInList(list)) {
+            handleSessionDeviceLost(list, window._sessionDeviceName || deviceName || getActiveSessionDeviceId() || 'device');
+            startRealtimeDeviceMonitoring();
+            return;
+        }
+        if (driver) {
+            connectedDevices = preferAndroidDevicesFirst(list);
+            startRealtimeDeviceMonitoring();
+            return;
+        }
         applyConnectedDevicesToUi(list, {
             startup: isFirstFill,
             forceEmpty: list.length === 0 && initialDeviceUiApplied
@@ -3458,6 +3558,18 @@
                     || list[0];
                 if (selected) requestInstalledAppsForDevice(selected);
             }
+            if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
+            return;
+        }
+        if (driver && !isSessionDeviceInList(list)) {
+            const previousName = window._sessionDeviceName || deviceName || getActiveSessionDeviceId() || 'device';
+            handleSessionDeviceLost(list, previousName);
+            if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
+            return;
+        }
+        if (driver) {
+            lastKnownDeviceFingerprint = fp;
+            connectedDevices = preferAndroidDevicesFirst(list);
             if (!realtimeDeviceMonitorInterval) startRealtimeDeviceMonitoring();
             return;
         }
@@ -3558,57 +3670,16 @@
 
                 // --- 1. ACTIVE SESSION: kill session if active device unplugged / simulator quit ---
                 if (driver) {
-                    const activePlatform = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
-                    const activePlatformTarget = typeof normalizePlatformName === 'function'
-                        ? normalizePlatformName(activePlatform)
-                        : activePlatform;
-                    const matchingActiveDevices = devicesForPlatform(activePlatformTarget, freshDevices);
-                    const activeUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
-                    const isDeviceStillConnected = matchingActiveDevices.some(
-                        (d) => (activeUdid && d.id === activeUdid) || (deviceName && d.name === deviceName)
-                    );
-
-                    if (!isDeviceStillConnected) {
-                        console.warn(`[Real-time Monitor] Active session device (${deviceName || activeUdid}) disconnected.`);
-                        const previousName = deviceName || activeUdid || 'device';
-                        lastKnownDeviceFingerprint = '';
-                        consecutiveEmptyDevicePolls = 0;
-                        if (typeof resetHomeToStartingStateOnDisconnect === 'function') {
-                            resetHomeToStartingStateOnDisconnect();
-                        }
-                        if (typeof markSessionInterrupted === 'function') {
-                            markSessionInterrupted(new Error(`device disconnected: ${previousName}`), {
-                                skipDisconnectAlert: true,
-                                skipDeviceUiHandling: true
-                            });
-                        }
-                        applyConnectedDevicesToUi(freshDevices, {
-                            startup: false,
-                            requestApps: freshDevices.length > 0,
-                            forceEmpty: freshDevices.length === 0
-                        });
-                        if (!freshDevices.length) {
-                            showAppPopup('device_disconnected_session');
-                        } else {
-                            const next = (document.getElementById('devicename')?.selectedOptions?.[0]?.text
-                                || document.getElementById('udid')?.value
-                                || 'another device');
-                            if (typeof showStructuredAlert === 'function') {
-                                showStructuredAlert(
-                                    'Device Disconnected',
-                                    {
-                                        lead: `“${String(previousName)}” disconnected. Home was reset to a fresh start.`,
-                                        hint: `Now using “${String(next)}”. Select an app and click Launch Application.`
-                                    },
-                                    'warning'
-                                );
-                            }
-                        }
+                    if (!isSessionDeviceInList(freshDevices)) {
+                        console.warn(`[Real-time Monitor] Active session device (${window._sessionDeviceName || deviceName || getActiveSessionDeviceId()}) disconnected.`);
+                        await handleSessionDeviceLost(
+                            freshDevices,
+                            window._sessionDeviceName || deviceName || getActiveSessionDeviceId() || 'device'
+                        );
                         return;
                     }
                     lastKnownDeviceFingerprint = freshFingerprint;
                     consecutiveEmptyDevicePolls = 0;
-                    // Keep global list fresh even during an active session
                     connectedDevices = preferAndroidDevicesFirst(freshDevices);
                     return;
                 }
@@ -4035,12 +4106,22 @@
 
     let pendingLaunchProjectData = null;
 
-    function triggerScreenshotLoader() {
-        if (process.platform !== 'win32') {
-            document.getElementById('overlay').style.display = 'block';
+    function clearLaunchScreenLoader() {
+        window._launchScreenLoading = false;
+        if (!platformSwitchInProgress && typeof hidePlatformSwitchLoader === 'function') {
+            hidePlatformSwitchLoader();
         }
+        const overlay = document.getElementById('overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+    window.clearLaunchScreenLoader = clearLaunchScreenLoader;
+
+    async function triggerScreenshotLoader() {
+        window._launchScreenLoading = true;
         const appRunning = document.getElementById('AppRunningPopup');
         if (appRunning) appRunning.style.display = 'none';
+        const dummy = document.getElementById('dummyDevice');
+        if (dummy) dummy.style.display = '';
         if (typeof showDeviceScreenMessage === 'function') {
             showDeviceScreenMessage('loading');
         } else if (typeof showDummyDeviceMessage === 'function') {
@@ -4051,7 +4132,14 @@
                 explicit: true
             });
         }
+        if (typeof showPlatformSwitchLoader === 'function') {
+            showPlatformSwitchLoader('Loading application…');
+            await new Promise((resolve) => {
+                requestAnimationFrame(() => requestAnimationFrame(resolve));
+            });
+        }
     }
+    window.triggerScreenshotLoader = triggerScreenshotLoader;
 
     function projectHasLaunchableData(project) {
         if (!project) return false;
@@ -4139,12 +4227,15 @@
     function projectMatchesDeviceHint(project, deviceHint) {
         if (!project) return false;
         const dev = deviceHint || null;
+        if (!dev || !(dev.id || dev.name || dev.deviceId || dev.deviceName)) return true;
+        if (typeof devicesAreSame === 'function') {
+            return devicesAreSame(project, dev);
+        }
         const activeDevId = String((dev && (dev.id || dev.deviceId)) || '').trim().toLowerCase();
         const activeDevName = String((dev && (dev.name || dev.deviceName)) || '').trim().toLowerCase();
         if (!activeDevId && !activeDevName) return true;
         const pDevName = String(project.deviceName || (project.device && project.device.name) || '').trim().toLowerCase();
         const pDevId = String(project.deviceId || (project.device && project.device.id) || '').trim().toLowerCase();
-        // Legacy / unbound projects do not match a specific connected device
         if (!pDevName && !pDevId) return false;
         if (activeDevId && pDevId && activeDevId === pDevId) return true;
         if (activeDevName && pDevName && activeDevName === pDevName) return true;
@@ -4155,8 +4246,7 @@
     function getGlobalLastConfiguredProject(platform, deviceHint) {
         try {
             const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
-            const dev = deviceHint || (typeof resolveActiveDeviceInfo === 'function' ? resolveActiveDeviceInfo(platform) : null);
-            const hasDevice = !!(dev && (dev.id || dev.name));
+            const filterByDevice = deviceHint && (deviceHint.id || deviceHint.name || deviceHint.deviceId || deviceHint.deviceName);
 
             let key = null;
             if (platform) {
@@ -4172,32 +4262,25 @@
                     ? { key: found.key || key, project: found.project }
                     : (store[key] ? { key: key, project: store[key] } : null);
                 if (hit) {
-                    if (!hasDevice || projectMatchesDeviceHint(hit.project, dev)) {
+                    if (!filterByDevice || projectMatchesDeviceHint(hit.project, deviceHint)) {
                         return hit;
                     }
-                    // Stored last project belongs to another device — fall through to device-filtered scan
                 }
             }
-            // Fallback: Pick the most recently updated project from the store matching device
             const storeKeys = Object.keys(store);
             if (storeKeys.length > 0) {
                 let candidates = [];
-                const activeDevId = (dev?.id || '').trim().toLowerCase();
-                const activeDevName = (dev?.name || '').trim().toLowerCase();
-
                 storeKeys.forEach(k => {
                     const pr = store[k];
                     if (pr && projectHasLaunchableData(pr)) {
                         const platNorm = String(pr.platform || k).toLowerCase().includes('ios') ? 'iOS' : 'Android';
-                        if (!platform || platNorm === (platform.toLowerCase().includes('ios') ? 'iOS' : 'Android')) {
-                            if (activeDevId || activeDevName) {
-                                if (projectMatchesDeviceHint(pr, dev)) {
-                                    candidates.push({ key: k, project: pr });
-                                }
-                                return;
-                            }
-                            candidates.push({ key: k, project: pr });
+                        if (platform && platNorm !== (String(platform).toLowerCase().includes('ios') ? 'iOS' : 'Android')) {
+                            return;
                         }
+                        if (filterByDevice && !projectMatchesDeviceHint(pr, deviceHint)) {
+                            return;
+                        }
+                        candidates.push({ key: k, project: pr });
                     }
                 });
                 if (candidates.length > 0) {
@@ -4327,6 +4410,46 @@
         ).trim();
     }
 
+    function normalizeDeviceToken(value) {
+        return String(value || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s*\((emulator|simulator|device)\)\s*$/i, '')
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function collectDeviceIdentityTokens(source) {
+        if (!source) return [];
+        const raw = [
+            source.id,
+            source.deviceId,
+            source.udid,
+            source.name,
+            source.deviceName,
+            source.label,
+            source.device && source.device.id,
+            source.device && source.device.name,
+            source.device && source.device.label
+        ];
+        const tokens = [];
+        raw.forEach((v) => {
+            const t = normalizeDeviceToken(v);
+            if (t && tokens.indexOf(t) === -1) tokens.push(t);
+        });
+        return tokens;
+    }
+
+    function devicesAreSame(a, b) {
+        const left = collectDeviceIdentityTokens(a);
+        const right = collectDeviceIdentityTokens(b);
+        if (!left.length || !right.length) return false;
+        return left.some((t) => right.indexOf(t) !== -1);
+    }
+    window.devicesAreSame = devicesAreSame;
+    window.collectDeviceIdentityTokens = collectDeviceIdentityTokens;
+
     function projectIsDeviceBound(project) {
         if (!project) return false;
         return !!(
@@ -4338,6 +4461,9 @@
 
     function connectedDeviceMatchesProject(device, project) {
         if (!device || !project) return false;
+        if (typeof devicesAreSame === 'function') {
+            return devicesAreSame(device, project);
+        }
         const tokens = [];
         [
             project.deviceId,
@@ -4421,12 +4547,14 @@
         }
 
         const store = typeof getProjectStore === 'function' ? getProjectStore() : {};
-        const currentPlatform = (typeof getSelectedPlatform === 'function') ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
         let key = window.activeConfiguredProjectKey || null;
         try {
-            const plat = String(currentPlatform).toLowerCase().includes('ios') ? 'ios' : 'android';
-            key = localStorage.getItem('algo_last_configured_project_platform_key_' + plat) || key;
+            key = localStorage.getItem('algo_last_configured_project_global_key') || key;
         } catch (_) {}
+        if (!key && typeof getGlobalLastConfiguredProject === 'function') {
+            const lastHit = getGlobalLastConfiguredProject();
+            if (lastHit && lastHit.key) key = lastHit.key;
+        }
         let project = (key && store[key]) ? store[key] : null;
         if (!project && key && typeof findProjectKeyInStore === 'function') {
             const found = findProjectKeyInStore(store, key);
@@ -4436,7 +4564,8 @@
             }
         }
 
-        const projPlatform = project ? (String(project.platform || '').toLowerCase().includes('ios') ? 'IOS' : 'Android') : currentPlatform;
+        const homePlatform = (typeof getSelectedPlatform === 'function') ? getSelectedPlatform() : (document.getElementById('platformname')?.value || 'Android');
+        const projPlatform = project ? (String(project.platform || '').toLowerCase().includes('ios') ? 'IOS' : 'Android') : homePlatform;
         const isIos = projPlatform === 'IOS' || projPlatform === 'iOS';
 
         if (!project || !key) {
@@ -5158,7 +5287,7 @@
             pendingExportAction = null;
             window.pendingExportAction = null;
 
-            triggerScreenshotLoader();
+            await triggerScreenshotLoader();
             resetFormLockActive = false;
             initialData = launchParams;
 
@@ -5250,7 +5379,7 @@
                 window.setGlobalPageName(uniqueInfo.appName);
             }
 
-            triggerScreenshotLoader();
+            await triggerScreenshotLoader();
             resetFormLockActive = false;
             if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
             initialData = launchParams;
@@ -5652,10 +5781,10 @@
                 setGlobalLastConfiguredProject(uniqueInfo.key, store[uniqueInfo.key], devInfo);
             }
 
-            triggerScreenshotLoader();
+            await triggerScreenshotLoader();
             resetFormLockActive = false;
             if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
-            launchApp(initialData);
+            await launchApp(initialData);
     });
     }
 
@@ -5751,14 +5880,18 @@
         };
     }
 
-    async function launchApp(initialData) {
+            async function launchApp(initialData) {
             window.launchApp = launchApp;
             if (typeof checkUnsavedConfigJsonGuard === 'function' && !checkUnsavedConfigJsonGuard('launch_project')) {
+                if (typeof clearLaunchScreenLoader === 'function') clearLaunchScreenLoader();
                 return;
             }
             window._resettingHome = false;
             if (typeof lockLaunchForm === 'function') {
                 lockLaunchForm();
+            }
+            if (!window._launchScreenLoading && typeof triggerScreenshotLoader === 'function') {
+                await triggerScreenshotLoader();
             }
             if (!Array.isArray(initialData) || initialData.length < 9 || !initialData[0] || (!initialData[1] && !initialData[5])) {
                 const pOpt = typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : 'Android';
@@ -6006,12 +6139,16 @@
 
                 try {
                     driver = await buildSession();
+                    window._sessionDeviceId = String(udid || '').trim();
+                    window._sessionDeviceName = String(deviceName || '').trim();
                 } catch (firstErr) {
                     const msg = String(firstErr && firstErr.message || firstErr);
                     if (/Could not find a driver|UiAutomator2|XCUITest|automationName/i.test(msg)) {
                         console.warn("Automation driver missing on Appium — restarting engine and retrying");
                         await ipcRenderer.invoke("ensure-appium", { forceRestart: true });
                         driver = await buildSession();
+                        window._sessionDeviceId = String(udid || '').trim();
+                        window._sessionDeviceName = String(deviceName || '').trim();
                     } else {
                         throw firstErr;
                     }
@@ -6081,7 +6218,7 @@
             document.getElementById('algoQA').disabled = false;
             document.getElementById('algoQA').style.backgroundColor = '#2F8BCC';
             document.getElementById('AppRunningPopup').style.display = 'none';
-            document.getElementById('overlay').style.display = 'none';
+            // Keep phone-frame blur until loadFirstScreen paints the screenshot
             document.getElementById('recordScenarioBtn').disabled = false;
             document.getElementById('recordScenarioBtn').style.backgroundColor = '#2F8BCC';
             document.getElementById('createFeatureBtn').disabled = false;
@@ -6266,15 +6403,6 @@
                 "base64"
             );
 
-            const dummy =
-                document.getElementById("dummyDevice");
-
-            if (dummy) {
-
-                dummy.style.display = "none";
-
-            }
-
             let img =
                 document.getElementById("screenshot");
 
@@ -6314,16 +6442,40 @@
 
             rotation = 0;
             zoomLevel = 1;
+            img.style.display = "block";
 
-            img.onload = function () {
-                adjustDevicePreviewSize(img);
-                applyScreenshotZoom(img);
-            };
-            img.src = `${folderPath}/image0.png?${Date.now()}`;
-            if (img.complete && img.naturalWidth > 0) {
-                adjustDevicePreviewSize(img);
-                applyScreenshotZoom(img);
+            await new Promise((resolve) => {
+                let settled = false;
+                const done = () => {
+                    if (settled) return;
+                    settled = true;
+                    try {
+                        adjustDevicePreviewSize(img);
+                        applyScreenshotZoom(img);
+                    } catch (_) {}
+                    resolve();
+                };
+                img.onload = done;
+                img.onerror = done;
+                img.src = `${folderPath}/image0.png?${Date.now()}`;
+                if (img.complete && img.naturalWidth > 0) {
+                    done();
+                }
+                setTimeout(done, 3000);
+            });
+
+            const dummy = document.getElementById("dummyDevice");
+            if (dummy) dummy.style.display = "none";
+            if (typeof clearLaunchScreenLoader === 'function') {
+                clearLaunchScreenLoader();
             }
+            try {
+                adjustDevicePreviewSize(img);
+                applyScreenshotZoom(img);
+                if (process.platform === 'win32') {
+                    requestAnimationFrame(() => applyScreenshotZoom(img));
+                }
+            } catch (_) {}
 
             // Load XML so hover/tap/show element work immediately
             const pageSource = await capturePageSource();
@@ -6336,6 +6488,9 @@
 
         } catch (error) {
             console.error("Screenshot capture failed:", error);
+            if (typeof clearLaunchScreenLoader === 'function') {
+                clearLaunchScreenLoader();
+            }
             // Call the new UI error handler instead of crashing
             displayScreenshotError(error);
         }
@@ -14615,7 +14770,7 @@ function updateRowEyeButtonState() {
                     window.setGlobalPageName(uniqueInfo.appName);
                 }
 
-                if (typeof triggerScreenshotLoader === 'function') triggerScreenshotLoader();
+                if (typeof triggerScreenshotLoader === 'function') await triggerScreenshotLoader();
                 resetFormLockActive = false;
                 if (typeof window.syncActiveProjectToRepo === 'function') window.syncActiveProjectToRepo();
 
@@ -15446,6 +15601,8 @@ function displayScreenshotError(err) {
     }
 
     document.getElementById('overlay').style.display = 'none';
+    window._launchScreenLoading = false;
+    if (typeof hidePlatformSwitchLoader === 'function') hidePlatformSwitchLoader();
     hideLocalDeviceLoader();
     const divStatusBar = document.getElementById("div_status_bar");
     if (divStatusBar) divStatusBar.style.display = "none";
@@ -15806,6 +15963,27 @@ window.updateTableHintMarquee = function(pageName) {
     let isDeleting = false;
     let started = false;
 
+    function stopHintMarquee(el) {
+        if (!el) return;
+        el.classList.remove('is-marquee');
+        el.style.removeProperty('--marquee-distance');
+        el.style.removeProperty('--marquee-duration');
+        el.style.transform = '';
+    }
+
+    function startHintMarqueeIfNeeded(el) {
+        const viewport = el && el.parentElement;
+        if (!el || !viewport) return 0;
+        stopHintMarquee(el);
+        const extra = Math.ceil(el.scrollWidth - viewport.clientWidth);
+        if (extra <= 8) return 0;
+        const duration = Math.min(16, Math.max(5, extra / 32));
+        el.style.setProperty('--marquee-distance', extra + 'px');
+        el.style.setProperty('--marquee-duration', duration + 's');
+        el.classList.add('is-marquee');
+        return Math.round(duration * 1000);
+    }
+
     function typeLoop() {
         const el = document.getElementById('tableHintTypeText');
         if (!el) {
@@ -15832,13 +16010,17 @@ window.updateTableHintMarquee = function(pageName) {
 
         let delay = isDeleting ? 18 : (current.length > 70 ? 32 : 42);
         if (!isDeleting && charIndex === current.length) {
-            delay = 2600;
+            const marqueeMs = startHintMarqueeIfNeeded(el);
+            delay = marqueeMs > 0 ? marqueeMs + 900 : 2600;
             isDeleting = true;
         } else if (isDeleting && charIndex === 0) {
+            stopHintMarquee(el);
             isDeleting = false;
             window._tableHintPhrases = buildTableHintPhrases();
             phraseIndex = (phraseIndex + 1) % Math.max((window._tableHintPhrases || phrases).length, 1);
             delay = 280;
+        } else if (isDeleting) {
+            stopHintMarquee(el);
         }
         window.setTimeout(typeLoop, delay);
     }
@@ -19638,55 +19820,38 @@ function updateConfigDashboard(forceAuto) {
 
     var store = typeof getProjectStore === 'function' ? getProjectStore() : {};
 
-    // Last launched / configured project for THIS Home platform only
+    // Last configured project only — do not follow the current Home device/app
     var configuredKey = null;
     var linkedProject = null;
-    try {
-        var platLsKey = isIos ? 'ios' : 'android';
-        configuredKey = localStorage.getItem('algo_last_configured_project_platform_key_' + platLsKey) || null;
-    } catch (_) {
-        configuredKey = null;
+    if (typeof getGlobalLastConfiguredProject === 'function') {
+        var lastHit = getGlobalLastConfiguredProject();
+        if (lastHit && lastHit.project) {
+            configuredKey = lastHit.key;
+            linkedProject = lastHit.project;
+        }
     }
-    if (configuredKey) {
-        linkedProject = store[configuredKey] || null;
-        if (!linkedProject && typeof findProjectKeyInStore === 'function') {
-            var foundCfg = findProjectKeyInStore(store, configuredKey);
-            if (foundCfg && foundCfg.project) {
-                configuredKey = foundCfg.key || configuredKey;
-                linkedProject = foundCfg.project;
+    if (!linkedProject) {
+        try {
+            configuredKey = localStorage.getItem('algo_last_configured_project_global_key') || null;
+            if (!configuredKey) {
+                var platLsKey = isIos ? 'ios' : 'android';
+                configuredKey = localStorage.getItem('algo_last_configured_project_platform_key_' + platLsKey) || null;
+            }
+        } catch (_) {
+            configuredKey = null;
+        }
+        if (configuredKey) {
+            linkedProject = store[configuredKey] || null;
+            if (!linkedProject && typeof findProjectKeyInStore === 'function') {
+                var foundCfg = findProjectKeyInStore(store, configuredKey);
+                if (foundCfg && foundCfg.project) {
+                    configuredKey = foundCfg.key || configuredKey;
+                    linkedProject = foundCfg.project;
+                }
             }
         }
     }
-    // Fallback: most recently updated project on this platform (launched/saved)
-    if (!linkedProject && store) {
-        var platCandidates = [];
-        Object.keys(store).forEach(function (k) {
-            var pr = store[k];
-            if (!pr) return;
-            var hasData = ((pr.pages || []).length > 0)
-                || ((pr.scenarios || []).length > 0)
-                || ((pr.features || []).length > 0);
-            if (!hasData) return;
-            var prIos = String(pr.platform || k).toLowerCase().includes('ios');
-            if (prIos !== isIos) return;
-            platCandidates.push({ key: k, project: pr });
-        });
-        if (platCandidates.length > 0) {
-            platCandidates.sort(function (a, b) {
-                return (b.project.lastUpdated || b.project.createdAt || 0) - (a.project.lastUpdated || a.project.createdAt || 0);
-            });
-            configuredKey = platCandidates[0].key;
-            linkedProject = platCandidates[0].project;
-        }
-    }
 
-    if (linkedProject && configuredKey) {
-        var pIsIosCheck = String(linkedProject.platform || '').toLowerCase().includes('ios');
-        if (pIsIosCheck !== isIos) {
-            linkedProject = null;
-            configuredKey = null;
-        }
-    }
     if (linkedProject && configuredKey) {
         window.activeConfiguredProjectKey = configuredKey;
     } else {
@@ -21014,8 +21179,10 @@ if (platformVersionField) {
             project.device = devInfo;
             return true;
         }
-        const same = (existingId && nextId && existingId === nextId)
-            || (existingName && nextName && existingName === nextName);
+        const same = (typeof devicesAreSame === 'function')
+            ? devicesAreSame(project, devInfo)
+            : ((existingId && nextId && existingId === nextId)
+                || (existingName && nextName && existingName === nextName));
         if (same) {
             // Refresh label/type metadata for same device only
             project.deviceName = devInfo.name || project.deviceName;
