@@ -295,73 +295,6 @@
         return adb.includes(' ') ? `"${adb}"` : adb;
     }
 
-    // Direct spawn of adb.exe on Windows often returns UTF-16 with no readable device lines.
-    function decodeAdbOutput(buf) {
-        if (!buf || !buf.length) return '';
-        if (buf.length >= 2 && buf[0] === 0xFF && buf[1] === 0xFE) {
-            return buf.slice(2).toString('utf16le');
-        }
-        let nullPairs = 0;
-        const sample = Math.min(buf.length, 64);
-        for (let i = 1; i < sample; i += 2) {
-            if (buf[i] === 0) nullPairs++;
-        }
-        if (nullPairs >= 4) return buf.toString('utf16le').replace(/^\uFEFF/, '');
-        return buf.toString('utf8');
-    }
-
-    // Windows: cmd.exe, same path as the working getprop/uiautomator calls.
-    // stdin is closed so adb does not sit forever and get killed as "Command failed".
-    function runAdbCapture(args, timeoutMs) {
-        const { spawn } = require('child_process');
-        const adbPath = getAdbExecutable();
-        const limit = timeoutMs || 8000;
-        return new Promise((resolve) => {
-            let out = Buffer.alloc(0);
-            let errBuf = Buffer.alloc(0);
-            let settled = false;
-            const finish = (code) => {
-                if (settled) return;
-                settled = true;
-                const text = `${decodeAdbOutput(out)}\n${decodeAdbOutput(errBuf)}`.replace(/\u0000/g, '').replace(/\r/g, '');
-                resolve({ code: code == null ? -1 : code, text });
-            };
-
-            let child;
-            try {
-                const spawnOpts = {
-                    env: process.env,
-                    windowsHide: true,
-                    stdio: ['ignore', 'pipe', 'pipe']
-                };
-                if (process.platform === 'win32') {
-                    child = spawn(adbPath, args, Object.assign({ shell: true }, spawnOpts));
-                } else {
-                    child = spawn(adbPath, args, spawnOpts);
-                }
-            } catch (err) {
-                resolve({ code: -1, text: String(err && err.message ? err.message : err) });
-                return;
-            }
-
-            const timer = setTimeout(() => { try { child.kill(); } catch (_) {} }, limit);
-            const hardStop = setTimeout(() => finish(-1), limit + 1000);
-            child.stdout.on('data', (chunk) => { out = Buffer.concat([out, Buffer.from(chunk)]); });
-            child.stderr.on('data', (chunk) => { errBuf = Buffer.concat([errBuf, Buffer.from(chunk)]); });
-            child.on('error', (err) => {
-                clearTimeout(timer);
-                clearTimeout(hardStop);
-                errBuf = Buffer.concat([errBuf, Buffer.from(String(err && err.message ? err.message : err))]);
-                finish(-1);
-            });
-            child.on('close', (code) => {
-                clearTimeout(timer);
-                clearTimeout(hardStop);
-                finish(code);
-            });
-        });
-    }
-
     function applyAndroidSdkToEnv(env) {
         const target = env || process.env;
         const sdk = resolveAndroidSdkRoot();
@@ -1794,48 +1727,10 @@
       return path.join(__dirname, '..', 'assets', 'algoScraper Logo.png');
     }
 
-    function getFirstInstallMarkerPath() {
-      return path.join(app.getPath('userData'), 'first-install-complete.json');
-    }
-
-    function isFirstInstallLaunch() {
-      try {
-        return !fs.existsSync(getFirstInstallMarkerPath());
-      } catch (_) {
-        return true;
-      }
-    }
-
-    function markFirstInstallComplete() {
-      try {
-        const marker = getFirstInstallMarkerPath();
-        fs.mkdirSync(path.dirname(marker), { recursive: true });
-        if (fs.existsSync(marker)) return;
-        fs.writeFileSync(marker, JSON.stringify({
-          completedAt: Date.now(),
-          platform: process.platform
-        }), 'utf8');
-      } catch (err) {
-        console.warn('Could not save first-install marker:', err && err.message ? err.message : err);
-      }
-    }
-
-    function getSplashWindowMetrics() {
-      const isWin = process.platform === 'win32';
-      const firstLaunch = isFirstInstallLaunch();
-      return {
-        width: isWin ? 384 : 400,
-        height: firstLaunch ? (isWin ? 220 : 228) : (isWin ? 188 : 196),
-        firstLaunch
-      };
-    }
-
     function createLoadingWindow() {
-      const { width, height, firstLaunch } = getSplashWindowMetrics();
       loadingWindow = new BrowserWindow({
-        width,
-        height,
-        useContentSize: true,
+        width: 420,
+        height: 260,
         frame: false,
         transparent: false,
         backgroundColor: "#141820",
@@ -1856,9 +1751,7 @@
         }
       });
 
-      loadRendererIntoWindow(loadingWindow, 'splash.html', {
-        first: firstLaunch ? '1' : '0'
-      }).catch((err) => {
+      loadRendererIntoWindow(loadingWindow, 'splash.html').catch((err) => {
         console.error('Failed to load splash.html:', err);
       });
 
@@ -1904,7 +1797,7 @@
       return path.join(__dirname, fileName);
     }
 
-    async function loadRendererIntoWindow(win, fileName, query) {
+    async function loadRendererIntoWindow(win, fileName) {
       if (!win || win.isDestroyed()) {
         throw new Error('Object has been destroyed');
       }
@@ -1913,11 +1806,7 @@
         throw new Error(`Renderer file missing: ${filePath}`);
       }
       // loadFile is asar-aware and keeps renderer Node require() working
-      if (query && typeof query === 'object') {
-        await win.loadFile(filePath, { query });
-      } else {
-        await win.loadFile(filePath);
-      }
+      await win.loadFile(filePath);
       return filePath;
     }
 
@@ -2052,7 +1941,7 @@
 
       mainWindow = new BrowserWindow({
         show: false,
-        title: "algoScraper",
+        title: "AlgoScraper",
         width: 1280,
         height: 800,
         minWidth: 960,
@@ -2071,11 +1960,42 @@
       });
 
       Menu.setApplicationMenu(null);
-      try {
-        mainWindow.setMenu(null);
-        mainWindow.setAutoHideMenuBar(true);
-        mainWindow.setMenuBarVisibility(false);
-      } catch (_) {}
+      const template = [
+        {
+          label: 'Edit',
+          submenu: [
+            { role: 'undo' },
+            { role: 'redo' },
+            { type: 'separator' },
+            { role: 'cut' },
+            { role: 'copy' },
+            { role: 'paste' },
+            { role: 'selectAll' }
+          ]
+        },
+        {
+          label: 'View',
+          submenu: [
+            { role: 'reload' },
+            { role: 'forcereload' },
+            { role: 'toggledevtools' },
+            { type: 'separator' },
+            { role: 'resetzoom' },
+            { role: 'zoomin' },
+            { role: 'zoomout' },
+            { type: 'separator' },
+            { role: 'togglefullscreen' }
+          ]
+        },
+        {
+          label: 'Window',
+          submenu: [
+            { role: 'Close' }
+          ]
+        }
+      ];
+      const menu = Menu.buildFromTemplate(template);
+      Menu.setApplicationMenu(menu);
 
       let shown = false;
       const enforceMinBounds = () => {
@@ -2205,16 +2125,6 @@
 
     // Variable to store the list of devices discovered at startup / refresh
     let connectedDevices = [];
-    // Ignore one flaky empty ADB/simctl scan so a connected device is not dropped.
-    let deviceScanInFlight = null;
-    let emptyDeviceScanStreak = 0;
-    let deviceScanConfirmedEmpty = false;
-    let androidScanReliable = true;
-    let iosScanReliable = true;
-    let lastGoodAndroidDevices = [];
-    let lastGoodIosDevices = [];
-    let androidAppListInFlight = false;
-    const EMPTY_DEVICE_SCAN_CONFIRM = 2;
 
     // ===========================================================================
     // [DEVICES] Connected targets — Android (emulator + physical) and iOS (sim + physical)
@@ -2223,9 +2133,11 @@
     // ===========================================================================
 
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
+    // Windows: use execFile + retries (shell quoting / CRLF / daemon warm-up are flaky).
     async function getConnectedAndroidDevices() {
         applyAndroidToolingToEnv(process.env);
         const adbPath = getAdbExecutable();
+        const { execFile } = require('child_process');
 
         const parseDevicesFromStdout = (stdout) => {
             const found = [];
@@ -2278,49 +2190,89 @@
             return found;
         };
 
-        let sawDeviceListOutput = false;
-        const runAdb = async (args, timeoutMs) => {
-            const captured = await runAdbCapture(args, timeoutMs);
-            const text = captured.text || '';
-            const parsed = parseDevicesFromStdout(text);
-            if (/list of devices attached/i.test(text) || parsed.length) sawDeviceListOutput = true;
-            if (!parsed.length && args[0] !== 'start-server') {
-                const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 300);
-                console.warn(`[Android Discovery] adb ${args.join(' ')} code=${captured.code} out=${snippet || '(empty)'}`);
+        const runAdbDevices = (args) => new Promise((resolve) => {
+            const finish = (stdout, error, stderr) => {
+                if (error) {
+                    console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
+                }
+                resolve(parseDevicesFromStdout(stdout));
+            };
+
+            try {
+                execFile(
+                    adbPath,
+                    args,
+                    {
+                        timeout: 12000,
+                        env: process.env,
+                        windowsHide: true,
+                        maxBuffer: 10 * 1024 * 1024
+                    },
+                    (error, stdout, stderr) => finish(stdout, error, stderr)
+                );
+            } catch (err) {
+                // Fallback for odd Windows path/shell cases
+                try {
+                    const quoted = adbPath.includes(' ') ? `"${adbPath}"` : adbPath;
+                    exec(`${quoted} ${args.join(' ')}`, {
+                        timeout: 12000,
+                        env: process.env,
+                        windowsHide: true,
+                        maxBuffer: 10 * 1024 * 1024
+                    }, (error2, stdout2, stderr2) => finish(stdout2, error2 || err, stderr2));
+                } catch (err2) {
+                    console.warn('[Android Discovery] adb exec fallback threw:', err2);
+                    resolve([]);
+                }
             }
-            return parsed;
-        };
+        });
 
-        let devices = await runAdb(['devices', '-l'], 8000);
-        if (!devices.length) devices = await runAdb(['devices'], 8000);
-
-        const described = devices.map((d) => `${d.id}:${d.type}`).join(', ');
-        console.log(`[Android Discovery] adb=${adbPath} found=${devices.length} reliable=${sawDeviceListOutput} ${described}`);
-
-        const kickAt = getConnectedAndroidDevices._daemonKickAt || 0;
-        if (!devices.length && !sawDeviceListOutput && (Date.now() - kickAt > 15000)) {
-            getConnectedAndroidDevices._daemonKickAt = Date.now();
-            await runAdb(['start-server'], 6000);
-            await new Promise((r) => setTimeout(r, 500));
-            sawDeviceListOutput = false;
-            devices = await runAdb(['devices', '-l'], 8000);
-            if (!devices.length) devices = await runAdb(['devices'], 8000);
-            console.log(`[Android Discovery] after start-server found=${devices.length}`, devices.map((d) => `${d.id}:${d.type}`).join(', '));
+        // Retry: Windows often returns empty while the adb daemon is starting
+        const attempts = process.platform === 'win32' ? 4 : 2;
+        let devices = [];
+        for (let i = 0; i < attempts; i++) {
+            devices = await runAdbDevices(['devices', '-l']);
+            if (!devices.length) {
+                devices = await runAdbDevices(['devices']);
+            }
+            if (devices.length) break;
+            if (i < attempts - 1) {
+                await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 700 : 350));
+            }
         }
 
-        // An app-list adb command can hide the device for one tick. Keep the last good list.
-        if (!devices.length && androidAppListInFlight && lastGoodAndroidDevices.length) {
-            androidScanReliable = false;
-            console.warn('[Android Discovery] app list in progress — keeping last connected devices');
-            return lastGoodAndroidDevices.slice();
+        console.log(`[Android Discovery] adb=${adbPath} found=${devices.length}`, devices.map((d) => d.id).join(', '));
+
+        // Last-resort shell fallback if execFile path never yielded devices on Windows
+        if (!devices.length && process.platform === 'win32') {
+            try {
+                const adbCmd = getAdbCommandPrefix();
+                const { stdout } = await new Promise((resolve) => {
+                    exec(`${adbCmd} devices -l`, {
+                        timeout: 12000,
+                        env: process.env,
+                        windowsHide: true,
+                        maxBuffer: 10 * 1024 * 1024
+                    }, (error, out, err) => resolve({ stdout: out || '', error, err }));
+                });
+                devices = parseDevicesFromStdout(stdout);
+                if (!devices.length) {
+                    const second = await new Promise((resolve) => {
+                        exec(`${adbCmd} devices`, {
+                            timeout: 10000,
+                            env: process.env,
+                            windowsHide: true,
+                            maxBuffer: 10 * 1024 * 1024
+                        }, (error, out) => resolve(out || ''));
+                    });
+                    devices = parseDevicesFromStdout(second);
+                }
+                console.log(`[Android Discovery] shell fallback found=${devices.length}`, devices.map((d) => d.id).join(', '));
+            } catch (fallbackErr) {
+                console.warn('[Android Discovery] shell fallback failed:', fallbackErr);
+            }
         }
 
-        androidScanReliable = sawDeviceListOutput || devices.length > 0;
-        if (!sawDeviceListOutput && lastGoodAndroidDevices.length) {
-            console.warn('[Android Discovery] scan failed — keeping last connected Android devices');
-            return lastGoodAndroidDevices.slice();
-        }
-        lastGoodAndroidDevices = devices.slice();
         return devices;
     }
 
@@ -2328,18 +2280,13 @@
     // macOS only — Windows has no Xcode toolchain / XCUITest in the package.
     async function getConnectedIOSDevices() {
         if (process.platform !== 'darwin') {
-            iosScanReliable = true;
             return [];
         }
 
-        let simOk = false;
-        let phyOk = false;
-
         const simPromise = new Promise((resolve) => {
-            exec("xcrun simctl list devices -j", { timeout: 8000 }, (simError, simStdout) => {
+            exec("xcrun simctl list devices -j", { timeout: 4000 }, (simError, simStdout) => {
                 const simDevices = [];
                 if (!simError && simStdout) {
-                    simOk = true;
                     try {
                         const parsed = JSON.parse(simStdout);
                         const devMap = parsed.devices || {};
@@ -2366,9 +2313,8 @@
                 }
 
                 if (simDevices.length === 0) {
-                    exec("xcrun simctl list devices booted", { timeout: 8000 }, (tErr, tStdout) => {
+                    exec("xcrun simctl list devices booted", { timeout: 3500 }, (tErr, tStdout) => {
                         if (!tErr && tStdout) {
-                            simOk = true;
                             const lines = tStdout.split("\n");
                             let currentOSVersion = "";
                             lines.forEach(line => {
@@ -2397,10 +2343,9 @@
         });
 
         const phyPromise = new Promise((resolve) => {
-            exec("xcrun xcdevice list", { timeout: 8000 }, (phyError, phyStdout) => {
+            exec("xcrun xcdevice list", { timeout: 4000 }, (phyError, phyStdout) => {
                 const phyDevices = [];
                 if (!phyError && phyStdout) {
-                    phyOk = true;
                     try {
                         const firstBracket = phyStdout.indexOf('[');
                         const lastBracket = phyStdout.lastIndexOf(']');
@@ -2438,18 +2383,9 @@
 
         try {
             const [sims, phys] = await Promise.all([simPromise, phyPromise]);
-            const devices = [...sims, ...phys];
-            iosScanReliable = simOk || phyOk;
-            if (!iosScanReliable && lastGoodIosDevices.length) {
-                console.warn('[iOS Discovery] scan failed — keeping last connected iOS devices');
-                return lastGoodIosDevices.slice();
-            }
-            lastGoodIosDevices = devices.slice();
-            return devices;
-        } catch (err) {
-            iosScanReliable = false;
-            console.warn('[iOS Discovery] scan failed — keeping last connected iOS devices:', err && err.message ? err.message : err);
-            return lastGoodIosDevices.slice();
+            return [...sims, ...phys];
+        } catch (_) {
+            return [];
         }
     }
 
@@ -2464,68 +2400,46 @@
 
     // --- 3. UPDATED CHECK CONNECTION LOGIC ---
     async function checkDeviceConnected() {
-        if (deviceScanInFlight) return deviceScanInFlight;
-        deviceScanInFlight = checkDeviceConnectedInner().finally(() => {
-            deviceScanInFlight = null;
-        });
-        return deviceScanInFlight;
-    }
-
-    async function checkDeviceConnectedInner() {
         // Android emulator/physical + iOS simulator/physical in parallel
         const [iosDevices, androidDevices] = await Promise.all([
             getConnectedIOSDevices(),
             getConnectedAndroidDevices()
         ]);
 
-        const found = mergeConnectedDevices(androidDevices, iosDevices);
+        connectedDevices = mergeConnectedDevices(androidDevices, iosDevices);
 
-        // Both toolchains failed (timeout / daemon down) — keep the last good list.
-        if (!androidScanReliable && !iosScanReliable && connectedDevices.length) {
-            deviceScanConfirmedEmpty = false;
-            console.warn('[Devices] scan failed — keeping last connected devices');
-            return true;
-        }
-
-        if (found.length > 0) {
-            emptyDeviceScanStreak = 0;
-            deviceScanConfirmedEmpty = false;
-            connectedDevices = found;
+        if (connectedDevices.length > 0) {
             deviceId = connectedDevices[0].id;
             deviceName = connectedDevices[0].name;
-            return true;
+        } else {
+            deviceId = "";
+            deviceName = "";
         }
 
-        // ADB/simctl sometimes prints an empty list for one tick while a device is still connected.
-        emptyDeviceScanStreak += 1;
-        if (connectedDevices.length && emptyDeviceScanStreak < EMPTY_DEVICE_SCAN_CONFIRM) {
-            deviceScanConfirmedEmpty = false;
-            console.warn(`[Devices] empty scan ${emptyDeviceScanStreak}/${EMPTY_DEVICE_SCAN_CONFIRM} ignored`);
-            return true;
-        }
-
-        deviceScanConfirmedEmpty = true;
-        connectedDevices = [];
-        deviceId = "";
-        deviceName = "";
-        return false;
+        return connectedDevices.length > 0;
     }
 
     // Live refresh for UI platform switching (Android ↔ iOS)
     ipcMain.handle("refresh-connected-devices", async () => {
         try {
-            await checkDeviceConnected();
+            const [iosDevices, androidDevices] = await Promise.all([
+                getConnectedIOSDevices(),
+                getConnectedAndroidDevices()
+            ]);
+            connectedDevices = mergeConnectedDevices(androidDevices, iosDevices);
             return {
                 success: true,
                 devices: connectedDevices,
-                confirmedEmpty: deviceScanConfirmedEmpty && connectedDevices.length === 0
+                android: androidDevices,
+                ios: iosDevices
             };
         } catch (err) {
             console.error("refresh-connected-devices failed:", err);
             return {
                 success: false,
                 devices: connectedDevices || [],
-                confirmedEmpty: false,
+                android: [],
+                ios: [],
                 error: err?.message || String(err)
             };
         }
@@ -2754,7 +2668,6 @@
         // "Object has been destroyed" when createWindow tries to load.
         try {
           createWindow();
-          markFirstInstallComplete();
           await sleep(80);
           await closeLoadingWindow();
           startupGateActive = false;
@@ -2851,21 +2764,18 @@
     const appDataPath = app.getPath('appData');
     const folderPath = path.join(appDataPath, 'algoScraperScreenShot');
 
-    function pushConnectedDevicesToRenderer(targetWindow, extra) {
+    function pushConnectedDevicesToRenderer(targetWindow) {
         const win = targetWindow || mainWindow;
         if (!win || win.isDestroyed()) return;
-        const confirmedEmpty = !!(extra && extra.confirmedEmpty) && !(connectedDevices || []).length;
         try {
             win.webContents.send('connected-devices-updated', {
                 folderPath,
                 devices: connectedDevices || [],
-                connectedDevices: connectedDevices || [],
-                confirmedEmpty
+                connectedDevices: connectedDevices || []
             });
             win.webContents.send('message-from-main', {
                 folderPath,
-                connectedDevices: connectedDevices || [],
-                confirmedEmpty
+                connectedDevices: connectedDevices || []
             });
         } catch (err) {
             console.warn('pushConnectedDevicesToRenderer failed:', err);
@@ -2906,9 +2816,7 @@
                         (connectedDevices || []).map((d) => `${d.platform}/${d.type}/${d.id}`).join(', ')
                     );
                     lastPushedDeviceFingerprint = fp;
-                    pushConnectedDevicesToRenderer(mainWindow, {
-                        confirmedEmpty: deviceScanConfirmedEmpty && !(connectedDevices || []).length
-                    });
+                    pushConnectedDevicesToRenderer(mainWindow);
                 }
             } catch (err) {
                 console.warn('[Device Watcher] tick failed:', err && err.message ? err.message : err);
@@ -2940,8 +2848,7 @@
                     try {
                         event.reply('message-from-main', {
                             folderPath,
-                            connectedDevices: connectedDevices || [],
-                            confirmedEmpty: deviceScanConfirmedEmpty && !(connectedDevices || []).length
+                            connectedDevices: connectedDevices || []
                         });
                     } catch (err) {
                         console.warn('message-from-main reply failed:', err);
@@ -3400,48 +3307,59 @@
     }
 
     async function getLaunchableAndroidPackages(udid) {
+        // Same idea as iOS app list: all home-screen launchable apps, not third-party-only.
         const launchable = new Set();
-        const addFromText = (text) => {
-            String(text || '').replace(/\r/g, '').split('\n').forEach((line) => {
-                const pkgLine = line.match(/^\s*package:([^\s]+)/i);
-                if (pkgLine && pkgLine[1]) {
-                    launchable.add(pkgLine[1].trim());
-                    return;
-                }
-                const match = line.match(/([a-zA-Z][\w]*(?:\.[\w]+)+)\/[A-Za-z0-9_.$]+/);
-                if (match && match[1]) launchable.add(match[1]);
-            });
-        };
-
-        const serial = String(udid || '').trim();
-        androidAppListInFlight = true;
-        const runAdb = async (args, timeoutMs) => {
-            const captured = await runAdbCapture(['-s', serial].concat(args), timeoutMs);
-            if (!String(captured.text || '').trim()) {
-                console.warn('[Android Apps] adb', args.join(' '), 'empty code=', captured.code);
-            }
-            return captured.text || '';
-        };
-
         try {
-            addFromText(await runAdb([
-                'shell', 'pm', 'list', 'packages', '-3'
-            ], 10000));
-
-            addFromText(await runAdb([
-                'shell', 'cmd', 'package', 'query-activities', '--brief',
-                '-a', 'android.intent.action.MAIN',
-                '-c', 'android.intent.category.LAUNCHER'
-            ], 12000));
-        } finally {
-            androidAppListInFlight = false;
+            // Prefer modern query; works on emulator + most real devices (Win/Mac)
+            const { stdout } = await execAsync(
+                `${getAdbCommandPrefix()} -s "${udid}" shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER`,
+                { timeout: 15000, env: process.env }
+            );
+            String(stdout || '').split('\n').forEach((line) => {
+                const match = line.match(/^\s*([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/);
+                if (match) launchable.add(match[1]);
+            });
+        } catch (err) {
+            console.warn('Launchable activity query failed:', err?.message || err);
         }
 
-        const packages = [...launchable]
+        // Older Android / OEM fallback via dumpsys package
+        if (!launchable.size) {
+            try {
+                const { stdout } = await execAsync(
+                    `${getAdbCommandPrefix()} -s "${udid}" shell dumpsys package`,
+                    { timeout: 20000, env: process.env }
+                );
+                const lines = String(stdout || '').split('\n');
+                for (let i = 0; i < lines.length; i++) {
+                    if (!lines[i].includes('android.intent.category.LAUNCHER') && !lines[i].includes('android.intent.action.MAIN')) continue;
+                    // Look nearby for component "pkg/activity"
+                    for (let j = Math.max(0, i - 8); j <= Math.min(lines.length - 1, i + 2); j++) {
+                        const m = lines[j].match(/([a-zA-Z0-9._]+)\/[a-zA-Z0-9._$]+/);
+                        if (m) launchable.add(m[1]);
+                    }
+                }
+            } catch (err) {
+                console.warn('dumpsys LAUNCHER fallback failed:', err?.message || err);
+            }
+        }
+
+        // Last resort: third-party packages (still better than empty dropdown)
+        if (!launchable.size) {
+            try {
+                const { stdout } = await execAsync(`${getAdbCommandPrefix()} -s "${udid}" shell pm list packages -3`, { timeout: 10000, env: process.env });
+                String(stdout || '').split('\n').forEach((line) => {
+                    if (line.includes('package:')) {
+                        launchable.add(line.replace('package:', '').trim());
+                    }
+                });
+            } catch (_) {}
+        }
+
+        // Same idea as iOS: show all launchable apps (system + user), not third-party only
+        return [...launchable]
             .filter((pkg) => pkg && !shouldIgnoreAndroidPackage(pkg))
             .sort((a, b) => a.localeCompare(b));
-        console.log(`[Android Apps] ${serial} packages=${packages.length}`);
-        return packages;
     }
 
     function dedupeAppDisplayNames(apps) {
@@ -3511,19 +3429,19 @@
             if (appPath && !/\.app(\/|$)/.test(appPath)) continue;
 
             const executableMatch = body.match(/CFBundleExecutable\s*=\s*"?([^";\n]+)"?/);
-            const displayMatch = body.match(/CFBundleDisplayName\s*=\s*"?([^";\n]+)"?/);
-            const nameMatch = body.match(/CFBundleName\s*=\s*"?([^";\n]+)"?/);
-            if (!executableMatch && !displayMatch && !nameMatch) continue;
+            if (!executableMatch) continue;
 
             // Display names are often unquoted in simctl output: CFBundleDisplayName = Settings;
+            const displayMatch = body.match(/CFBundleDisplayName\s*=\s*"?([^";\n]+)"?/);
+            const nameMatch = body.match(/CFBundleName\s*=\s*"?([^";\n]+)"?/);
             let displayName = (displayMatch && displayMatch[1])
                 || (nameMatch && nameMatch[1])
-                || (executableMatch && executableMatch[1])
+                || executableMatch[1]
                 || bundleId;
             displayName = String(displayName).trim().replace(/^"|"$/g, '');
             if (!displayName) continue;
 
-            if (blockedTokens.some((token) => String(bundleId).includes(token))) {
+            if (blockedTokens.some((token) => bundleId.includes(token) || displayName.includes(token))) {
                 continue;
             }
             // Skip Watch companion / internal shells that are not useful for scraping
@@ -3543,11 +3461,11 @@
             if (Array.isArray(list)) {
                 list.forEach((item) => {
                     const bundleId = item.bundleIdentifier || item.bundleID || item.bundleId || item.identifier;
-                    const displayName = item.name || item.displayName || item.localizedName || item.CFBundleDisplayName || item.bundleName || bundleId;
+                    const displayName = item.name || item.displayName || item.CFBundleDisplayName || item.bundleName;
                     const hidden = item.hidden === true || item.isHidden === true;
                     const appType = String(item.applicationType || item.type || '').toLowerCase();
                     if (!bundleId || !displayName || hidden) return;
-                    if (appType && appType !== 'user' && appType !== 'system' && appType !== 'unknown') return;
+                    if (appType && appType !== 'user' && appType !== 'unknown') return;
                     if (String(bundleId).includes('WebDriverAgent') || String(bundleId).includes('xctrunner')) return;
                     apps.push({ name: String(displayName).trim(), bundleId: String(bundleId).trim() });
                 });
@@ -3579,7 +3497,7 @@
         return apps;
     }
 
-    async function enrichAndroidLabelsInBackground(event, udid, apps, requestId) {
+    async function enrichAndroidLabelsInBackground(event, udid, apps) {
         const aaptPath = resolveAaptBinary();
         if (!aaptPath || !apps.length) return;
 
@@ -3620,29 +3538,14 @@
         ).sort((a, b) => a.name.localeCompare(b.name));
 
         try {
-            event.reply('installed-apps', {
-                apps: refreshed,
-                requestId: requestId || 0,
-                deviceId: udid || ''
-            });
+            event.reply('installed-apps', refreshed);
         } catch (_) {}
     }
 
-    // Shared IPC: renderer sends selected device → returns { apps, requestId, deviceId }
+    // Shared IPC: renderer sends selected device → returns [{ name, bundleId }, ...]
     ipcMain.on("get-installed-apps", async (event, selectedDevice) => {
-        const requestId = selectedDevice && selectedDevice.requestId;
-        const replyApps = (apps) => {
-            try {
-                event.reply('installed-apps', {
-                    apps: Array.isArray(apps) ? apps : [],
-                    requestId: requestId || 0,
-                    deviceId: (selectedDevice && selectedDevice.id) || ''
-                });
-            } catch (_) {}
-        };
-
         if (!selectedDevice) {
-            replyApps([]);
+            event.reply("installed-apps", []);
             return;
         }
 
@@ -3650,7 +3553,7 @@
         const platform = String(selectedDevice.platform || '').toUpperCase();
 
         try {
-            if (platform === 'ANDROID' || platform === '') {
+            if (platform === 'ANDROID') {
                 const packages = await getLaunchableAndroidPackages(udid);
                 const cache = loadAndroidLabelCache();
                 let apps = packages.map((pkg) => ({
@@ -3658,57 +3561,43 @@
                     bundleId: pkg
                 }));
                 apps = dedupeAppDisplayNames(apps).sort((a, b) => a.name.localeCompare(b.name));
-                replyApps(apps);
-                enrichAndroidLabelsInBackground(event, udid, apps, requestId).catch(() => {});
+                event.reply("installed-apps", apps);
+                // Resolve real APK labels in background (cached for next time)
+                enrichAndroidLabelsInBackground(event, udid, apps).catch(() => {});
                 return;
             }
 
-            const safeUdid = String(udid || '').replace(/"/g, '');
-            const loadSimulatorApps = async () => {
-                const { stdout } = await execAsync(`xcrun simctl listapps "${safeUdid}"`, { timeout: 30000 });
-                return parseIOSSimulatorApps(stdout);
-            };
-            const loadPhysicalApps = async () => {
+            // iOS simulator / device — only executable launchable apps with real display names
+            let apps = [];
+            if (selectedDevice.type === 'simulator') {
+                const { stdout } = await execAsync(`xcrun simctl listapps "${udid}"`, { timeout: 30000 });
+                apps = parseIOSSimulatorApps(stdout);
+            } else {
                 let stdout = '';
                 try {
                     const result = await execAsync(
-                        `xcrun devicectl device info apps --device "${safeUdid}" --json-output -`,
+                        `xcrun devicectl device info apps --device "${udid}" --json-output -`,
                         { timeout: 30000 }
                     );
                     stdout = result.stdout || '';
                 } catch (_) {
                     const result = await execAsync(
-                        `xcrun devicectl device info apps --device "${safeUdid}"`,
+                        `xcrun devicectl device info apps --device "${udid}"`,
                         { timeout: 30000 }
                     );
                     stdout = result.stdout || '';
                 }
-                return parseIOSPhysicalApps(stdout);
-            };
-
-            let apps = [];
-            const preferSimulator = selectedDevice.type !== 'physical';
-            try {
-                apps = preferSimulator ? await loadSimulatorApps() : await loadPhysicalApps();
-            } catch (firstErr) {
-                console.warn('iOS app list primary path failed:', firstErr && firstErr.message ? firstErr.message : firstErr);
-            }
-            if (!apps.length) {
-                try {
-                    apps = preferSimulator ? await loadPhysicalApps() : await loadSimulatorApps();
-                } catch (secondErr) {
-                    console.warn('iOS app list fallback path failed:', secondErr && secondErr.message ? secondErr.message : secondErr);
-                }
+                apps = parseIOSPhysicalApps(stdout);
             }
 
             const uniqueApps = dedupeAppDisplayNames(
                 Array.from(new Map(apps.map((app) => [app.bundleId, app])).values())
             ).sort((a, b) => a.name.localeCompare(b.name));
 
-            replyApps(uniqueApps);
+            event.reply("installed-apps", uniqueApps);
         } catch (err) {
             console.error('get-installed-apps failed:', err);
-            replyApps([]);
+            event.reply("installed-apps", []);
         }
     });
 
