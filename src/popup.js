@@ -2899,6 +2899,7 @@
     }
 
     function isAppDropdownNeedingFetch() {
+        if (window._installedAppsInFlight) return false;
         const appSelect = document.getElementById('appname');
         if (!appSelect) return true;
         const val = String(appSelect.value || '').trim().toLowerCase();
@@ -2937,6 +2938,12 @@
             type: selectedDevice.type || '',
             version: selectedDevice.version || ''
         };
+
+        const nextId = String(devicePayload.id);
+        if (window._installedAppsInFlight && window._installedAppsInFlight === nextId) {
+            return false;
+        }
+        window._installedAppsInFlight = nextId;
 
         window._pendingInstalledAppsDeviceId = String(devicePayload.id);
         window._installedAppsRequestSeq = (window._installedAppsRequestSeq || 0) + 1;
@@ -3206,6 +3213,10 @@
         }
         if (!targetDevice) {
             targetDevice = ordered[0];
+        }
+        if (!targetDevice) {
+            setNoDeviceConnectedState();
+            return null;
         }
 
         deviceId = targetDevice.id;
@@ -3530,7 +3541,7 @@
             realtimeDeviceMonitorInterval = null;
         }
 
-        const tickMs = process.platform === 'win32' ? 1400 : 1100;
+        const tickMs = process.platform === 'win32' ? 4000 : 1500;
         console.log(`[Real-time Monitor] started (${process.platform}, every ${tickMs}ms)`);
 
         const runPoll = async () => {
@@ -3738,8 +3749,7 @@
             }
         };
 
-        // Immediate first poll, then interval
-        runPoll();
+        // Main process already scans and pushes; avoid a second immediate adb storm.
         realtimeDeviceMonitorInterval = setInterval(runPoll, tickMs);
     }
     window.startRealtimeDeviceMonitoring = startRealtimeDeviceMonitoring;
@@ -3826,6 +3836,7 @@
 
 
     ipcRenderer.on("installed-apps", (event, apps) => {
+            window._installedAppsInFlight = '';
             console.log("Installed Apps:", apps);
             const dropdown = document.getElementById("appname");
             if (!dropdown) return;
