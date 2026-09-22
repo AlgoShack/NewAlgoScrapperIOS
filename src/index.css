@@ -2599,9 +2599,9 @@ th .resizer:hover {
     width: 440px;
     max-width: calc(100vw - 32px);
     background-color: #ffffff;
-    border-radius: 12px;
-    border: 1px solid rgba(203, 213, 225, 0.9);
-    box-shadow: 0 20px 40px -10px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(15, 23, 42, 0.05);
+    border-radius: 10px;
+    border: 2px solid #2F8BCC;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
     z-index: 100000 !important;
     overflow: hidden;
     font-family: inherit;
@@ -2619,6 +2619,7 @@ th .resizer:hover {
     align-items: center;
     gap: 10px;
     border-bottom: 1px solid #e2e8f0;
+    border-radius: 8px 8px 0 0;
 }
 
 .custom-modal .warning-icon {
@@ -2638,6 +2639,7 @@ th .resizer:hover {
     padding: 18px 20px 16px;
     text-align: left;
     background-color: #ffffff;
+    border-radius: 0 0 8px 8px;
 }
 
 .custom-modal .modal-main-text {
@@ -2817,20 +2819,20 @@ th .resizer:hover {
 
 /* Launch picker: compact rows, fixed height, list scrolls */
 .launch-picker-modal {
-    width: 530px !important;
-    max-width: calc(100vw - 32px) !important;
-    max-height: none !important;
-    display: flex;
-    flex-direction: column;
-    border-radius: 10px !important;
-    box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.22), 0 6px 12px -4px rgba(0, 0, 0, 0.12) !important;
+  width: 530px !important;
+  max-width: calc(100vw - 32px) !important;
+  max-height: none !important;
+  display: flex;
+  flex-direction: column;
+  border: 2px solid #2F8BCC !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22) !important;
 }
 
 .launch-picker-modal .modal-header {
     padding: 10px 16px;
     flex-shrink: 0;
-    border-top-left-radius: 9px;
-    border-top-right-radius: 9px;
+    border-radius: 8px 8px 0 0;
 }
 
 .launch-picker-modal .modal-body {
@@ -3952,10 +3954,13 @@ th .resizer:hover {
 }
 
 
-/* --- Form modals (Create Feature / Record Scenario) — match scraper alert style --- */
+/* --- Form modals (Create Feature / Record Scenario / Edit Scenario) — match scraper alert style --- */
 .custom-modal.form-modal {
     width: 400px;
     overflow: visible;
+    border: 2px solid #2F8BCC;
+    border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
 }
 
 .custom-modal.form-modal .modal-body.form-modal-body {

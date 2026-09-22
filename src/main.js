@@ -1727,15 +1727,53 @@
       return path.join(__dirname, '..', 'assets', 'algoScraper Logo.png');
     }
 
+    function getFirstInstallMarkerPath() {
+      return path.join(app.getPath('userData'), 'first-install-complete.json');
+    }
+
+    function isFirstInstallLaunch() {
+      try {
+        return !fs.existsSync(getFirstInstallMarkerPath());
+      } catch (_) {
+        return true;
+      }
+    }
+
+    function markFirstInstallComplete() {
+      try {
+        const marker = getFirstInstallMarkerPath();
+        fs.mkdirSync(path.dirname(marker), { recursive: true });
+        if (fs.existsSync(marker)) return;
+        fs.writeFileSync(marker, JSON.stringify({
+          completedAt: Date.now(),
+          platform: process.platform
+        }), 'utf8');
+      } catch (err) {
+        console.warn('Could not save first-install marker:', err && err.message ? err.message : err);
+      }
+    }
+
+    function getSplashWindowMetrics() {
+      const isWin = process.platform === 'win32';
+      const firstLaunch = isFirstInstallLaunch();
+      return {
+        width: isWin ? 384 : 400,
+        height: firstLaunch ? (isWin ? 220 : 228) : (isWin ? 188 : 196),
+        firstLaunch
+      };
+    }
+
     function createLoadingWindow() {
+      const { width, height, firstLaunch } = getSplashWindowMetrics();
       loadingWindow = new BrowserWindow({
-        width: 420,
-        height: 260,
+        width,
+        height,
+        useContentSize: true,
         frame: false,
         transparent: false,
         backgroundColor: "#141820",
         resizable: false,
-        movable: false,
+        movable: true,
         minimizable: false,
         maximizable: false,
         alwaysOnTop: true,
@@ -1751,7 +1789,9 @@
         }
       });
 
-      loadRendererIntoWindow(loadingWindow, 'splash.html').catch((err) => {
+      loadRendererIntoWindow(loadingWindow, 'splash.html', {
+        first: firstLaunch ? '1' : '0'
+      }).catch((err) => {
         console.error('Failed to load splash.html:', err);
       });
 
@@ -1797,7 +1837,7 @@
       return path.join(__dirname, fileName);
     }
 
-    async function loadRendererIntoWindow(win, fileName) {
+    async function loadRendererIntoWindow(win, fileName, query) {
       if (!win || win.isDestroyed()) {
         throw new Error('Object has been destroyed');
       }
@@ -1806,7 +1846,11 @@
         throw new Error(`Renderer file missing: ${filePath}`);
       }
       // loadFile is asar-aware and keeps renderer Node require() working
-      await win.loadFile(filePath);
+      if (query && typeof query === 'object') {
+        await win.loadFile(filePath, { query });
+      } else {
+        await win.loadFile(filePath);
+      }
       return filePath;
     }
 
@@ -1941,7 +1985,7 @@
 
       mainWindow = new BrowserWindow({
         show: false,
-        title: "AlgoScraper",
+        title: "algoScraper",
         width: 1280,
         height: 800,
         minWidth: 960,
@@ -2668,6 +2712,7 @@
         // "Object has been destroyed" when createWindow tries to load.
         try {
           createWindow();
+          markFirstInstallComplete();
           await sleep(80);
           await closeLoadingWindow();
           startupGateActive = false;
