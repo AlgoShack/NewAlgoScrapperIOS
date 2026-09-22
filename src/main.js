@@ -2133,11 +2133,11 @@
     // ===========================================================================
 
     // --- ANDROID: `adb devices -l` → emulator-* or USB serial ---
-    // Windows: use execFile + retries (shell quoting / CRLF / daemon warm-up are flaky).
+    // Same shell `adb` call as getprop / package list. Direct execFile on adb.exe
+    // exits "Command failed" on Windows and the device list is dropped.
     async function getConnectedAndroidDevices() {
         applyAndroidToolingToEnv(process.env);
-        const adbPath = getAdbExecutable();
-        const { execFile } = require('child_process');
+        const adbCmd = getAdbCommandPrefix();
 
         const parseDevicesFromStdout = (stdout) => {
             const found = [];
@@ -2145,22 +2145,13 @@
             const lines = String(stdout).replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
             lines.forEach((line) => {
                 const trimmed = String(line || '').trim();
-                if (!trimmed || trimmed.startsWith('*') || trimmed.startsWith('List of')) return;
+                if (!trimmed || trimmed.startsWith('*') || /^list of devices/i.test(trimmed)) return;
 
-                // id + state (device|offline|unauthorized|…) — tolerate extra Windows spacing
-                const deviceMatch = trimmed.match(/^([^\s]+)\s+(\S+)/);
+                const deviceMatch = trimmed.match(/^(\S+)\s+device\b/i);
                 if (!deviceMatch) return;
 
                 const id = String(deviceMatch[1] || '').trim();
-                const status = String(deviceMatch[2] || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-                if (!id) return;
-                if (id.toLowerCase().includes('daemon') || id.toLowerCase().includes('adb') || id.toLowerCase().includes('error')) return;
-
-                // Only online targets
-                if (status !== 'device') {
-                    console.log(`[Android Discovery] Skipping device ${id} with status: ${status}`);
-                    return;
-                }
+                if (!id || id === 'List' || id === '*') return;
 
                 let name = id;
                 const modelMatch = trimmed.match(/model:([^\s]+)/i);
@@ -2168,17 +2159,12 @@
                     name = modelMatch[1].replace(/_/g, ' ');
                 } else {
                     const prodMatch = trimmed.match(/product:([^\s]+)/i);
-                    if (prodMatch) {
-                        name = prodMatch[1].replace(/_/g, ' ');
-                    }
+                    if (prodMatch) name = prodMatch[1].replace(/_/g, ' ');
                 }
 
                 const isEmulator = id.toLowerCase().startsWith('emulator-')
                     || id.toLowerCase().includes('127.0.0.1')
-                    || id.toLowerCase().includes('localhost')
-                    || name.toLowerCase().includes('sdk')
-                    || name.toLowerCase().includes('emulator')
-                    || name.toLowerCase().includes('generic');
+                    || id.toLowerCase().includes('localhost');
 
                 found.push({
                     id: id,
@@ -2191,88 +2177,36 @@
         };
 
         const runAdbDevices = (args) => new Promise((resolve) => {
-            const finish = (stdout, error, stderr) => {
-                if (error) {
-                    console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
+            const child = exec(`${adbCmd} ${args}`, {
+                timeout: 8000,
+                env: process.env,
+                maxBuffer: 10 * 1024 * 1024
+            }, (error, stdout, stderr) => {
+                const text = [
+                    stdout || '',
+                    stderr || '',
+                    (error && error.stdout) || '',
+                    (error && error.stderr) || ''
+                ].join('\n');
+                const parsed = parseDevicesFromStdout(text);
+                if (!parsed.length) {
+                    const snippet = text.replace(/\s+/g, ' ').trim().slice(0, 300);
+                    console.warn(`[Android Discovery] ${args} code=${error ? (error.code || error.signal || 'err') : 0} out=${snippet || '(empty)'}`);
                 }
-                resolve(parseDevicesFromStdout(stdout));
-            };
-
-            try {
-                execFile(
-                    adbPath,
-                    args,
-                    {
-                        timeout: 12000,
-                        env: process.env,
-                        windowsHide: true,
-                        maxBuffer: 10 * 1024 * 1024
-                    },
-                    (error, stdout, stderr) => finish(stdout, error, stderr)
-                );
-            } catch (err) {
-                // Fallback for odd Windows path/shell cases
-                try {
-                    const quoted = adbPath.includes(' ') ? `"${adbPath}"` : adbPath;
-                    exec(`${quoted} ${args.join(' ')}`, {
-                        timeout: 12000,
-                        env: process.env,
-                        windowsHide: true,
-                        maxBuffer: 10 * 1024 * 1024
-                    }, (error2, stdout2, stderr2) => finish(stdout2, error2 || err, stderr2));
-                } catch (err2) {
-                    console.warn('[Android Discovery] adb exec fallback threw:', err2);
-                    resolve([]);
-                }
+                resolve(parsed);
+            });
+            if (child && child.stdin) {
+                try { child.stdin.end(); } catch (_) {}
             }
         });
 
-        // Retry: Windows often returns empty while the adb daemon is starting
-        const attempts = process.platform === 'win32' ? 4 : 2;
-        let devices = [];
-        for (let i = 0; i < attempts; i++) {
-            devices = await runAdbDevices(['devices', '-l']);
-            if (!devices.length) {
-                devices = await runAdbDevices(['devices']);
-            }
-            if (devices.length) break;
-            if (i < attempts - 1) {
-                await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 700 : 350));
-            }
-        }
+        let devices = await runAdbDevices('devices -l');
+        if (!devices.length) devices = await runAdbDevices('devices');
 
-        console.log(`[Android Discovery] adb=${adbPath} found=${devices.length}`, devices.map((d) => d.id).join(', '));
-
-        // Last-resort shell fallback if execFile path never yielded devices on Windows
-        if (!devices.length && process.platform === 'win32') {
-            try {
-                const adbCmd = getAdbCommandPrefix();
-                const { stdout } = await new Promise((resolve) => {
-                    exec(`${adbCmd} devices -l`, {
-                        timeout: 12000,
-                        env: process.env,
-                        windowsHide: true,
-                        maxBuffer: 10 * 1024 * 1024
-                    }, (error, out, err) => resolve({ stdout: out || '', error, err }));
-                });
-                devices = parseDevicesFromStdout(stdout);
-                if (!devices.length) {
-                    const second = await new Promise((resolve) => {
-                        exec(`${adbCmd} devices`, {
-                            timeout: 10000,
-                            env: process.env,
-                            windowsHide: true,
-                            maxBuffer: 10 * 1024 * 1024
-                        }, (error, out) => resolve(out || ''));
-                    });
-                    devices = parseDevicesFromStdout(second);
-                }
-                console.log(`[Android Discovery] shell fallback found=${devices.length}`, devices.map((d) => d.id).join(', '));
-            } catch (fallbackErr) {
-                console.warn('[Android Discovery] shell fallback failed:', fallbackErr);
-            }
-        }
-
+        console.log(
+            `[Android Discovery] adb=${adbCmd} found=${devices.length}`,
+            devices.map((d) => `${d.id}:${d.type}`).join(', ')
+        );
         return devices;
     }
 
