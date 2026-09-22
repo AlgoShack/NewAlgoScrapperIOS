@@ -2908,11 +2908,13 @@
         const placeholders = new Set([
             '',
             'no device connected',
-            'loading apps...',
-            'loading apps…',
             'select app',
             'no apps found'
         ]);
+        const currentUdid = (document.getElementById('udid')?.value || deviceId || '').trim();
+        if (window._installedAppsInFlightId && currentUdid && window._installedAppsInFlightId === currentUdid) {
+            return false;
+        }
         if (placeholders.has(val) || placeholders.has(text)) return true;
         // Only a placeholder option present
         if (!appSelect.options || appSelect.options.length <= 1) {
@@ -2938,7 +2940,12 @@
             version: selectedDevice.version || ''
         };
 
-        window._pendingInstalledAppsDeviceId = String(devicePayload.id);
+        const deviceIdKey = String(devicePayload.id);
+        if (!options.force && window._installedAppsInFlightId === deviceIdKey) {
+            return false;
+        }
+        window._installedAppsInFlightId = deviceIdKey;
+        window._pendingInstalledAppsDeviceId = deviceIdKey;
         window._installedAppsRequestSeq = (window._installedAppsRequestSeq || 0) + 1;
         const seq = window._installedAppsRequestSeq;
 
@@ -3854,6 +3861,9 @@
                 console.warn('[Devices] Ignoring stale installed-apps request', requestId);
                 return;
             }
+            if (!replyDeviceId || replyDeviceId === window._installedAppsInFlightId || replyDeviceId === String(window._pendingInstalledAppsDeviceId || '')) {
+                window._installedAppsInFlightId = '';
+            }
 
             // Device was disconnected while apps were loading
             if (isDeviceDropdownEmpty()) {
@@ -3880,7 +3890,7 @@
                     const selected = (connectedDevices || []).find((d) => d.id === currentUdid || d.name === currentUdid);
                     if (selected) {
                         console.warn('[Devices] App list empty — retrying once for', currentUdid);
-                        requestInstalledAppsForDevice(selected, { silent: true });
+                        requestInstalledAppsForDevice(selected, { silent: true, force: true });
                         return;
                     }
                 }

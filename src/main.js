@@ -3397,7 +3397,6 @@
     }
 
     async function getLaunchableAndroidPackages(udid) {
-        // Same idea as iOS app list: all home-screen launchable apps, not third-party-only.
         const launchable = new Set();
         const addFromText = (text) => {
             String(text || '').replace(/\r/g, '').split('\n').forEach((line) => {
@@ -3411,52 +3410,53 @@
             });
         };
 
-        const safeAdb = getAdbCommandPrefix();
-        const serial = String(udid || '').replace(/"/g, '');
-        try {
-            const { stdout } = await execAsync(
-                `${safeAdb} -s "${serial}" shell cmd package query-activities --brief -a android.intent.action.MAIN -c android.intent.category.LAUNCHER`,
-                { timeout: 20000, env: process.env }
-            );
-            addFromText(stdout);
-        } catch (err) {
-            console.warn('Launchable activity query failed:', err?.message || err);
-        }
-
-        // Always merge user-installed packages so a partial launcher query cannot hide them.
-        try {
-            const { stdout } = await execAsync(
-                `${safeAdb} -s "${serial}" shell pm list packages -3`,
-                { timeout: 12000, env: process.env }
-            );
-            addFromText(stdout);
-        } catch (err) {
-            console.warn('pm list packages -3 failed:', err?.message || err);
-        }
-
-        // Older Android / OEM fallback via dumpsys package when the list is still thin
-        if (launchable.size < 3) {
-            try {
-                const { stdout } = await execAsync(
-                    `${safeAdb} -s "${serial}" shell dumpsys package`,
-                    { timeout: 20000, env: process.env }
-                );
-                const lines = String(stdout || '').replace(/\r/g, '').split('\n');
-                for (let i = 0; i < lines.length; i++) {
-                    if (!lines[i].includes('android.intent.category.LAUNCHER') && !lines[i].includes('android.intent.action.MAIN')) continue;
-                    for (let j = Math.max(0, i - 8); j <= Math.min(lines.length - 1, i + 2); j++) {
-                        const m = lines[j].match(/([a-zA-Z][\w]*(?:\.[\w]+)+)\/[A-Za-z0-9_.$]+/);
-                        if (m) launchable.add(m[1]);
-                    }
+        const serial = String(udid || '').trim();
+        const adbPath = getAdbExecutable();
+        const { execFile } = require('child_process');
+        const runAdb = (args, timeoutMs) => new Promise((resolve) => {
+            execFile(adbPath, ['-s', serial].concat(args), {
+                timeout: timeoutMs || 20000,
+                env: process.env,
+                windowsHide: true,
+                maxBuffer: 20 * 1024 * 1024
+            }, (error, stdout, stderr) => {
+                if (error) {
+                    console.warn('[Android Apps] adb', args.join(' '), 'failed:', error.message || error, stderr || '');
                 }
-            } catch (err) {
-                console.warn('dumpsys LAUNCHER fallback failed:', err?.message || err);
+                resolve(stdout || '');
+            });
+        });
+
+        addFromText(await runAdb([
+            'shell', 'cmd', 'package', 'query-activities', '--brief',
+            '-a', 'android.intent.action.MAIN',
+            '-c', 'android.intent.category.LAUNCHER'
+        ], 20000));
+
+        // User-installed apps, even if the launcher query is partial or empty.
+        addFromText(await runAdb(['shell', 'pm', 'list', 'packages', '-3'], 12000));
+
+        if (launchable.size < 3) {
+            const dumped = await runAdb(['shell', 'dumpsys', 'package'], 20000);
+            const lines = String(dumped || '').replace(/\r/g, '').split('\n');
+            for (let i = 0; i < lines.length; i++) {
+                if (!lines[i].includes('android.intent.category.LAUNCHER') && !lines[i].includes('android.intent.action.MAIN')) continue;
+                for (let j = Math.max(0, i - 8); j <= Math.min(lines.length - 1, i + 2); j++) {
+                    const m = lines[j].match(/([a-zA-Z][\w]*(?:\.[\w]+)+)\/[A-Za-z0-9_.$]+/);
+                    if (m) launchable.add(m[1]);
+                }
             }
         }
 
-        return [...launchable]
+        if (!launchable.size) {
+            addFromText(await runAdb(['shell', 'pm', 'list', 'packages'], 12000));
+        }
+
+        const packages = [...launchable]
             .filter((pkg) => pkg && !shouldIgnoreAndroidPackage(pkg))
             .sort((a, b) => a.localeCompare(b));
+        console.log(`[Android Apps] ${serial} packages=${packages.length}`);
+        return packages;
     }
 
     function dedupeAppDisplayNames(apps) {
