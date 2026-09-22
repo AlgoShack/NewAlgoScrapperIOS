@@ -3727,6 +3727,8 @@
                             if (selected) requestInstalledAppsForDevice(selected);
                         }
                     }
+                } else if (!freshDevices.length && window._installedAppsInFlightId) {
+                    return;
                 } else if (!window._devicesConfirmedEmpty) {
                     return;
                 } else {

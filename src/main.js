@@ -2146,6 +2146,7 @@
     let iosScanReliable = true;
     let lastGoodAndroidDevices = [];
     let lastGoodIosDevices = [];
+    let androidAppListInFlight = false;
     const EMPTY_DEVICE_SCAN_CONFIRM = 2;
 
     // ===========================================================================
@@ -2218,9 +2219,10 @@
                 if (error) {
                     console.warn(`[Android Discovery] adb ${args.join(' ')} failed:`, error.message || error, stderr || '');
                 }
-                const text = String(stdout || '');
-                if (text.trim()) sawDeviceListOutput = true;
-                resolve(parseDevicesFromStdout(text.replace(/\r/g, '')));
+                const text = `${stdout || ''}\n${stderr || ''}`.replace(/\r/g, '');
+                const parsed = parseDevicesFromStdout(text);
+                if (/list of devices attached/i.test(text) || parsed.length) sawDeviceListOutput = true;
+                resolve(parsed);
             };
 
             try {
@@ -2252,8 +2254,8 @@
             }
         });
 
-        // Retry: Windows often returns empty while the adb daemon is starting
-        const attempts = process.platform === 'win32' ? 4 : 2;
+        // Two quick reads. A long retry loop blocks detection while another adb command is running.
+        const attempts = 2;
         let devices = [];
         for (let i = 0; i < attempts; i++) {
             devices = await runAdbDevices(['devices', '-l']);
@@ -2262,7 +2264,7 @@
             }
             if (devices.length) break;
             if (i < attempts - 1) {
-                await new Promise((r) => setTimeout(r, process.platform === 'win32' ? 700 : 350));
+                await new Promise((r) => setTimeout(r, 400));
             }
         }
 
@@ -2283,7 +2285,7 @@
         }
 
         // Last-resort shell fallback if execFile path never yielded devices on Windows
-        if (!devices.length && process.platform === 'win32') {
+        if (!devices.length) {
             try {
                 const adbCmd = getAdbCommandPrefix();
                 const { stdout } = await new Promise((resolve) => {
@@ -2294,7 +2296,8 @@
                         maxBuffer: 10 * 1024 * 1024
                     }, (error, out, err) => resolve({ stdout: out || '', error, err }));
                 });
-                devices = parseDevicesFromStdout(stdout);
+                devices = parseDevicesFromStdout(String(stdout || '') + '\n' + String(err || ''));
+                if (devices.length) sawDeviceListOutput = true;
                 if (!devices.length) {
                     const second = await new Promise((resolve) => {
                         exec(`${adbCmd} devices`, {
@@ -2305,6 +2308,7 @@
                         }, (error, out) => resolve(out || ''));
                     });
                     devices = parseDevicesFromStdout(second);
+                    if (devices.length) sawDeviceListOutput = true;
                 }
                 console.log(`[Android Discovery] shell fallback found=${devices.length}`, devices.map((d) => d.id).join(', '));
             } catch (fallbackErr) {
@@ -2312,7 +2316,14 @@
             }
         }
 
-        androidScanReliable = sawDeviceListOutput;
+        // An app-list adb command can hide the device for one tick. Keep the last good list.
+        if (!devices.length && androidAppListInFlight && lastGoodAndroidDevices.length) {
+            androidScanReliable = false;
+            console.warn('[Android Discovery] app list in progress — keeping last connected devices');
+            return lastGoodAndroidDevices.slice();
+        }
+
+        androidScanReliable = sawDeviceListOutput || devices.length > 0;
         if (!sawDeviceListOutput && lastGoodAndroidDevices.length) {
             console.warn('[Android Discovery] scan failed — keeping last connected Android devices');
             return lastGoodAndroidDevices.slice();
@@ -3413,9 +3424,10 @@
         const serial = String(udid || '').trim();
         const adbPath = getAdbExecutable();
         const { execFile } = require('child_process');
+        androidAppListInFlight = true;
         const runAdb = (args, timeoutMs) => new Promise((resolve) => {
             execFile(adbPath, ['-s', serial].concat(args), {
-                timeout: timeoutMs || 20000,
+                timeout: timeoutMs || 12000,
                 env: process.env,
                 windowsHide: true,
                 maxBuffer: 20 * 1024 * 1024
@@ -3423,33 +3435,22 @@
                 if (error) {
                     console.warn('[Android Apps] adb', args.join(' '), 'failed:', error.message || error, stderr || '');
                 }
-                resolve(stdout || '');
+                resolve(`${stdout || ''}\n${stderr || ''}`);
             });
         });
 
-        addFromText(await runAdb([
-            'shell', 'cmd', 'package', 'query-activities', '--brief',
-            '-a', 'android.intent.action.MAIN',
-            '-c', 'android.intent.category.LAUNCHER'
-        ], 20000));
+        try {
+            addFromText(await runAdb([
+                'shell', 'pm', 'list', 'packages', '-3'
+            ], 10000));
 
-        // User-installed apps, even if the launcher query is partial or empty.
-        addFromText(await runAdb(['shell', 'pm', 'list', 'packages', '-3'], 12000));
-
-        if (launchable.size < 3) {
-            const dumped = await runAdb(['shell', 'dumpsys', 'package'], 20000);
-            const lines = String(dumped || '').replace(/\r/g, '').split('\n');
-            for (let i = 0; i < lines.length; i++) {
-                if (!lines[i].includes('android.intent.category.LAUNCHER') && !lines[i].includes('android.intent.action.MAIN')) continue;
-                for (let j = Math.max(0, i - 8); j <= Math.min(lines.length - 1, i + 2); j++) {
-                    const m = lines[j].match(/([a-zA-Z][\w]*(?:\.[\w]+)+)\/[A-Za-z0-9_.$]+/);
-                    if (m) launchable.add(m[1]);
-                }
-            }
-        }
-
-        if (!launchable.size) {
-            addFromText(await runAdb(['shell', 'pm', 'list', 'packages'], 12000));
+            addFromText(await runAdb([
+                'shell', 'cmd', 'package', 'query-activities', '--brief',
+                '-a', 'android.intent.action.MAIN',
+                '-c', 'android.intent.category.LAUNCHER'
+            ], 12000));
+        } finally {
+            androidAppListInFlight = false;
         }
 
         const packages = [...launchable]
