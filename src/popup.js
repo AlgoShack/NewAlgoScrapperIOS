@@ -5858,10 +5858,18 @@
             title = "UiAutomator2 Instrumentation Crashed";
             friendlyMessage = `UiAutomator2 process was terminated by Android OS: ${cleanCause}`;
             hint = "On Xiaomi/OPPO/Vivo/Realme devices, enable 'Install via USB' and 'USB Debugging (Security Settings)' in Developer Options.";
-        } else if (/ANDROID_HOME|ANDROID_SDK_ROOT/i.test(rawMsg)) {
+        } else if (/JAVA_HOME|Could not find java|Unable to locate a Java Runtime|java\.exe|bin[\\/]java['" ]/i.test(rawMsg)) {
+            title = "Java Runtime Missing";
+            friendlyMessage = "UiAutomator2 needs Java to sign and install its helper APK.";
+            hint = "Reinstall AlgoScraper so the bundled Java runtime is included (same as Node and Appium). From source, run npm run setup.";
+        } else if (/apksigner\.jar|Cannot verify the signature|Android Build Tools|zipalign|Could not find 'aapt/i.test(rawMsg)) {
+            title = "Android Build Tools Missing";
+            friendlyMessage = "AlgoScraper could not find Android Build Tools (apksigner / aapt), which UiAutomator2 needs to install its helper APK.";
+            hint = "Reinstall AlgoScraper so bundled Android build-tools are included. From source, run npm run setup.";
+        } else if (/Could not find 'adb'|Cannot find adb|adb(\.exe)? (was )?not found|ANDROID_HOME|ANDROID_SDK_ROOT/i.test(rawMsg)) {
             title = "Android SDK Missing";
             friendlyMessage = "Android SDK tools (adb) were not found.";
-            hint = "Install Android platform-tools or configure the ANDROID_HOME environment variable.";
+            hint = "Reinstall AlgoScraper so bundled adb is included. From source, run npm run setup.";
         } else if (/did not open/i.test(rawMsg)) {
             title = "Application Did Not Open";
             friendlyMessage = cleanCause;
@@ -7376,6 +7384,45 @@
     }
     window.buildScenarioPayload = buildScenarioPayload;
 
+    function isRecordScenarioExportMode() {
+        return Boolean(
+            window.pageScenarioData &&
+            Object.keys(window.pageScenarioData).length > 0 &&
+            Object.values(window.pageScenarioData).some(s => s && (s.scenarioName || s.scenarioOutline))
+        );
+    }
+
+    // Same JSON for Download and algoQA send (Windows + Mac).
+    // Normal: { isRecordscenario:false, dashboardControls:[...] }
+    // Record: { isRecordscenario:true, dashboardControls:{ APP URL, SCENARIOS } }
+    function buildHomeExportJson(dashboardControls) {
+        if (isRecordScenarioExportMode()) {
+            return (typeof buildScenarioPayload === "function")
+                ? buildScenarioPayload(dashboardControls)
+                : {
+                    "isRecordscenario": true,
+                    "dashboardControls": {
+                        "APP URL": "",
+                        "APP ACTIVITY": "",
+                        "APP PACKAGE": "",
+                        "BUNDLE ID": "",
+                        "DEVICE NAME": "",
+                        "UDID": "",
+                        "SCENARIOS": [{
+                            "SCENARIO_NAME": "Scenario",
+                            "SCENARIO_OUTLINE": "",
+                            "STEPS": dashboardControls || []
+                        }]
+                    }
+                };
+        }
+        return {
+            "isRecordscenario": false,
+            "dashboardControls": dashboardControls || []
+        };
+    }
+    window.buildHomeExportJson = buildHomeExportJson;
+
     async function downloadTableAsJSON(tableId) {
         const statusBar = document.getElementById('sttus_bar_div');
         if (statusBar) statusBar.style.display = 'none';
@@ -7395,15 +7442,8 @@
             return;
         }
 
-        // Differentiate between Normal Scraping vs Record Scenario
-        const isScenarioMode = Boolean(
-            window.pageScenarioData &&
-            Object.keys(window.pageScenarioData).length > 0 &&
-            Object.values(window.pageScenarioData).some(s => s && (s.scenarioName || s.scenarioOutline))
-        );
-
-        const jsonContent = isScenarioMode
-            ? buildScenarioPayload(dashboardControls)
+        const jsonContent = (typeof buildHomeExportJson === "function")
+            ? buildHomeExportJson(dashboardControls)
             : { "isRecordscenario": false, "dashboardControls": dashboardControls };
 
         let appName = "App";
@@ -10487,16 +10527,27 @@ function createAndAppendTable(dtControls) {
     let lastClickedImg = null; // Variable to keep track of the last clicked image
 
     tableEC.addEventListener("click", async (event) => {
-      // Check if an image is currently being loaded, if yes, cancel the loading
       if (loadingImage) return;
 
-//      var plateformOption = plateformName.options[plateformName.selectedIndex].text;
-      if (event.target.tagName === "TD" && event.target.cellIndex === 4) {
-        const thirdCell = event.target.parentNode.cells[2];
-        const innerText = thirdCell.innerText;
+      const td = event.target.closest("td");
+      if (!td || !tableEC.contains(td)) return;
 
+      const row = td.parentElement;
+      if (!row || row.classList.contains("empty-excel-row") || row.classList.contains("no-results-row")) return;
 
-    //for coordinates
+      // Page Name / other columns are editable labels — never query Appium with them.
+      const isXpathCell = td.classList.contains("xpath") || /^xpath_/i.test(td.id || "");
+      if (!isXpathCell) return;
+
+      if (event.target.closest("select, option, button, input, .custom-select-trigger, .custom-select-menu, .js-custom-select")) {
+        return;
+      }
+
+      const selectEl = td.querySelector("select.control-id-dropdown, select.xpath-dropdown, select");
+      let innerText = "";
+      if (selectEl && selectEl.value) innerText = String(selectEl.value).trim();
+      if (!innerText) innerText = String(td.innerText || "").trim();
+      if (!innerText) return;
 
         if (innerText.startsWith("COORDINATE(")) {
 
@@ -10511,6 +10562,7 @@ function createAndAppendTable(dtControls) {
 
             return;
         }
+        if (!driver) return;
         document.getElementById("brokenText").style.display = "none";
 
         try {
@@ -10566,7 +10618,6 @@ function createAndAppendTable(dtControls) {
           loadingImage = false; // Reset loadingImage flag after image loading is complete or failed
           document.getElementById("div_status_bar_ss").style.display = "none";
         }
-      }
     });
 
     // ===========================================================================
@@ -10749,37 +10800,12 @@ function createAndAppendTable(dtControls) {
             return;
         }
 
-        const isScenarioMode = Boolean(
-            window.pageScenarioData &&
-            Object.keys(window.pageScenarioData).length > 0 &&
-            Object.values(window.pageScenarioData).some(s => s && (s.scenarioName || s.scenarioOutline))
-        );
-
-        // Record scenario send/download share the same JSON shape:
-        // { isRecordscenario: true, dashboardControls: { APP URL, SCENARIOS: [...] } }
-        let dataToSend;
-        if (isScenarioMode) {
-            dataToSend = (typeof buildScenarioPayload === "function")
-                ? buildScenarioPayload(tableData)
-                : {
-                    "isRecordscenario": true,
-                    "dashboardControls": {
-                        "APP URL": "",
-                        "APP ACTIVITY": "",
-                        "APP PACKAGE": "",
-                        "BUNDLE ID": "",
-                        "DEVICE NAME": "",
-                        "UDID": "",
-                        "SCENARIOS": [{
-                            "SCENARIO_NAME": "Scenario",
-                            "SCENARIO_OUTLINE": "",
-                            "STEPS": tableData
-                        }]
-                    }
-                };
-        } else {
-            dataToSend = tableData;
-        }
+        const dataToSend = (typeof buildHomeExportJson === "function")
+            ? buildHomeExportJson(tableData)
+            : { "isRecordscenario": false, "dashboardControls": tableData };
+        const isScenarioMode = (typeof isRecordScenarioExportMode === "function")
+            ? isRecordScenarioExportMode()
+            : Boolean(dataToSend && dataToSend.isRecordscenario);
 
         const payload = {
             data: dataToSend,

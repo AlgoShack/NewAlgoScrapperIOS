@@ -36,9 +36,12 @@ coverage/
 
 # Bundled Node.js download/extract scratch
 .tmp-node-download/
+.tmp-android-tools-download/
 .tmp-win-prune/
 # Local Node binary (restore with npm run download-node); too large for GitHub
 bundled-node/node
 bundled-node/node.exe
+# Local Android SDK + JRE (restore with npm run download-android-tools)
+bundled-android-tools/
 # GitHub Actions needs token `workflow` scope to push; keep local only
 .github/workflows/

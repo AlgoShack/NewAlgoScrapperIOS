@@ -7,6 +7,7 @@
  *   1) Resolves system npm-cli.js (never broken local node_modules/.bin/npm@3)
  *   2) npm install at repo root (Electron app)
  *   3) Downloads bundled Node → ./bundled-node (Appium runner)
+ *   3b) Downloads bundled Android tools → ./bundled-android-tools (adb, apksigner, JRE)
  *   4) npm install inside appium-runtime/ (Appium + drivers)
  *   5) Ensures drivers: uiautomator2 (Android), xcuitest (iOS)
  *
@@ -247,6 +248,9 @@ function main() {
     // 2) Bundled Node for Appium (no user Node install needed at runtime)
     run(process.execPath, [path.join(ROOT, 'scripts', 'download-bundled-node.js')], ROOT);
 
+    // 2b) Bundled adb + build-tools + JRE (no user Android Studio / Java needed)
+    run(process.execPath, [path.join(ROOT, 'scripts', 'download-bundled-android-tools.js')], ROOT);
+
     // 3) Appium runtime install + drivers
     if (!fs.existsSync(APPIUM_RUNTIME)) {
         throw new Error(`Missing appium-runtime folder at ${APPIUM_RUNTIME}`);
@@ -264,6 +268,7 @@ function main() {
 
     console.log('\nSetup complete.');
     console.log('- Bundled Node: bundled-node/');
+    console.log('- Bundled Android tools: bundled-android-tools/');
     console.log('- Bundled Appium: appium-runtime/');
     console.log('Next: npm start');
 }

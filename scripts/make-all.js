@@ -10,6 +10,7 @@
  *   npm run make:win      → Windows Setup.exe only
  *
  * AUTOMATIC (no manual cleanup needed):
+ *   • Downloads bundled-node + bundled-android-tools (adb, apksigner, JRE) into extraResource
  *   • Clears electron-packager leftovers (common ENOSPC cause)
  *   • Removes Xcode *.noindex / Intermediates caches from node_modules
  *   • Clears old out/ artifacts for the target being built
@@ -62,6 +63,27 @@ function run(cmd, args, opts = {}) {
 
 function runNode(scriptArgs) {
     run(process.execPath, scriptArgs);
+}
+
+function downloadBundledAndroidTools(platform, arch) {
+    const marker = path.join(ROOT, 'bundled-android-tools', '.platform');
+    const want = `${platform}-${arch}`;
+    const adbName = platform === 'win32' ? 'adb.exe' : 'adb';
+    const adbPath = path.join(ROOT, 'bundled-android-tools', 'platform-tools', adbName);
+    const javaPath = path.join(ROOT, 'bundled-android-tools', 'jre', 'bin', platform === 'win32' ? 'java.exe' : 'java');
+    if (fs.existsSync(adbPath) && fs.existsSync(javaPath) && fs.existsSync(marker)) {
+        try {
+            if (fs.readFileSync(marker, 'utf8').trim() === want) {
+                console.log(`   bundled-android-tools already ${want} — skip download`);
+                return;
+            }
+        } catch (_) {}
+    }
+    runNode([
+        path.join('scripts', 'download-bundled-android-tools.js'),
+        '--platform', platform,
+        '--arch', arch
+    ]);
 }
 
 function downloadBundledNode(platform, arch) {
@@ -620,6 +642,7 @@ function buildIOS() {
     }
 
     downloadBundledNode('darwin', arch);
+    downloadBundledAndroidTools('darwin', arch);
     // Last wipe right before forge (failed runs leave multi‑GB tmp trees)
     cleanPackagerTemp();
     assertDiskSpace(5);
@@ -657,6 +680,7 @@ function buildWindows() {
 
     autoPrepareDiskForMake('win');
     downloadBundledNode('win32', arch);
+    downloadBundledAndroidTools('win32', arch);
 
     const restoreRuntime = pruneAppiumRuntimeForWindows();
     try {
@@ -677,6 +701,11 @@ function restoreHostNode() {
         downloadBundledNode(process.platform, process.arch === 'ia32' ? 'x86' : process.arch);
     } catch (err) {
         console.warn('Could not restore host bundled-node:', err.message || err);
+    }
+    try {
+        downloadBundledAndroidTools(process.platform, process.arch === 'ia32' ? 'x86' : process.arch);
+    } catch (err) {
+        console.warn('Could not restore host bundled-android-tools:', err.message || err);
     }
 }
 

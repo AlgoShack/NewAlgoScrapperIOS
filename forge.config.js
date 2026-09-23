@@ -3,8 +3,9 @@
  *
  * Bundles BOTH mobile automation stacks into the shipped app so end users
  * do not need system Node or system Appium:
- *   - ./appium-runtime  → Appium 2 + UiAutomator2 (Android) + XCUITest (iOS)
- *   - ./bundled-node    → Node binary used to spawn Appium (see scripts/download-bundled-node.js)
+ *   - ./appium-runtime           → Appium 2 + UiAutomator2 (Android) + XCUITest (iOS)
+ *   - ./bundled-node             → Node binary used to spawn Appium
+ *   - ./bundled-android-tools    → adb, build-tools (apksigner), Temurin JRE
  *
  * Distributables:
  *   npm run make      → THIS machine only (Mac → iOS/Mac .app+dmg, Windows → Setup.exe)
@@ -40,16 +41,18 @@ module.exports = {
       unpackDir: '{appium-runtime,node_modules/appium-xcuitest-driver}'
     },
 
-    // Copied next to the app as process.resourcesPath/{appium-runtime,bundled-node}
+    // Copied next to the app as process.resourcesPath/{appium-runtime,bundled-node,bundled-android-tools}
     extraResource: [
       "./appium-runtime",
-      "./bundled-node"
+      "./bundled-node",
+      "./bundled-android-tools"
     ],
 
     // Don't ship junk into the package (Xcode caches cause ENOSPC during copy)
     ignore: [
       /^\/appium-runtime\/\.appium-home($|\/)/,
       /^\/\.tmp-node-download($|\/)/,
+      /^\/\.tmp-android-tools-download($|\/)/,
       /^\/\.tmp-win-prune($|\/)/,
       /^\/out($|\/)/,
       /^\/algoScraper-builds($|\/)/,

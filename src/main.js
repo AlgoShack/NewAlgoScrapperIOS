@@ -12,14 +12,14 @@
      *
      * STARTUP FLOW (app.on 'ready')
      *   1) Splash popup          → createLoadingWindow()
-     *   2) Prerequisites         → bundled Node + appium-runtime present
+     *   2) Prerequisites         → bundled Node + appium-runtime + Android tools present
      *   3) Automation engine     → ensureAppiumStarted() on port 4723
      *      Prefer bundled Appium+Node; if that fails, fall back to system Appium+Node
      *   4) Device check          → Android (adb) + iOS (simctl/xcdevice), Android preferred
      *   5) Main window           → createWindow() → src/index.html + popup.js
      *
      * KEY SECTIONS (search these headers below)
-     *   [ENV]         PATH + auto ANDROID_HOME (detect Studio SDK or download platform-tools)
+     *   [ENV]         PATH + auto ANDROID_HOME (platform-tools, build-tools) + Java JRE
      *   [APPIUM]      Bundled → system fallback / Node / extensions.yaml / APPIUM_HOME
      *   [SPLASH]      Startup loading popup (real-time status)
      *   [DEVICES]     Android + iOS connected-device discovery (iOS skipped on Windows)
@@ -180,6 +180,46 @@
         }
     }
 
+    function sdkHasApksigner(root) {
+        if (!root) return false;
+        const jarNames = [
+            path.join(root, 'platform-tools', 'apksigner.jar'),
+            path.join(root, 'apksigner.jar')
+        ];
+        try {
+            if (jarNames.some((p) => fs.existsSync(p))) return true;
+            const buildTools = path.join(root, 'build-tools');
+            if (!fs.existsSync(buildTools)) return false;
+            const versions = fs.readdirSync(buildTools);
+            for (const version of versions) {
+                const dir = path.join(buildTools, version);
+                const bat = process.platform === 'win32' ? 'apksigner.bat' : 'apksigner';
+                if (
+                    fs.existsSync(path.join(dir, 'lib', 'apksigner.jar'))
+                    || fs.existsSync(path.join(dir, 'apksigner.jar'))
+                    || fs.existsSync(path.join(dir, bat))
+                ) {
+                    return true;
+                }
+            }
+        } catch (_) {}
+        return false;
+    }
+
+    function listBuildToolsBinDirs(sdk) {
+        const dirs = [];
+        try {
+            const buildTools = path.join(sdk, 'build-tools');
+            if (!fs.existsSync(buildTools)) return dirs;
+            const versions = fs.readdirSync(buildTools).sort().reverse();
+            for (const version of versions) {
+                const dir = path.join(buildTools, version);
+                if (fs.existsSync(dir)) dirs.push(dir);
+            }
+        } catch (_) {}
+        return dirs;
+    }
+
     function getManagedAndroidSdkRoot() {
         try {
             return path.join(app.getPath('userData'), 'android-sdk');
@@ -188,7 +228,51 @@
         }
     }
 
+    function getManagedJreRoot() {
+        try {
+            return path.join(app.getPath('userData'), 'jre');
+        } catch (_) {
+            return path.join(os.homedir(), '.algoscraper', 'jre');
+        }
+    }
+
+    function getBundledAndroidToolsDir() {
+        const dirs = [];
+        try {
+            if (app.isPackaged && process.resourcesPath) {
+                dirs.push(path.join(process.resourcesPath, 'bundled-android-tools'));
+            }
+        } catch (_) {}
+        dirs.push(path.join(__dirname, '..', 'bundled-android-tools'));
+        if (process.resourcesPath) {
+            dirs.push(path.join(process.resourcesPath, 'bundled-android-tools'));
+        }
+        return [...new Set(dirs.filter(Boolean))];
+    }
+
+    function getBundledAndroidToolsRoot() {
+        for (const root of getBundledAndroidToolsDir()) {
+            try {
+                if (androidSdkLooksValid(root) && sdkHasApksigner(root)) return path.resolve(root);
+            } catch (_) {}
+        }
+        return null;
+    }
+
+    function getBundledJreHome() {
+        for (const root of getBundledAndroidToolsDir()) {
+            const jre = path.join(root, 'jre');
+            if (javaHomeLooksValid(jre)) return jre;
+            const macHome = path.join(jre, 'Contents', 'Home');
+            if (javaHomeLooksValid(macHome)) return macHome;
+        }
+        return null;
+    }
+
     function resolveAndroidSdkRoot() {
+        const bundled = getBundledAndroidToolsRoot();
+        if (bundled) return bundled;
+
         const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
         const userProfile = process.env.USERPROFILE || os.homedir();
         const progFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
@@ -367,6 +451,7 @@
         const pathSep = process.platform === 'win32' ? ';' : ':';
         const extras = [
             path.join(sdk, 'platform-tools'),
+            ...listBuildToolsBinDirs(sdk),
             path.join(sdk, 'emulator'),
             path.join(sdk, 'tools'),
             path.join(sdk, 'tools', 'bin')
@@ -409,7 +494,25 @@
         return null;
     }
 
+    function javaHomeFromPath() {
+        const javaName = process.platform === 'win32' ? 'java.exe' : 'java';
+        const pathSep = process.platform === 'win32' ? ';' : ':';
+        try {
+            for (const dir of String(process.env.PATH || '').split(pathSep)) {
+                if (!dir) continue;
+                if (!fs.existsSync(path.join(dir, javaName))) continue;
+                const home = path.resolve(dir, '..');
+                if (javaHomeLooksValid(home)) return home;
+                const macHome = path.join(home, 'Contents', 'Home');
+                if (javaHomeLooksValid(macHome)) return macHome;
+            }
+        } catch (_) {}
+        return null;
+    }
+
     function resolveJavaHome() {
+        const bundled = getBundledJreHome();
+        if (bundled) return bundled;
         if (javaHomeLooksValid(process.env.JAVA_HOME)) return process.env.JAVA_HOME;
         const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
         const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
@@ -425,16 +528,27 @@
         for (const root of studioJbr) {
             if (javaHomeLooksValid(root)) return root;
         }
-        return firstExistingJavaHome([
+        const fromInstalls = firstExistingJavaHome([
             path.join(pf, 'Java'),
             path.join(pf, 'Eclipse Adoptium'),
+            path.join(pf, 'Eclipse Foundation'),
             path.join(pf, 'Microsoft'),
             path.join(pf, 'Amazon Corretto'),
+            path.join(pf, 'Zulu'),
+            path.join(pf, 'BellSoft'),
             path.join(pf86, 'Java'),
+            path.join(localAppData, 'Programs', 'Eclipse Adoptium'),
+            path.join(os.homedir(), '.jdks'),
             '/Library/Java/JavaVirtualMachines',
             '/opt/homebrew/opt/openjdk',
             '/usr/local/opt/openjdk'
         ]);
+        if (fromInstalls) return fromInstalls;
+        const fromPath = javaHomeFromPath();
+        if (fromPath) return fromPath;
+        const managed = getManagedJreRoot();
+        if (javaHomeLooksValid(managed)) return managed;
+        return null;
     }
 
     function applyJavaHomeToEnv(env) {
@@ -468,11 +582,28 @@
         return 'https://dl.google.com/android/repository/platform-tools-latest-linux.zip';
     }
 
-    async function downloadHttpsFile(fileUrl, destPath) {
+    const ANDROID_BUILD_TOOLS_VERSION = '34.0.0';
+    const ANDROID_BUILD_TOOLS_ZIP_TAG = '34';
+
+    function buildToolsDownloadUrl() {
+        if (process.platform === 'win32') {
+            return `https://dl.google.com/android/repository/build-tools_r${ANDROID_BUILD_TOOLS_ZIP_TAG}-windows.zip`;
+        }
+        if (process.platform === 'darwin') {
+            return `https://dl.google.com/android/repository/build-tools_r${ANDROID_BUILD_TOOLS_ZIP_TAG}-macosx.zip`;
+        }
+        return `https://dl.google.com/android/repository/build-tools_r${ANDROID_BUILD_TOOLS_ZIP_TAG}-linux.zip`;
+    }
+
+    async function downloadHttpsFile(fileUrl, destPath, timeoutMs) {
+        const waitMs = Number(timeoutMs) > 0 ? Number(timeoutMs) : 90000;
         try {
             const { net } = require('electron');
             if (net && typeof net.fetch === 'function') {
-                const res = await net.fetch(fileUrl, { redirect: 'follow' });
+                const res = await Promise.race([
+                    net.fetch(fileUrl, { redirect: 'follow' }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error(`Download timed out after ${Math.round(waitMs / 1000)}s`)), waitMs))
+                ]);
                 if (!res.ok) {
                     throw new Error(`Download failed ${res.status} for ${fileUrl}`);
                 }
@@ -503,9 +634,9 @@
                     res.pipe(file);
                     file.on('finish', () => file.close(() => resolve(destPath)));
                 });
-                req.setTimeout(90000, () => {
+                req.setTimeout(waitMs, () => {
                     req.destroy();
-                    reject(new Error('Download timed out after 90s'));
+                    reject(new Error(`Download timed out after ${Math.round(waitMs / 1000)}s`));
                 });
                 req.on('error', (err) => {
                     try { fs.unlinkSync(destPath); } catch (_) {}
@@ -541,8 +672,41 @@
         }
     }
 
+    function detectArchiveKind(filePath) {
+        try {
+            const fd = fs.openSync(filePath, 'r');
+            const buf = Buffer.alloc(4);
+            fs.readSync(fd, buf, 0, 4, 0);
+            fs.closeSync(fd);
+            if (buf[0] === 0x1f && buf[1] === 0x8b) return 'tar.gz';
+            if (buf[0] === 0x50 && buf[1] === 0x4b) return 'zip';
+        } catch (_) {}
+        const lower = String(filePath || '').toLowerCase();
+        if (lower.endsWith('.tar.gz') || lower.endsWith('.tgz')) return 'tar.gz';
+        return 'zip';
+    }
+
+    function extractArchive(archivePath, destDir) {
+        fs.mkdirSync(destDir, { recursive: true });
+        if (detectArchiveKind(archivePath) === 'tar.gz') {
+            const tar = process.platform === 'win32'
+                ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+                : 'tar';
+            const result = spawnSync(tar, ['-xzf', archivePath, '-C', destDir], {
+                windowsHide: true,
+                encoding: 'utf8'
+            });
+            if (result.status !== 0) {
+                throw new Error((result.stderr || result.stdout || 'Failed to extract archive').toString().trim());
+            }
+            return;
+        }
+        unzipArchive(archivePath, destDir);
+    }
+
     function copyBundledAndroidSdkIfPresent(managedRoot) {
         const bundledRoots = [
+            ...getBundledAndroidToolsDir(),
             process.resourcesPath ? path.join(process.resourcesPath, 'android-sdk') : null,
             path.join(__dirname, '..', 'android-sdk')
         ].filter(Boolean);
@@ -552,8 +716,137 @@
             const from = path.join(root, 'platform-tools');
             const to = path.join(managedRoot, 'platform-tools');
             fs.cpSync(from, to, { recursive: true });
+            const fromBt = path.join(root, 'build-tools');
+            const toBt = path.join(managedRoot, 'build-tools');
+            if (fs.existsSync(fromBt)) {
+                fs.cpSync(fromBt, toBt, { recursive: true });
+            }
             return androidSdkLooksValid(managedRoot);
         }
+        return false;
+    }
+
+    function findApksignerFile(root, maxDepth) {
+        const stack = [{ dir: root, depth: 0 }];
+        const limit = Number(maxDepth) > 0 ? Number(maxDepth) : 5;
+        while (stack.length) {
+            const item = stack.pop();
+            if (!item || item.depth > limit) continue;
+            let entries = [];
+            try {
+                entries = fs.readdirSync(item.dir, { withFileTypes: true });
+            } catch (_) {
+                continue;
+            }
+            for (const entry of entries) {
+                const full = path.join(item.dir, entry.name);
+                if (entry.isFile() && /^(apksigner(\.jar|\.bat)?)$/i.test(entry.name)) {
+                    return full;
+                }
+                if (entry.isDirectory() && entry.name !== '.' && entry.name !== '..') {
+                    stack.push({ dir: full, depth: item.depth + 1 });
+                }
+            }
+        }
+        return null;
+    }
+
+    function copyApksignerJarFallback(sdkRoot, toolDir) {
+        const candidates = [
+            path.join(toolDir, 'lib', 'apksigner.jar'),
+            path.join(toolDir, 'apksigner.jar')
+        ];
+        const jar = candidates.find((p) => {
+            try { return fs.existsSync(p); } catch (_) { return false; }
+        });
+        if (!jar) return;
+        const dests = [
+            path.join(sdkRoot, 'platform-tools', 'apksigner.jar'),
+            path.join(sdkRoot, 'apksigner.jar')
+        ];
+        for (const dest of dests) {
+            try {
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                fs.copyFileSync(jar, dest);
+            } catch (_) {}
+        }
+    }
+
+    async function installBuildTools(sdkRoot) {
+        if (!sdkRoot) throw new Error('No Android SDK root for build-tools.');
+        const dest = path.join(sdkRoot, 'build-tools', ANDROID_BUILD_TOOLS_VERSION);
+        const zipPath = path.join(os.tmpdir(), `algoscraper-build-tools-${Date.now()}.zip`);
+        const extractDir = path.join(os.tmpdir(), `algoscraper-build-tools-extract-${Date.now()}`);
+        try {
+            console.log('Downloading Android build-tools (apksigner) for AlgoScraper…');
+            await reportAndroidToolsStatus('Downloading Android build tools');
+            await downloadHttpsFile(buildToolsDownloadUrl(), zipPath, 180000);
+            await reportAndroidToolsStatus('Installing Android build tools');
+            unzipArchive(zipPath, extractDir);
+            const signer = findApksignerFile(extractDir, 6);
+            if (!signer) {
+                throw new Error('Downloaded build-tools, but apksigner was not found after extract.');
+            }
+            let toolDir = path.dirname(signer);
+            if (path.basename(toolDir).toLowerCase() === 'lib') {
+                toolDir = path.dirname(toolDir);
+            }
+            fs.mkdirSync(path.join(sdkRoot, 'build-tools'), { recursive: true });
+            if (fs.existsSync(dest)) {
+                fs.rmSync(dest, { recursive: true, force: true });
+            }
+            fs.cpSync(toolDir, dest, { recursive: true });
+            if (process.platform !== 'win32') {
+                const unixBin = path.join(dest, 'apksigner');
+                if (fs.existsSync(unixBin)) {
+                    try { fs.chmodSync(unixBin, 0o755); } catch (_) {}
+                }
+            }
+            copyApksignerJarFallback(sdkRoot, dest);
+        } finally {
+            try { fs.unlinkSync(zipPath); } catch (_) {}
+            try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) {}
+        }
+        if (!sdkHasApksigner(sdkRoot)) {
+            throw new Error('Downloaded build-tools, but apksigner was not found after extract.');
+        }
+    }
+
+    async function ensureAndroidBuildTools(sdkRoot) {
+        if (!sdkRoot) return false;
+        if (sdkHasApksigner(sdkRoot)) return true;
+        let lastErr = null;
+        try {
+            await installBuildTools(sdkRoot);
+            if (sdkHasApksigner(sdkRoot)) return true;
+        } catch (err) {
+            lastErr = err;
+            console.warn('Could not install build-tools into', sdkRoot, err && err.message);
+        }
+        const managed = getManagedAndroidSdkRoot();
+        if (path.resolve(managed) !== path.resolve(sdkRoot)) {
+            try {
+                await installBuildTools(managed);
+                const managedSigner = findApksignerFile(path.join(managed, 'build-tools'), 4);
+                if (managedSigner) {
+                    let toolDir = path.dirname(managedSigner);
+                    if (path.basename(toolDir).toLowerCase() === 'lib') toolDir = path.dirname(toolDir);
+                    copyApksignerJarFallback(sdkRoot, toolDir);
+                    try {
+                        const dest = path.join(sdkRoot, 'build-tools', ANDROID_BUILD_TOOLS_VERSION);
+                        fs.mkdirSync(path.join(sdkRoot, 'build-tools'), { recursive: true });
+                        fs.cpSync(toolDir, dest, { recursive: true });
+                    } catch (copyErr) {
+                        console.warn('Could not copy build-tools into ANDROID_HOME:', copyErr && copyErr.message);
+                    }
+                }
+            } catch (err) {
+                lastErr = err;
+                console.warn('Could not auto-install Android build-tools:', err && err.message);
+            }
+        }
+        if (sdkHasApksigner(sdkRoot) || sdkHasApksigner(managed)) return true;
+        if (lastErr) throw lastErr;
         return false;
     }
 
@@ -561,7 +854,9 @@
         const zipPath = path.join(os.tmpdir(), `algoscraper-platform-tools-${Date.now()}.zip`);
         try {
             console.log('Downloading Android platform-tools for AlgoScraper…');
+            await reportAndroidToolsStatus('Downloading Android platform tools');
             await downloadHttpsFile(platformToolsDownloadUrl(), zipPath);
+            await reportAndroidToolsStatus('Installing Android platform tools');
             const existing = path.join(managedRoot, 'platform-tools');
             if (fs.existsSync(existing)) {
                 fs.rmSync(existing, { recursive: true, force: true });
@@ -585,51 +880,250 @@
         if (androidSdkEnsurePromise) return androidSdkEnsurePromise;
         androidSdkEnsurePromise = (async () => {
             applyAndroidToolingToEnv(process.env);
+            const bundledSdk = getBundledAndroidToolsRoot();
+            if (bundledSdk && sdkHasApksigner(bundledSdk)) {
+                return {
+                    sdk: bundledSdk,
+                    source: 'bundled',
+                    hasApksigner: true,
+                    downloadAttempted: false,
+                    downloadError: null,
+                    offline: false
+                };
+            }
             let sdk = resolveAndroidSdkRoot();
-            if (sdk) return { sdk, source: 'existing' };
+            let source = sdk ? 'existing' : null;
+            let downloadAttempted = false;
+            let downloadError = null;
 
-            const managed = getManagedAndroidSdkRoot();
-            if (androidSdkLooksValid(managed)) {
-                applyAndroidToolingToEnv(process.env);
-                return { sdk: managed, source: 'managed' };
-            }
-
-            try {
-                try {
-                    if (copyBundledAndroidSdkIfPresent(managed)) {
-                        applyAndroidToolingToEnv(process.env);
-                        return { sdk: managed, source: 'bundled' };
+            if (!sdk) {
+                const managed = getManagedAndroidSdkRoot();
+                if (androidSdkLooksValid(managed)) {
+                    sdk = managed;
+                    source = 'managed';
+                } else {
+                    try {
+                        try {
+                            if (copyBundledAndroidSdkIfPresent(managed)) {
+                                sdk = managed;
+                                source = 'bundled';
+                            }
+                        } catch (copyErr) {
+                            console.warn('Bundled Android SDK copy skipped:', copyErr && copyErr.message);
+                        }
+                        if (!sdk) {
+                            downloadAttempted = true;
+                            await installPlatformTools(managed);
+                            sdk = managed;
+                            source = 'downloaded';
+                            console.log('Android SDK (managed):', managed);
+                        }
+                    } catch (err) {
+                        console.warn('Could not auto-install Android platform-tools:', err && err.message);
+                        return {
+                            sdk: null,
+                            source: 'failed',
+                            error: err && err.message,
+                            hasApksigner: false,
+                            downloadAttempted: true,
+                            downloadError: err && err.message,
+                            offline: isNoInternetError(err)
+                        };
                     }
-                } catch (copyErr) {
-                    console.warn('Bundled Android SDK copy skipped:', copyErr && copyErr.message);
                 }
-                await installPlatformTools(managed);
-                applyAndroidToolingToEnv(process.env);
-                console.log('Android SDK (managed):', managed);
-                return { sdk: managed, source: 'downloaded' };
-            } catch (err) {
-                console.warn('Could not auto-install Android platform-tools:', err && err.message);
-                return { sdk: null, source: 'failed', error: err && err.message };
             }
+
+            let hasApksigner = sdkHasApksigner(sdk);
+            if (!hasApksigner) {
+                downloadAttempted = true;
+                try {
+                    hasApksigner = await ensureAndroidBuildTools(sdk);
+                    if (!hasApksigner) {
+                        downloadError = 'Android build tools could not be installed.';
+                    }
+                } catch (err) {
+                    console.warn('Android build-tools setup failed:', err && err.message);
+                    downloadError = err && err.message;
+                    const failed = {
+                        err,
+                        offline: isNoInternetError(err)
+                    };
+                    applyAndroidToolingToEnv(process.env);
+                    const resolved = resolveAndroidSdkRoot() || sdk;
+                    return {
+                        sdk: resolved,
+                        source: source || 'existing',
+                        hasApksigner: sdkHasApksigner(resolved),
+                        downloadAttempted: true,
+                        downloadError: failed.err && failed.err.message,
+                        offline: failed.offline
+                    };
+                }
+            }
+
+            applyAndroidToolingToEnv(process.env);
+            const resolved = resolveAndroidSdkRoot() || sdk;
+            return {
+                sdk: resolved,
+                source: source || 'existing',
+                hasApksigner: sdkHasApksigner(resolved),
+                downloadAttempted,
+                downloadError,
+                offline: isNoInternetError(downloadError)
+            };
         })().finally(() => {
             androidSdkEnsurePromise = null;
         });
         return androidSdkEnsurePromise;
     }
 
+    function findJavaHomeUnder(root, maxDepth) {
+        if (!root) return null;
+        const skip = new Set(['node_modules', '.git', 'System Volume Information']);
+        const stack = [{ dir: root, depth: 0 }];
+        const limit = Number(maxDepth) > 0 ? Number(maxDepth) : 6;
+        while (stack.length) {
+            const item = stack.pop();
+            if (!item || item.depth > limit) continue;
+            if (javaHomeLooksValid(item.dir)) return item.dir;
+            const macHome = path.join(item.dir, 'Contents', 'Home');
+            if (javaHomeLooksValid(macHome)) return macHome;
+            let entries = [];
+            try {
+                entries = fs.readdirSync(item.dir, { withFileTypes: true });
+            } catch (_) {
+                continue;
+            }
+            for (const entry of entries) {
+                if (!entry.isDirectory() || skip.has(entry.name) || entry.name === '.' || entry.name === '..') continue;
+                stack.push({ dir: path.join(item.dir, entry.name), depth: item.depth + 1 });
+            }
+        }
+        return null;
+    }
+
+    function jreDownloadUrl() {
+        const osName = process.platform === 'win32' ? 'windows' : (process.platform === 'darwin' ? 'mac' : 'linux');
+        const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
+        return `https://api.adoptium.net/v3/binary/latest/17/ga/${osName}/${arch}/jre/hotspot/normal/eclipse?project=jdk`;
+    }
+
+    function copyBundledJreIfPresent() {
+        const dest = getManagedJreRoot();
+        const bundledRoots = [
+            ...getBundledAndroidToolsDir().map((root) => path.join(root, 'jre')),
+            process.resourcesPath ? path.join(process.resourcesPath, 'jre') : null,
+            path.join(__dirname, '..', 'jre')
+        ].filter(Boolean);
+        for (const root of bundledRoots) {
+            try {
+                if (!fs.existsSync(root)) continue;
+                const home = javaHomeLooksValid(root) ? root : findJavaHomeUnder(root, 4);
+                if (!home) continue;
+                fs.mkdirSync(path.dirname(dest), { recursive: true });
+                if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+                fs.cpSync(home, dest, { recursive: true });
+                if (javaHomeLooksValid(dest)) return dest;
+            } catch (err) {
+                console.warn('Bundled Java copy skipped:', err && err.message);
+            }
+        }
+        return null;
+    }
+
+    async function installManagedJre() {
+        const dest = getManagedJreRoot();
+        const archivePath = path.join(os.tmpdir(), `algoscraper-jre-${Date.now()}.bin`);
+        const extractDir = path.join(os.tmpdir(), `algoscraper-jre-extract-${Date.now()}`);
+        try {
+            console.log('Downloading Java runtime for AlgoScraper…');
+            await reportAndroidToolsStatus('Downloading Java runtime');
+            await downloadHttpsFile(jreDownloadUrl(), archivePath, 240000);
+            await reportAndroidToolsStatus('Installing Java runtime');
+            extractArchive(archivePath, extractDir);
+            const home = findJavaHomeUnder(extractDir, 6);
+            if (!home) {
+                throw new Error('Downloaded Java runtime, but java was not found after extract.');
+            }
+            fs.mkdirSync(path.dirname(dest), { recursive: true });
+            if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+            fs.cpSync(home, dest, { recursive: true });
+            if (process.platform !== 'win32') {
+                const javaBin = path.join(dest, 'bin', 'java');
+                if (fs.existsSync(javaBin)) {
+                    try { fs.chmodSync(javaBin, 0o755); } catch (_) {}
+                }
+            }
+        } finally {
+            try { fs.unlinkSync(archivePath); } catch (_) {}
+            try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch (_) {}
+        }
+        if (!javaHomeLooksValid(dest)) {
+            throw new Error('Downloaded Java runtime, but java was not found after extract.');
+        }
+        return dest;
+    }
+
+    let javaEnsurePromise = null;
+
+    async function ensureManagedJava() {
+        if (javaEnsurePromise) return javaEnsurePromise;
+        javaEnsurePromise = (async () => {
+            applyJavaHomeToEnv(process.env);
+            const fromBundle = getBundledJreHome();
+            if (fromBundle) return { javaHome: fromBundle, source: 'bundled', downloadAttempted: false };
+            const existing = resolveJavaHome();
+            if (existing) return { javaHome: existing, source: 'existing', downloadAttempted: false };
+
+            const copiedJre = copyBundledJreIfPresent();
+            if (copiedJre) {
+                applyJavaHomeToEnv(process.env);
+                return { javaHome: copiedJre, source: 'bundled', downloadAttempted: false };
+            }
+
+            try {
+                const installed = await installManagedJre();
+                applyJavaHomeToEnv(process.env);
+                return { javaHome: installed, source: 'downloaded', downloadAttempted: true };
+            } catch (err) {
+                console.warn('Could not auto-install Java runtime:', err && err.message);
+                return {
+                    javaHome: null,
+                    source: 'failed',
+                    downloadAttempted: true,
+                    downloadError: err && err.message,
+                    offline: isNoInternetError(err)
+                };
+            }
+        })().finally(() => {
+            javaEnsurePromise = null;
+        });
+        return javaEnsurePromise;
+    }
+
+    async function ensureAndroidSystemDependencies() {
+        const sdkResult = await ensureManagedAndroidSdk();
+        const javaResult = await ensureManagedJava();
+        applyAndroidToolingToEnv(process.env);
+        return {
+            sdk: sdkResult && sdkResult.sdk,
+            hasApksigner: !!(sdkResult && sdkResult.hasApksigner),
+            javaHome: (javaResult && javaResult.javaHome) || resolveJavaHome(),
+            downloadAttempted: !!(sdkResult && sdkResult.downloadAttempted) || !!(javaResult && javaResult.downloadAttempted),
+            downloadError: (sdkResult && sdkResult.downloadError) || (javaResult && javaResult.downloadError) || null,
+            offline: !!(sdkResult && sdkResult.offline) || !!(javaResult && javaResult.offline),
+            sdkResult,
+            javaResult
+        };
+    }
+
     function androidSdkMissingMessage() {
         return process.platform === 'win32'
-            ? "AlgoScraper could not set up Android tools on this PC (ANDROID_HOME).\n\n"
-              + "The app normally downloads Google platform-tools automatically and sets ANDROID_HOME for you.\n\n"
-              + "Check your internet connection and try Launch again.\n"
-              + "Or install Android Studio (SDK Platform-Tools). Default folder:\n"
-              + "%LOCALAPPDATA%\\Android\\Sdk\n\n"
+            ? "AlgoScraper could not find bundled Android tools on this PC (adb, apksigner, Java).\n\n"
+              + "Those ship inside the installer the same way Node and Appium do. Reinstall AlgoScraper, or run npm run setup / npm run make:win when building.\n\n"
               + "You still need an emulator or a phone with USB debugging — those cannot be bundled."
-            : "AlgoScraper could not set up Android tools on this Mac (ANDROID_HOME).\n\n"
-              + "The app normally downloads Google platform-tools automatically and sets ANDROID_HOME for you.\n\n"
-              + "Check your internet connection and try Launch again.\n"
-              + "Or install Android Studio (SDK Platform-Tools). Default folder:\n"
-              + "~/Library/Android/sdk\n\n"
+            : "AlgoScraper could not find bundled Android tools on this Mac (adb, apksigner, Java).\n\n"
+              + "Those ship inside the app the same way Node and Appium do. Reinstall AlgoScraper, or run npm run setup / npm run make:ios when building.\n\n"
               + "iOS scraping uses Xcode and does not need ANDROID_HOME.\n"
               + "Android still needs an emulator or a phone with USB debugging.";
     }
@@ -667,7 +1161,9 @@
             path.join(process.env.SystemRoot || 'C:\\Windows', 'System32'),
             process.env.ANDROID_HOME ? path.join(process.env.ANDROID_HOME, 'platform-tools') : null,
             process.env.ANDROID_SDK_ROOT ? path.join(process.env.ANDROID_SDK_ROOT, 'platform-tools') : null,
-            process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk', 'platform-tools') : null
+            process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Android', 'Sdk', 'platform-tools') : null,
+            process.env.JAVA_HOME ? path.join(process.env.JAVA_HOME, 'bin') : null,
+            ...(process.env.ANDROID_HOME ? listBuildToolsBinDirs(process.env.ANDROID_HOME) : [])
         ].filter(Boolean);
         const parts = String(process.env.PATH || '').split(';').filter(Boolean);
         for (const p of winExtras) {
@@ -1919,6 +2415,30 @@
       if (delay > 0) await sleep(delay + 180);
     }
 
+    function isNoInternetError(err) {
+      const code = String((err && (err.code || err.errno)) || '').toUpperCase();
+      const msg = String((err && err.message) || err || '').toLowerCase();
+      return (
+        [
+          'ENOTFOUND', 'EAI_AGAIN', 'ENETUNREACH', 'EHOSTUNREACH', 'ENETDOWN',
+          'ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKETTIMEDOUT',
+          'ERR_INTERNET_DISCONNECTED', 'ERR_NAME_NOT_RESOLVED', 'ERR_NETWORK_CHANGED'
+        ].includes(code)
+        || /enotfound|eai_again|enetunreach|ehostunreach|enotconn|getaddrinfo|dns|offline|internet|network is unreachable|failed to fetch|network request failed|socket hang up|timed out|timeout|net::err_/i.test(msg)
+      );
+    }
+
+    async function reportAndroidToolsStatus(live, status) {
+      if (!loadingWindow || loadingWindow.isDestroyed()) return;
+      await setStartupStatus({
+        step: 'sdk',
+        status: status || 'active',
+        detail: live,
+        headline: 'Preparing AlgoScraper',
+        live
+      });
+    }
+
     async function showSuccess(step, detail, options = {}) {
       const {
         headline = 'Preparing AlgoScraper',
@@ -2835,29 +3355,46 @@
 
         if (startupCancelled) return;
 
-            if (!resolveAndroidSdkRoot()) {
-                await showStep('sdk', 'Preparing Android tools', {
+            const existingSdk = resolveAndroidSdkRoot();
+            const needsPlatformTools = !existingSdk;
+            const needsBuildTools = !!(existingSdk && !sdkHasApksigner(existingSdk));
+            const needsJava = !resolveJavaHome();
+
+            if (!needsPlatformTools && !needsBuildTools && !needsJava) {
+                applyAndroidToolingToEnv(process.env);
+            } else {
+                await showStep('sdk', 'Checking Android tools', {
                     headline: 'Preparing AlgoScraper',
-                    live: 'Downloading Android tools',
-                    delay: 200
+                    live: 'Checking Android tools',
+                    delay: 350
                 });
 
                 if (startupCancelled) return;
 
-                const sdkResult = await ensureManagedAndroidSdk();
+                const depResult = await ensureAndroidSystemDependencies();
                 if (startupCancelled) return;
 
-                if (sdkResult && sdkResult.sdk) {
+                if (depResult && depResult.downloadAttempted && depResult.downloadError) {
+                    const live = depResult.offline
+                        ? 'Download failed. Internet is not connected'
+                        : 'Android tools download failed';
+                    await setStartupStatus({
+                        step: 'sdk',
+                        status: 'error',
+                        detail: live,
+                        headline: 'Preparing AlgoScraper',
+                        live
+                    });
+                    await sleep(1600);
+                } else if (depResult && (depResult.sdk || depResult.javaHome)) {
                     await showSuccess('sdk', 'Android tools ready', {
                         headline: 'Preparing AlgoScraper',
                         live: 'Android tools ready',
-                        delay: 300
+                        delay: 400
                     });
                 } else {
-                    console.warn('Android tools not ready:', sdkResult && sdkResult.error);
+                    console.warn('Android tools not ready:', depResult && depResult.downloadError);
                 }
-            } else {
-                applyAndroidToolingToEnv(process.env);
             }
 
             if (startupCancelled) return;
@@ -3193,20 +3730,23 @@
     // Used by Launch Application in popup.js before creating the WebDriver session
     // ===========================================================================
     ipcMain.handle("android-sdk-status", async () => {
-        const ensured = await ensureManagedAndroidSdk();
+        const ensured = await ensureAndroidSystemDependencies();
         applyAndroidToolingToEnv(process.env);
         const sdk = (ensured && ensured.sdk) || resolveAndroidSdkRoot();
-        const javaHome = resolveJavaHome();
+        const javaHome = (ensured && ensured.javaHome) || resolveJavaHome();
         return {
             found: !!sdk,
             sdk: sdk || null,
             javaHome: javaHome || null,
+            hasApksigner: !!(ensured && ensured.hasApksigner) || sdkHasApksigner(sdk),
             message: sdk ? null : androidSdkMissingMessage()
         };
     });
 
     ipcMain.handle("ensure-appium", async (event, opts) => {
         try {
+            await ensureAndroidSystemDependencies();
+            applyAndroidToolingToEnv(process.env);
             const forceRestart = !!(opts && opts.forceRestart);
             let result = await ensureAppiumStarted({ forceRestart });
             if (!result || !result.success) {
@@ -3539,8 +4079,10 @@
     function resolveAaptBinary() {
         const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
         const roots = [
+            resolveAndroidSdkRoot(),
             process.env.ANDROID_HOME,
             process.env.ANDROID_SDK_ROOT,
+            getManagedAndroidSdkRoot(),
             path.join(os.homedir(), 'Library', 'Android', 'sdk'),
             path.join(os.homedir(), 'Android', 'Sdk'),
             path.join(localAppData, 'Android', 'Sdk')
