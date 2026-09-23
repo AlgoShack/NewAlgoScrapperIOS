@@ -7392,8 +7392,39 @@
         );
     }
 
-    // Same JSON for Download and algoQA send (Windows + Mac).
-    // Normal: { isRecordscenario:false, dashboardControls:[...] }
+    function formatNormalExportRow(row) {
+        const sanitized = (typeof sanitizeExportRow === "function") ? sanitizeExportRow(row) : (row || {});
+        const xpRaw = sanitized["XPATH"];
+        const xpath = Array.isArray(xpRaw)
+            ? String(xpRaw[0] || "").trim()
+            : String(xpRaw == null ? "" : xpRaw).trim();
+        let fingerprint = sanitized["FINGERPRINT"];
+        if (!fingerprint || typeof fingerprint !== "object" || Array.isArray(fingerprint)) {
+            fingerprint = {};
+        }
+        return {
+            "CONTROL NAME": sanitized["CONTROL NAME"] || "",
+            "CONTROL TYPE": sanitized["CONTROL TYPE"] || "",
+            "CONTROL ACTION": sanitized["CONTROL ACTION"] || "",
+            "XPATH": xpath,
+            "IDENTIFICATION TYPE": sanitized["IDENTIFICATION TYPE"] || "XPATH",
+            "CONTROL VALUE": sanitized["CONTROL VALUE"] || "",
+            "FEATURE NAME": sanitized["FEATURE NAME"] || "",
+            "NODE NAME": sanitized["NODE NAME"] || "",
+            "PAGE NAME": sanitized["PAGE NAME"] || "",
+            "APP URL": sanitized["APP URL"] || "",
+            "APP ACTIVITY": sanitized["APP ACTIVITY"] || "",
+            "APP PACKAGE": sanitized["APP PACKAGE"] || "",
+            "BUNDLE ID": sanitized["BUNDLE ID"] || "",
+            "DEVICE NAME": sanitized["DEVICE NAME"] || "",
+            "UDID": sanitized["UDID"] || "",
+            "FINGERPRINT": fingerprint
+        };
+    }
+    window.formatNormalExportRow = formatNormalExportRow;
+
+    // Inner JSON used by download + AlgoQA `data`.
+    // Normal: [ { CONTROL NAME, ... } ] — no isRecordscenario / dashboardControls
     // Record: { isRecordscenario:true, dashboardControls:{ APP URL, SCENARIOS } }
     function buildHomeExportJson(dashboardControls) {
         if (isRecordScenarioExportMode()) {
@@ -7416,10 +7447,7 @@
                     }
                 };
         }
-        return {
-            "isRecordscenario": false,
-            "dashboardControls": dashboardControls || []
-        };
+        return (dashboardControls || []).map(formatNormalExportRow);
     }
     window.buildHomeExportJson = buildHomeExportJson;
 
@@ -7442,9 +7470,16 @@
             return;
         }
 
-        const jsonContent = (typeof buildHomeExportJson === "function")
+        const exportJson = (typeof buildHomeExportJson === "function")
             ? buildHomeExportJson(dashboardControls)
-            : { "isRecordscenario": false, "dashboardControls": dashboardControls };
+            : dashboardControls.map((row) =>
+                (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : row
+            );
+        const jsonContent = (exportJson && !Array.isArray(exportJson) && exportJson.isRecordscenario)
+            ? exportJson
+            : (Array.isArray(exportJson)
+                ? exportJson
+                : ((exportJson && exportJson.dashboardControls) || dashboardControls));
 
         let appName = "App";
         try {
@@ -10802,14 +10837,13 @@ function createAndAppendTable(dtControls) {
 
         const dataToSend = (typeof buildHomeExportJson === "function")
             ? buildHomeExportJson(tableData)
-            : { "isRecordscenario": false, "dashboardControls": tableData };
-        const isScenarioMode = (typeof isRecordScenarioExportMode === "function")
-            ? isRecordScenarioExportMode()
-            : Boolean(dataToSend && dataToSend.isRecordscenario);
+            : tableData.map((row) =>
+                (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : row
+            );
+        const isScenarioMode = !!(dataToSend && !Array.isArray(dataToSend) && dataToSend.isRecordscenario);
 
         const payload = {
             data: dataToSend,
-            isRecordscenario: isScenarioMode,
             userID: Number(userData.userID) || 0,
             baseUrl: userData.baseUrl || "",
             projectId: userData.project_id || "",
@@ -10818,6 +10852,9 @@ function createAndAppendTable(dtControls) {
             applicationTypeId: Number(userData.application_type_id) || 0,
             applicationType: "Mobile"
         };
+        if (isScenarioMode) {
+            payload.isRecordscenario = true;
+        }
 
         let bodyText = "";
         try {
@@ -22179,7 +22216,9 @@ if (platformVersionField) {
                 }
             }
 
-            const cleanElList = rawElList.map(sanitizeExportRow);
+            const cleanElList = rawElList.map((row) =>
+                (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : sanitizeExportRow(row)
+            );
 
             return {
                 filename: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
@@ -22187,10 +22226,7 @@ if (platformVersionField) {
                 badgeClass: 'repo-badge-page',
                 title: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
                 subtitle: `${cleanElList.length} UI ${cleanElList.length === 1 ? 'control' : 'controls'} • ${item.appName || project.appName || 'Application'} (${platform})`,
-                data: {
-                    "isRecordscenario": false,
-                    "dashboardControls": cleanElList
-                }
+                data: cleanElList
             };
         } else if (item.type === 'scenario') {
             // Find scraped steps for this scenario (from item.elements or fallback to project.pages)
