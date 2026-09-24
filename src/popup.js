@@ -190,19 +190,158 @@
         }
     }
 
-    if (isWinOS) {
-        const nativeTitleHosts = '.rec-error-icon, .error-icon-wrapper, .error-info-icon, .info-icon-wrapper, .custom-tooltip-wrapper';
-        const stripNativeTitle = (el) => {
-            if (!el || !el.removeAttribute) return;
+    function initAppHoverTooltips() {
+        const SKIP_HOST = '.custom-tooltip-wrapper, .info-icon-wrapper, .error-icon-wrapper, .rec-error-icon, .page-info-tooltip, .error-info-tooltip, .rec-error-tooltip, #appCustomTooltip';
+
+        let tipEl = document.getElementById('appCustomTooltip');
+        if (!tipEl) {
+            tipEl = document.createElement('div');
+            tipEl.id = 'appCustomTooltip';
+            tipEl.className = 'app-custom-tooltip';
+            tipEl.setAttribute('role', 'tooltip');
+            (document.body || document.documentElement).appendChild(tipEl);
+        }
+
+        let currentHost = null;
+        let hideTimer = null;
+
+        const hideTip = () => {
+            currentHost = null;
+            tipEl.classList.remove('is-visible');
+        };
+
+        const skipHost = (el) => !!(el && el.closest && el.closest(SKIP_HOST));
+
+        const adoptTitle = (el) => {
+            if (!el || !el.getAttribute) return;
+            if (skipHost(el)) {
+                el.removeAttribute('title');
+                if (el.querySelectorAll) {
+                    el.querySelectorAll('[title]').forEach((n) => n.removeAttribute('title'));
+                }
+                return;
+            }
+            const native = el.getAttribute('title');
+            if (!native) return;
+            if (!el.getAttribute('data-tooltip')) {
+                el.setAttribute('data-tooltip', native);
+            }
             el.removeAttribute('title');
-            if (el.querySelectorAll) {
-                el.querySelectorAll('[title]').forEach((n) => n.removeAttribute('title'));
+        };
+
+        const adoptTree = (root) => {
+            if (!root || root.nodeType !== 1) return;
+            adoptTitle(root);
+            if (root.querySelectorAll) {
+                root.querySelectorAll('[title]').forEach(adoptTitle);
             }
         };
+
+        const readTipText = (el) => {
+            if (!el || !el.getAttribute) return '';
+            return String(el.getAttribute('data-tooltip') || el.getAttribute('title') || '').trim();
+        };
+
+        const findTipHost = (start) => {
+            let n = start;
+            while (n && n !== document.body && n !== document.documentElement) {
+                if (n.nodeType === 1) {
+                    if (skipHost(n) && n.matches && n.matches(SKIP_HOST)) return null;
+                    if (skipHost(n)) return null;
+                    const text = readTipText(n);
+                    if (text) return n;
+                }
+                n = n.parentElement;
+            }
+            return null;
+        };
+
+        const positionTip = (host) => {
+            const rect = host.getBoundingClientRect();
+            tipEl.style.left = '0px';
+            tipEl.style.top = '0px';
+            const tipRect = tipEl.getBoundingClientRect();
+            const pad = 8;
+            let left = rect.left + (rect.width / 2) - (tipRect.width / 2);
+            let top = rect.bottom + 8;
+            if (left < pad) left = pad;
+            if (left + tipRect.width > window.innerWidth - pad) {
+                left = Math.max(pad, window.innerWidth - pad - tipRect.width);
+            }
+            if (top + tipRect.height > window.innerHeight - pad) {
+                top = rect.top - tipRect.height - 8;
+            }
+            if (top < pad) top = pad;
+            tipEl.style.left = Math.round(left) + 'px';
+            tipEl.style.top = Math.round(top) + 'px';
+        };
+
+        const showTip = (host) => {
+            adoptTitle(host);
+            const text = readTipText(host);
+            if (!text) {
+                hideTip();
+                return;
+            }
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+                hideTimer = null;
+            }
+            currentHost = host;
+            tipEl.textContent = text;
+            tipEl.classList.add('is-visible');
+            positionTip(host);
+        };
+
+        adoptTree(document.body);
+
         document.addEventListener('mouseover', (e) => {
-            const host = e.target && e.target.closest ? e.target.closest(nativeTitleHosts) : null;
-            if (host) stripNativeTitle(host);
+            const host = findTipHost(e.target);
+            if (!host) {
+                if (currentHost) hideTip();
+                return;
+            }
+            if (currentHost === host) return;
+            showTip(host);
         }, true);
+
+        document.addEventListener('mouseout', (e) => {
+            if (!currentHost) return;
+            const to = e.relatedTarget;
+            if (to && (currentHost === to || currentHost.contains(to))) return;
+            if (to && findTipHost(to) === currentHost) return;
+            hideTimer = setTimeout(hideTip, 40);
+        }, true);
+
+        document.addEventListener('scroll', hideTip, true);
+        window.addEventListener('blur', hideTip);
+        document.addEventListener('keydown', hideTip, true);
+
+        try {
+            const mo = new MutationObserver((mutations) => {
+                for (let i = 0; i < mutations.length; i++) {
+                    const m = mutations[i];
+                    if (m.type === 'attributes' && m.attributeName === 'title' && m.target) {
+                        adoptTitle(m.target);
+                        if (currentHost === m.target) showTip(m.target);
+                    }
+                    if (m.type === 'childList' && m.addedNodes) {
+                        m.addedNodes.forEach((n) => adoptTree(n));
+                    }
+                }
+            });
+            mo.observe(document.body, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['title']
+            });
+        } catch (_) {}
+    }
+    if (document.body) {
+        initAppHoverTooltips();
+    } else {
+        document.addEventListener('DOMContentLoaded', initAppHoverTooltips);
     }
 
     const secretKey = "algoshackv5-123";
@@ -5769,11 +5908,13 @@
                     features: [],
                     pages: [buildInitialProjectPage(uniqueInfo.appName, plateformOption)]
                 };
+                if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(store[uniqueInfo.key]);
                 persistProjectStore(store);
             } else if (devInfo) {
                 if (typeof bindOrPreserveProjectDevice === 'function') {
                     bindOrPreserveProjectDevice(store[uniqueInfo.key], devInfo);
                 }
+                if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(store[uniqueInfo.key]);
                 persistProjectStore(store);
             }
 
@@ -7209,9 +7350,6 @@
             ? getExportDeviceName(row["DEVICE NAME"] !== undefined ? row["DEVICE NAME"] : (row.DeviceName !== undefined ? row.DeviceName : (row.deviceName !== undefined ? row.deviceName : devName)))
             : String(row["DEVICE NAME"] || row.DeviceName || row.deviceName || devName || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
         const udid = row["UDID"] !== undefined ? row["UDID"] : (row.UDID !== undefined ? row.UDID : (row.udid !== undefined ? row.udid : udidVal));
-        const appUrl = (row["APP URL"] !== undefined && typeof row["APP URL"] === 'string')
-            ? row["APP URL"]
-            : (row.AppUrl !== undefined ? String(row.AppUrl) : (row.appUrl !== undefined ? String(row.appUrl) : ""));
 
         let fingerprintObj = {};
         const rawFp = row["FINGERPRINT"] !== undefined ? row["FINGERPRINT"] : (row.Fingerprint !== undefined ? row.Fingerprint : row.fingerprint);
@@ -7236,7 +7374,7 @@
             "FEATURE NAME": featureName,
             "NODE NAME": nodeName,
             "PAGE NAME": pageName,
-            "APP URL": appUrl,
+            "APP URL": "",
             "APP ACTIVITY": appActivity,
             "APP PACKAGE": appPackage,
             "BUNDLE ID": bundleId,
@@ -7269,14 +7407,6 @@
         const appPkg = (document.getElementById('apppackage')?.value || '').trim();
         const appAct = (document.getElementById('appactivity')?.value || '').trim();
         const bundleId = (document.getElementById('bundleID')?.value || '').trim();
-
-        let appUrl = "";
-        try {
-            appUrl = (document.getElementById('appiumurl')?.value || '').trim();
-            if (!appUrl && window.currentUserData && window.currentUserData.launchUrl) {
-                appUrl = window.currentUserData.launchUrl.trim();
-            }
-        } catch (_) {}
 
         const formatScenarioStep = (step) => {
             const sanitized = (typeof sanitizeExportRow === "function") ? sanitizeExportRow(step) : (step || {});
@@ -7412,7 +7542,7 @@
             "FEATURE NAME": sanitized["FEATURE NAME"] || "",
             "NODE NAME": sanitized["NODE NAME"] || "",
             "PAGE NAME": sanitized["PAGE NAME"] || "",
-            "APP URL": sanitized["APP URL"] || "",
+            "APP URL": "",
             "APP ACTIVITY": sanitized["APP ACTIVITY"] || "",
             "APP PACKAGE": sanitized["APP PACKAGE"] || "",
             "BUNDLE ID": sanitized["BUNDLE ID"] || "",
@@ -7424,7 +7554,7 @@
     window.formatNormalExportRow = formatNormalExportRow;
 
     // Inner JSON used by download + AlgoQA `data`.
-    // Normal: [ { CONTROL NAME, ... } ] — no isRecordscenario / dashboardControls
+    // Normal: { isRecordscenario:false, dashboardControls:[rows] }
     // Record: { isRecordscenario:true, dashboardControls:{ APP URL, SCENARIOS } }
     function buildHomeExportJson(dashboardControls) {
         if (isRecordScenarioExportMode()) {
@@ -7447,7 +7577,10 @@
                     }
                 };
         }
-        return (dashboardControls || []).map(formatNormalExportRow);
+        return {
+            "isRecordscenario": false,
+            "dashboardControls": (dashboardControls || []).map(formatNormalExportRow)
+        };
     }
     window.buildHomeExportJson = buildHomeExportJson;
 
@@ -7470,16 +7603,14 @@
             return;
         }
 
-        const exportJson = (typeof buildHomeExportJson === "function")
+        const jsonContent = (typeof buildHomeExportJson === "function")
             ? buildHomeExportJson(dashboardControls)
-            : dashboardControls.map((row) =>
-                (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : row
-            );
-        const jsonContent = (exportJson && !Array.isArray(exportJson) && exportJson.isRecordscenario)
-            ? exportJson
-            : (Array.isArray(exportJson)
-                ? exportJson
-                : ((exportJson && exportJson.dashboardControls) || dashboardControls));
+            : {
+                "isRecordscenario": false,
+                "dashboardControls": dashboardControls.map((row) =>
+                    (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : row
+                )
+            };
 
         let appName = "App";
         try {
@@ -10837,10 +10968,12 @@ function createAndAppendTable(dtControls) {
 
         const dataToSend = (typeof buildHomeExportJson === "function")
             ? buildHomeExportJson(tableData)
-            : tableData.map((row) =>
-                (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : row
-            );
-        const isScenarioMode = !!(dataToSend && !Array.isArray(dataToSend) && dataToSend.isRecordscenario);
+            : {
+                "isRecordscenario": false,
+                "dashboardControls": tableData.map((row) =>
+                    (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : row
+                )
+            };
 
         const payload = {
             data: dataToSend,
@@ -10852,9 +10985,6 @@ function createAndAppendTable(dtControls) {
             applicationTypeId: Number(userData.application_type_id) || 0,
             applicationType: "Mobile"
         };
-        if (isScenarioMode) {
-            payload.isRecordscenario = true;
-        }
 
         let bodyText = "";
         try {
@@ -12272,6 +12402,222 @@ function persistProjectStore(store) {
 }
 window.persistProjectStore = persistProjectStore;
 
+function readHomeLaunchFields() {
+    const platform = (typeof getSelectedPlatform === 'function' ? getSelectedPlatform() : '')
+        || (document.getElementById('platformname')?.value || 'Android');
+    const isIos = String(platform).toLowerCase().includes('ios');
+    let appUrl = '';
+    try {
+        appUrl = (document.getElementById('appiumurl')?.value || '').trim();
+        if (!appUrl && window.currentUserData && window.currentUserData.launchUrl) {
+            appUrl = String(window.currentUserData.launchUrl || '').trim();
+        }
+    } catch (_) {}
+    const appSelectVal = (document.getElementById('appname')?.value || '').trim();
+    const appPackage = isIos
+        ? ''
+        : ((document.getElementById('apppackage')?.value || '').trim() || appSelectVal);
+    const appActivityRaw = (document.getElementById('appactivity')?.value || '').trim();
+    const appActivity = isIos
+        ? ''
+        : ((typeof isUnresolvedAndroidActivity === 'function' && isUnresolvedAndroidActivity(appActivityRaw))
+            ? ''
+            : appActivityRaw);
+    const bundleId = isIos
+        ? ((document.getElementById('bundleID')?.value || '').trim() || appSelectVal)
+        : '';
+    let deviceName = (typeof getExportDeviceName === 'function') ? getExportDeviceName() : '';
+    const udid = (document.getElementById('udid')?.value || '').trim();
+    return {
+        platform,
+        appUrl,
+        appPackage,
+        appActivity,
+        bundleId,
+        deviceName,
+        udid
+    };
+}
+window.readHomeLaunchFields = readHomeLaunchFields;
+
+function lookupInstalledAppId(appName) {
+    const sel = document.getElementById('appname');
+    if (!sel || !sel.options) return '';
+    const want = String(appName || '').trim().toLowerCase();
+    if (!want) return '';
+    for (let i = 0; i < sel.options.length; i++) {
+        const opt = sel.options[i];
+        const text = String(opt.text || opt.innerText || '').trim().toLowerCase();
+        const val = String(opt.value || '').trim();
+        if (!val) continue;
+        if (text === want || val.toLowerCase() === want) return val;
+    }
+    return '';
+}
+
+function isLiveOpenRepoProject(project) {
+    if (!project) return false;
+    const key = window.activeResumedProjectKey;
+    if (!key) return false;
+    try {
+        const store = (typeof getProjectStore === 'function') ? getProjectStore() : {};
+        if (store[key] === project) return true;
+        const live = store[key];
+        if (live && project.projectId && live.projectId && String(live.projectId) === String(project.projectId)) {
+            return true;
+        }
+        if (project.projectId && String(key).endsWith('::' + project.projectId)) return true;
+    } catch (_) {}
+    return false;
+}
+
+function stampProjectLaunchFields(project, fields) {
+    if (!project || typeof project !== 'object') return project;
+    const src = fields && typeof fields === 'object' ? fields : readHomeLaunchFields();
+    const pick = (cur, next) => {
+        const n = String(next || '').trim();
+        return n || String(cur || '').trim();
+    };
+    project.appUrl = pick(project.appUrl, src.appUrl);
+    project.appPackage = pick(project.appPackage, src.appPackage);
+    project.appActivity = pick(project.appActivity, src.appActivity);
+    if (typeof isUnresolvedAndroidActivity === 'function' && isUnresolvedAndroidActivity(project.appActivity)) {
+        project.appActivity = String(src.appActivity || '').trim();
+    }
+    project.bundleId = pick(project.bundleId, src.bundleId);
+    if (src.udid) project.deviceId = pick(project.deviceId, src.udid);
+    if (src.deviceName) {
+        project.deviceName = pick(project.deviceName, src.deviceName);
+        if (project.device && typeof project.device === 'object') {
+            project.device.name = pick(project.device.name, src.deviceName);
+            if (src.udid) project.device.id = pick(project.device.id, src.udid);
+        }
+    }
+
+    const platform = project.platform || src.platform || 'Android';
+    const isIos = String(platform).toLowerCase().includes('ios');
+    const caps = Object.assign({}, (project.capabilities && typeof project.capabilities === 'object') ? project.capabilities : {});
+    if (isIos) {
+        if (project.bundleId) caps['appium:bundleId'] = project.bundleId;
+        delete caps['appium:appPackage'];
+        delete caps['appium:appActivity'];
+        delete caps.appPackage;
+        delete caps.appActivity;
+    } else {
+        if (project.appPackage) caps['appium:appPackage'] = project.appPackage;
+        if (project.appActivity) caps['appium:appActivity'] = project.appActivity;
+        delete caps['appium:bundleId'];
+        delete caps.bundleId;
+    }
+    if (project.deviceId) caps['appium:udid'] = project.deviceId;
+    if (project.deviceName) {
+        caps['appium:deviceName'] = (typeof getExportDeviceName === 'function')
+            ? getExportDeviceName(project.deviceName)
+            : project.deviceName;
+    }
+    project.capabilities = caps;
+    return project;
+}
+window.stampProjectLaunchFields = stampProjectLaunchFields;
+
+function firstExportFieldFromElements(project, key) {
+    const lists = [];
+    (project && Array.isArray(project.pages) ? project.pages : []).forEach((pg) => {
+        if (pg && Array.isArray(pg.elements)) lists.push(pg.elements);
+    });
+    (project && Array.isArray(project.scenarios) ? project.scenarios : []).forEach((sc) => {
+        if (sc && Array.isArray(sc.elements)) lists.push(sc.elements);
+    });
+    for (let i = 0; i < lists.length; i++) {
+        const list = lists[i];
+        for (let j = 0; j < list.length; j++) {
+            const el = list[j];
+            if (!el || typeof el !== 'object') continue;
+            const v = el[key];
+            if (String(v || '').trim()) return String(v).trim();
+        }
+    }
+    return '';
+}
+
+function getProjectLaunchFields(project) {
+    const p = project && typeof project === 'object' ? project : {};
+    if (isLiveOpenRepoProject(p)) {
+        stampProjectLaunchFields(p, readHomeLaunchFields());
+    }
+
+    const platform = p.platform || 'Android';
+    const isIos = String(platform).toLowerCase().includes('ios');
+    const caps = (p.capabilities && typeof p.capabilities === 'object') ? p.capabilities : {};
+    const installedId = lookupInstalledAppId(p.appName);
+
+    let appPackage = String(p.appPackage || caps['appium:appPackage'] || caps.appPackage || '').trim()
+        || firstExportFieldFromElements(p, 'APP PACKAGE')
+        || (!isIos ? installedId : '');
+    let appActivity = String(p.appActivity || caps['appium:appActivity'] || caps.appActivity || '').trim()
+        || firstExportFieldFromElements(p, 'APP ACTIVITY');
+    if (typeof isUnresolvedAndroidActivity === 'function' && isUnresolvedAndroidActivity(appActivity)) {
+        appActivity = '';
+    }
+    let bundleId = String(p.bundleId || caps['appium:bundleId'] || caps.bundleId || '').trim()
+        || firstExportFieldFromElements(p, 'BUNDLE ID')
+        || (isIos ? installedId : '');
+    let appUrl = String(p.appUrl || p.appURL || caps['appium:app'] || '').trim()
+        || firstExportFieldFromElements(p, 'APP URL');
+    let deviceName = String((p.device && p.device.name) || p.deviceName || '')
+        .replace(/\s*\((emulator|simulator|device)\)\s*$/i, '').trim();
+    if (isLiveOpenRepoProject(p) && typeof getExportDeviceName === 'function') {
+        deviceName = getExportDeviceName(deviceName) || deviceName;
+    }
+    let udid = String((p.device && p.device.id) || p.deviceId || caps['appium:udid'] || '').trim()
+        || firstExportFieldFromElements(p, 'UDID');
+    if (isLiveOpenRepoProject(p)) {
+        const liveUdid = (document.getElementById('udid')?.value || '').trim();
+        if (liveUdid) udid = liveUdid;
+    }
+
+    if (isIos) {
+        appPackage = '';
+        appActivity = '';
+    } else {
+        bundleId = '';
+    }
+
+    stampProjectLaunchFields(p, {
+        platform,
+        appUrl,
+        appPackage,
+        appActivity,
+        bundleId,
+        deviceName,
+        udid
+    });
+
+    return {
+        "APP URL": "",
+        "APP ACTIVITY": isIos ? '' : String(p.appActivity || '').trim(),
+        "APP PACKAGE": isIos ? '' : String(p.appPackage || '').trim(),
+        "BUNDLE ID": isIos ? String(p.bundleId || '').trim() : '',
+        "DEVICE NAME": String(p.deviceName || (p.device && p.device.name) || deviceName || '')
+            .replace(/\s*\((emulator|simulator|device)\)\s*$/i, '').trim(),
+        "UDID": String(p.deviceId || (p.device && p.device.id) || udid || '').trim()
+    };
+}
+window.getProjectLaunchFields = getProjectLaunchFields;
+
+function applyLaunchFieldsToControlRow(row, fields) {
+    const next = Object.assign({}, row || {});
+    const f = fields || {};
+    next["APP URL"] = "";
+    next["APP ACTIVITY"] = f["APP ACTIVITY"] || next["APP ACTIVITY"] || "";
+    next["APP PACKAGE"] = f["APP PACKAGE"] || next["APP PACKAGE"] || "";
+    next["BUNDLE ID"] = f["BUNDLE ID"] || next["BUNDLE ID"] || "";
+    next["DEVICE NAME"] = f["DEVICE NAME"] || next["DEVICE NAME"] || "";
+    next["UDID"] = f["UDID"] || next["UDID"] || "";
+    return next;
+}
+window.applyLaunchFieldsToControlRow = applyLaunchFieldsToControlRow;
+
 function findProjectKeyInStore(store, preferredKey, hintProject) {
     if (!store || typeof store !== 'object') {
         return { key: preferredKey || null, project: null };
@@ -12387,6 +12733,7 @@ function createFreshRepoProject(baseAppName, platform, deviceHint) {
         features: [],
         pages: [buildInitialProjectPage(uniqueInfo.appName, platform)]
     };
+    if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(store[uniqueInfo.key]);
     persistProjectStore(store);
 
     window.activeProjectSessionMode = 'new';
@@ -21270,6 +21617,7 @@ if (platformVersionField) {
                 if (opened.key && opened.key !== liveKey) {
                     window.activeResumedProjectKey = opened.key;
                 }
+                if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(opened.project);
                 return opened.project;
             }
             key = liveKey;
@@ -21277,6 +21625,9 @@ if (platformVersionField) {
 
         const preferredKey = key || liveKey;
         if (preferredKey && store[preferredKey]) {
+            if (inLiveSession && typeof stampProjectLaunchFields === 'function') {
+                stampProjectLaunchFields(store[preferredKey]);
+            }
             return store[preferredKey];
         }
 
@@ -21300,6 +21651,7 @@ if (platformVersionField) {
             features: [],
             pages: []
         };
+        if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(store[targetKey]);
         if (window.activeProjectSessionMode === 'new' || window.activeProjectSessionMode === 'resumed') {
             window.activeResumedProjectKey = targetKey;
         }
@@ -21379,6 +21731,7 @@ if (platformVersionField) {
         }
         if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
 
+        if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(project);
         project.lastUpdated = Date.now();
         } finally {
             endRepoWrite(true);
@@ -21461,6 +21814,7 @@ if (platformVersionField) {
         }
 
         if (typeof dedupeProjectFeatureLists === 'function') dedupeProjectFeatureLists(project);
+        if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(project);
         project.lastUpdated = Date.now();
         } finally {
             endRepoWrite(true);
@@ -21754,6 +22108,7 @@ if (platformVersionField) {
         } else {
             project.pages.unshift(item);
         }
+        if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(project);
         project.lastUpdated = Date.now();
         } finally {
             endRepoWrite(true);
@@ -21872,6 +22227,7 @@ if (platformVersionField) {
 
             if (typeof pruneProjectAssetOwnership === 'function') pruneProjectAssetOwnership(project);
 
+            if (typeof stampProjectLaunchFields === 'function') stampProjectLaunchFields(project);
             project.lastUpdated = Date.now();
             project.lastActivePageName = (document.getElementById('pagename_searchbox')?.value || '').trim() || project.lastActivePageName || '';
 
@@ -22197,6 +22553,21 @@ if (platformVersionField) {
         const store = getProjectStore();
         const project = getProjectByKey(store, projectKey) || {};
         const platform = item.platform || project.platform || 'Android';
+        const launchFields = (typeof getProjectLaunchFields === 'function')
+            ? getProjectLaunchFields(project)
+            : {
+                "APP URL": "",
+                "APP ACTIVITY": "",
+                "APP PACKAGE": "",
+                "BUNDLE ID": "",
+                "DEVICE NAME": (project.device && project.device.name) || project.deviceName || "",
+                "UDID": (project.device && project.device.id) || project.deviceId || ""
+            };
+        try {
+            if (typeof persistProjectStore === 'function' && typeof getProjectStore === 'function') {
+                persistProjectStore(getProjectStore());
+            }
+        } catch (_) {}
 
         if (item.type === 'page') {
             let rawElList = Array.isArray(item.elements) && item.elements.length > 0 ? item.elements : [];
@@ -22216,9 +22587,14 @@ if (platformVersionField) {
                 }
             }
 
-            const cleanElList = rawElList.map((row) =>
-                (typeof formatNormalExportRow === "function") ? formatNormalExportRow(row) : sanitizeExportRow(row)
-            );
+            const cleanElList = rawElList.map((row) => {
+                const formatted = (typeof formatNormalExportRow === "function")
+                    ? formatNormalExportRow(row)
+                    : sanitizeExportRow(row);
+                return (typeof applyLaunchFieldsToControlRow === "function")
+                    ? applyLaunchFieldsToControlRow(formatted, launchFields)
+                    : formatted;
+            });
 
             return {
                 filename: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
@@ -22226,7 +22602,10 @@ if (platformVersionField) {
                 badgeClass: 'repo-badge-page',
                 title: `${pageName.replace(/\s+/g, '_')}_scraped_elements.json`,
                 subtitle: `${cleanElList.length} UI ${cleanElList.length === 1 ? 'control' : 'controls'} • ${item.appName || project.appName || 'Application'} (${platform})`,
-                data: cleanElList
+                data: {
+                    "isRecordscenario": false,
+                    "dashboardControls": cleanElList
+                }
             };
         } else if (item.type === 'scenario') {
             // Find scraped steps for this scenario (from item.elements or fallback to project.pages)
@@ -22252,16 +22631,6 @@ if (platformVersionField) {
             }
 
             const pageName = item.pageName || item.name || 'Default';
-            const itemPlatform = project.platform || platform || 'Android';
-            const isAndroidItem = String(itemPlatform).toLowerCase().includes('android');
-            const isIOSItem = String(itemPlatform).toLowerCase().includes('ios');
-            const devNameItem = (typeof getExportDeviceName === "function")
-                ? getExportDeviceName((project.device && project.device.name) || project.deviceName || "")
-                : String((project.device && project.device.name) || project.deviceName || "").replace(/\s*\((emulator|simulator|device)\)\s*$/i, "").trim();
-            const udidItem = (project.device && project.device.id) || project.deviceId || '';
-            const appPkgItem = (project.capabilities && (project.capabilities['appium:appPackage'] || project.capabilities.appPackage)) || '';
-            const appActItem = (project.capabilities && (project.capabilities['appium:appActivity'] || project.capabilities.appActivity)) || '';
-            const bundleIdItem = (project.capabilities && (project.capabilities['appium:bundleId'] || project.capabilities.bundleId)) || '';
 
             const formattedSteps = rawSteps.map(step => {
                 const sanitized = sanitizeExportRow(step);
@@ -22283,11 +22652,11 @@ if (platformVersionField) {
                 "isRecordscenario": true,
                 "dashboardControls": {
                     "APP URL": "",
-                    "APP ACTIVITY": isAndroidItem ? appActItem : "",
-                    "APP PACKAGE": isAndroidItem ? appPkgItem : "",
-                    "BUNDLE ID": isIOSItem ? bundleIdItem : "",
-                    "DEVICE NAME": devNameItem,
-                    "UDID": udidItem,
+                    "APP ACTIVITY": launchFields["APP ACTIVITY"] || "",
+                    "APP PACKAGE": launchFields["APP PACKAGE"] || "",
+                    "BUNDLE ID": launchFields["BUNDLE ID"] || "",
+                    "DEVICE NAME": launchFields["DEVICE NAME"] || "",
+                    "UDID": launchFields["UDID"] || "",
                     "SCENARIOS": [
                         {
                             "SCENARIO_NAME": item.name || pageName || "Scenario",

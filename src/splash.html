@@ -107,6 +107,28 @@
     background: rgba(239, 68, 68, 0.3);
   }
 
+  .app-custom-tooltip {
+    position: fixed;
+    max-width: 200px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #333333;
+    border: 1px solid #dcdcdc;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    z-index: 9999;
+    transition: opacity 0.12s ease, visibility 0.12s ease;
+  }
+  .app-custom-tooltip.is-visible {
+    opacity: 1;
+    visibility: visible;
+  }
+
   .content {
     flex: 1;
     display: flex;
@@ -259,7 +281,7 @@
       </div>
       <div class="header-right">
         <span class="brand-pill">Powered by algoShack</span>
-        <button id="cancelStartupBtn" class="cancel-btn" title="Cancel launch" aria-label="Cancel startup">
+        <button id="cancelStartupBtn" class="cancel-btn" data-tooltip="Cancel launch" aria-label="Cancel startup">
           <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -302,6 +324,23 @@
 
   const cancelBtn = document.getElementById("cancelStartupBtn");
   if (cancelBtn) {
+    const tip = document.createElement('div');
+    tip.className = 'app-custom-tooltip';
+    document.body.appendChild(tip);
+    const showTip = () => {
+      const text = cancelBtn.getAttribute('data-tooltip') || 'Cancel launch';
+      tip.textContent = text;
+      tip.classList.add('is-visible');
+      const rect = cancelBtn.getBoundingClientRect();
+      const tw = tip.offsetWidth || 90;
+      let left = rect.left + rect.width / 2 - tw / 2;
+      let top = rect.bottom + 8;
+      if (left < 8) left = 8;
+      tip.style.left = Math.round(left) + 'px';
+      tip.style.top = Math.round(top) + 'px';
+    };
+    cancelBtn.addEventListener('mouseenter', showTip);
+    cancelBtn.addEventListener('mouseleave', () => tip.classList.remove('is-visible'));
     cancelBtn.addEventListener("click", function(e) {
       e.preventDefault();
       e.stopPropagation();
